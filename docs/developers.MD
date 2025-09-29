@@ -147,3 +147,46 @@ pip install -r requirements.txt
 * 資料庫在開發測試階段使用 SQLite；部署時會切換到 PostgreSQL。
 * `.venv/` 已加入 `.gitignore`，請勿提交虛擬環境檔案。
 * 如需測試種子資料，請使用 `fixtures/` 並透過 `loaddata` 匯入。
+
+---
+
+## 如何產生 `DJANGO_SECRET_KEY`
+
+> 請在本機 `.env` 產生並填入，不要把 `.env` 提交到 Git。
+
+### 1) 使用 Django 內建工具
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key as g; print(g())"
+```
+
+把輸出貼到 `.env`：
+
+```env
+DJANGO_SECRET_KEY= <貼上剛剛那串>
+```
+
+### 2) 不依賴 Django 的通用 Python 方式
+
+```bash
+python -c "import secrets,string; print(''.join(secrets.choice(string.ascii_letters+string.digits+'!@#$%^&*(-_=+)') for _ in range(64)))"
+```
+
+### 3) macOS / Linux（OpenSSL）
+
+```bash
+openssl rand -base64 48
+```
+
+### 4) Windows PowerShell
+
+```powershell
+[Convert]::ToBase64String((New-Object Byte[] 48 | %{$_=0}; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($args[0]); $args[0]))
+```
+
+### 注意事項
+
+* `SECRET_KEY` 長度建議 50+，來源需隨機；請放入本機 `.env`。
+* **不要**把正式環境的 `SECRET_KEY` 放進 repo；請用部署平台的 Secrets / 環境變數管理。
+* 更換正式環境 `SECRET_KEY` 後既有 **Django session/CSRF** 會失效，使用者需重新登入。
+
