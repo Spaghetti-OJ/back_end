@@ -1,9 +1,14 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from .models import UserProfile
 
 User = get_user_model()
 
 class RegisterSerializer(serializers.ModelSerializer):
+    identity = serializers.ChoiceField(
+        choices=[c.value for c in User.Identity],  # ['teacher','admin','student']
+        required=True
+    )
     student_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     bio = serializers.CharField(required=False, allow_blank=True)
 
@@ -21,7 +26,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
 
-        # 透過 signals 已有空 profile
         profile = user.userprofile
         if student_id is not None:
             profile.student_id = student_id

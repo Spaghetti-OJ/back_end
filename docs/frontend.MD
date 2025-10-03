@@ -93,7 +93,7 @@ curl -X POST http://127.0.0.1:8000/auth/signup/ \
 
 ## 使用者登入 API
 
-**路徑**：`POST /auth/login/`
+**路徑**：`POST /auth/session/`
 
 **說明**：以帳號密碼登入，取得 JWT。
 
@@ -132,7 +132,7 @@ curl -X POST http://127.0.0.1:8000/auth/signup/ \
 **cURL 測試**：
 
 ```bash
-curl -X POST http://127.0.0.1:8000/auth/login/ \
+curl -X POST http://127.0.0.1:8000/auth/session/ \
   -H "Content-Type: application/json" \
   -d '{"username":"momo","password":"abc12345"}'
 ```
