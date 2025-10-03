@@ -26,7 +26,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
 
-        profile = user.userprofile
+        profile, _ = UserProfile.objects.get_or_create(user=user)
         if student_id is not None:
             profile.student_id = student_id
         if bio:
