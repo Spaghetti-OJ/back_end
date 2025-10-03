@@ -50,11 +50,20 @@ class MeSerializer(serializers.ModelSerializer):
         fields = ['id','username','email','real_name','identity','date_joined','last_login','profile']
 
     def get_profile(self, obj):
-        p = obj.userprofile
-        return {
-            "student_id": p.student_id,
-            "bio": p.bio,
-            "avatar": p.avatar.url if p.avatar else None,
-            "email_verified": p.email_verified,
-            "updated_at": p.updated_at,
-        }
+        try:
+            p = obj.userprofile
+            return {
+                "student_id": p.student_id,
+                "bio": p.bio,
+                "avatar": p.avatar.url if p.avatar else None,
+                "email_verified": p.email_verified,
+                "updated_at": p.updated_at,
+            }
+        except UserProfile.DoesNotExist:
+            return {
+                "student_id": "",
+                "bio": "",
+                "avatar": None,
+                "email_verified": False,
+                "updated_at": None,
+            }
