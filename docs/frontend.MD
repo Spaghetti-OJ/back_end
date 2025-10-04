@@ -169,7 +169,7 @@ curl -X POST http://127.0.0.1:8000/auth/session/ \
 **cURL 測試**：
 
 ```bash
-curl -X POST http://127.0.0.1:8000/auth/refresh \
+curl -X POST http://127.0.0.1:8000/auth/refresh/ \
   -H "Content-Type: application/json" \
   -d '{"refresh":"<你的 refresh token>"}'
 ```
