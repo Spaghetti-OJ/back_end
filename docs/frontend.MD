@@ -146,7 +146,7 @@ curl -X POST http://127.0.0.1:8000/auth/session/ \
 
 ## 取得新 access token（refresh 機制）
 
-**路徑**：`POST /auth/refresh`
+**路徑**：`POST /auth/refresh/`
 
 **請求（JSON）**
 
