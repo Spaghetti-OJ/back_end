@@ -44,7 +44,6 @@ INSTALLED_APPS = [
     'user.apps.UserConfig',
     "rest_framework",
     "corsheaders",
-    "user",
     "courses",
     "auths",
     "problems",
