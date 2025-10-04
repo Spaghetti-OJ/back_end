@@ -52,7 +52,7 @@ class Problem(models.Model):
     test_case_info = models.TextField(blank=True, null=True)
     supported_languages = models.JSONField(default=default_supported_langs)
     creator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_problems')
-    course = models.ForeignKey('courses.Course', on_delete=models.SET_NULL, null=True, blank=True, related_name='problems')
+    course = models.ForeignKey('courses.Courses', on_delete=models.SET_NULL, null=True, blank=True, related_name='problems')
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     tags = models.ManyToManyField('Tag', through='ProblemTag', related_name='problems')
