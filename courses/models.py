@@ -60,7 +60,7 @@ class Courses(models.Model):
             self.join_code = code
             try:
                 with transaction.atomic():
-                    super().save(update_fields=["join_code"])
+                    super(Courses, self).save(update_fields=["join_code"])
                 return code
             except IntegrityError:
                 self.join_code = None
