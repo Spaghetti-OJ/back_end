@@ -178,7 +178,7 @@ curl -X POST http://127.0.0.1:8000/auth/refresh \
 
 ## 取得自己的資料
 
-**路徑**：`GET /auth/me`
+**路徑**：`GET /auth/me/`
 
 **Headers**：`Authorization: Bearer <access>`
 
