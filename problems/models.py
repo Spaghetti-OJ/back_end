@@ -9,7 +9,7 @@ def unlimited_or_nonnegative(value: int):
     if value == -1:
         return
     if value < 0:
-        raise models.ValidationError("must be -1 or >= 0")
+        raise models.ValidationError("Value must be -1 (unlimited) or non-negative.")
 
 def default_supported_langs():
     return ["c", "cpp", "java", "python"]
