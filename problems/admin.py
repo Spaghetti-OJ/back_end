@@ -10,6 +10,6 @@ class ProblemAdmin(admin.ModelAdmin):
 
 @admin.register(Test_cases)
 class TestCaseAdmin(admin.ModelAdmin):
-    list_display = ('id', 'problem', 'case_no', 'case_group', 'weight', 'file_size')
+    list_display = ('id', 'problem_id', 'case_group', 'weight', 'file_size')
 admin.site.register(Tags)
 admin.site.register(Problem_tags)

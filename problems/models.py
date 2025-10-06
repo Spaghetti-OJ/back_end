@@ -56,10 +56,10 @@ class Problems(models.Model):
     test_case_info = models.TextField(blank=True, null=True)
     supported_languages = models.JSONField(default=default_supported_langs)
     creator_id = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_problems')
-    course_id = models.ForeignKey('courses.Courses', on_delete=models.SET_NULL, null=True, blank=True, related_name='problems')
+    course_id = models.ForeignKey('courses.Courses', on_delete=models.SET_NULL, null=True, blank=True, related_name='courses')
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
-    tags = models.ManyToManyField('Tag', through='ProblemTag', related_name='problems')
+    tags = models.ManyToManyField('Tags', through='Problem_tags', related_name='problems')
 
     class Meta:
         indexes = [
@@ -94,14 +94,14 @@ class Test_cases(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=['problem', 'case_no'], name='uq_problem_case_no')
+            models.UniqueConstraint(fields=['problem_id', 'id'], name='uq_problem_case_no')
         ]
         indexes = [
-            models.Index(fields=['problem', 'case_group']),
+            models.Index(fields=['problem_id', 'case_group']),
         ]
 
     def __str__(self):
-        return f"{self.problem.id}#{self.case_no}"
+        return f"{self.problem_id.id}#{self.id}"
 
 
 class Problem_tags(models.Model):
@@ -111,12 +111,12 @@ class Problem_tags(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=['problem', 'tag'], name='uq_problem_tag')
+            models.UniqueConstraint(fields=['problem_id', 'tag_id'], name='uq_problem_tag')
         ]
         indexes = [
-            models.Index(fields=['tag']),
-            models.Index(fields=['problem', 'tag']),
+            models.Index(fields=['tag_id']),
+            models.Index(fields=['problem_id', 'tag_id']),
         ]
 
     def __str__(self):
-        return f"{self.problem.id}-{self.tag.id}"
+        return f"{self.problem_id.id}-{self.tag_id.id}"

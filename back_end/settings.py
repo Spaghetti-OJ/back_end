@@ -30,13 +30,6 @@ DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-change-me")
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
 
-<<<<<<< HEAD
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-=======
-
->>>>>>> 72cc015 (docs: correct cURL command for refresh token in frontend documentation and update security comments in settings.py)
-
 # Application definition
 
 INSTALLED_APPS = [
