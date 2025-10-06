@@ -9,13 +9,13 @@ def unlimited_or_nonnegative(value: int):
     if value == -1:
         return
     if value < 0:
-        raise models.ValidationError("must be -1 or >= 0")
+        raise models.ValidationError("Value must be -1 (unlimited) or non-negative.")
 
 def default_supported_langs():
     return ["c", "cpp", "java", "python"]
 
 
-class Tag(models.Model):
+class Tags(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=50, unique=True)
     usage_count = models.IntegerField(default=0)
@@ -24,7 +24,7 @@ class Tag(models.Model):
         return self.name
 
 
-class Problem(models.Model):
+class Problems(models.Model):
     class Difficulty(models.TextChoices):
         EASY = 'easy', 'Easy'
         MEDIUM = 'medium', 'Medium'
@@ -42,7 +42,11 @@ class Problem(models.Model):
     acceptance_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0), MaxValueValidator(100)])
     like_count = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     view_count = models.IntegerField(default=0, validators=[MinValueValidator(0)])
-    total_quota = models.IntegerField(default=-1, validators=[unlimited_or_nonnegative])
+    total_quota = models.IntegerField(
+        default=-1,
+        validators=[unlimited_or_nonnegative],
+        help_text="The maximum number of submissions allowed for this problem. Set to -1 for unlimited submissions."
+    )
     description = models.TextField()
     input_description = models.TextField(blank=True, null=True)
     output_description = models.TextField(blank=True, null=True)
@@ -51,8 +55,8 @@ class Problem(models.Model):
     hint = models.TextField(blank=True, null=True)
     test_case_info = models.TextField(blank=True, null=True)
     supported_languages = models.JSONField(default=default_supported_langs)
-    creator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_problems')
-    course = models.ForeignKey('courses.Courses ', on_delete=models.SET_NULL, null=True, blank=True, related_name='problems')
+    creator_id = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_problems')
+    course_id = models.ForeignKey('courses.Courses', on_delete=models.SET_NULL, null=True, blank=True, related_name='problems')
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     tags = models.ManyToManyField('Tag', through='ProblemTag', related_name='problems')
@@ -67,8 +71,9 @@ class Problem(models.Model):
         return f"[{self.get_difficulty_display()}] {self.title}"
 
     def recompute_acceptance_rate(self, save=True):
+        accepted = min(self.accepted_submissions, self.total_submissions)
         if self.total_submissions > 0:
-            rate = (self.accepted_submissions / self.total_submissions) * 100
+            rate = (accepted / self.total_submissions) * 100
         else:
             rate = 0.0
         self.acceptance_rate = round(Decimal(rate), 2)
@@ -76,10 +81,9 @@ class Problem(models.Model):
             self.save(update_fields=['acceptance_rate'])
 
 
-class TestCase(models.Model):
+class Test_cases(models.Model):
     id = models.AutoField(primary_key=True)
-    problem = models.ForeignKey(Problem, on_delete=models.CASCADE, related_name='test_cases')
-    case_no = models.IntegerField()
+    problem_id = models.ForeignKey(Problems, on_delete=models.CASCADE, related_name='test_cases')
     input_data = models.TextField()
     expected_output = models.TextField()
     weight = models.IntegerField(default=1)
@@ -97,13 +101,12 @@ class TestCase(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.problem_id}#{self.case_no}"
+        return f"{self.problem.id}#{self.case_no}"
 
 
-class ProblemTag(models.Model):
-    id = models.AutoField(primary_key=True)
-    problem = models.ForeignKey(Problem, on_delete=models.CASCADE)
-    tag = models.ForeignKey(Tag, on_delete=models.CASCADE)
+class Problem_tags(models.Model):
+    problem_id = models.ForeignKey(Problems, on_delete=models.CASCADE)
+    tag_id = models.ForeignKey(Tags, on_delete=models.CASCADE)
     added_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='added_problem_tags')
 
     class Meta:
@@ -116,4 +119,4 @@ class ProblemTag(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.problem_id}-{self.tag_id}"
+        return f"{self.problem.id}-{self.tag.id}"
