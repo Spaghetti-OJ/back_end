@@ -2,6 +2,7 @@ import uuid
 from decimal import Decimal
 from django.conf import settings
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 
@@ -81,29 +82,114 @@ class Problems(models.Model):
             self.save(update_fields=['acceptance_rate'])
 
 
-class Test_cases(models.Model):
-    id = models.AutoField(primary_key=True)
-    problem_id = models.ForeignKey(Problems, on_delete=models.CASCADE, related_name='test_cases')
-    input_data = models.TextField()
-    expected_output = models.TextField()
-    weight = models.IntegerField(default=1)
-    file_path = models.CharField(max_length=500, blank=True, null=True)
-    case_group = models.IntegerField(default=1)
-    file_size = models.IntegerField(default=0)
-    created_at = models.DateTimeField(default=timezone.now)
+class Problem_subtasks(models.Model):
+    id = models.AutoField(primary_key=True)  
+    problem_id = models.ForeignKey(
+        'problems.Problems', 
+        on_delete=models.CASCADE,
+        related_name='subtasks',
+        db_index=True,
+    )
+    subtask_no = models.PositiveIntegerField()              # 01~99
+    weight = models.IntegerField(default=0)                
+    time_limit_ms = models.PositiveIntegerField(null=True, blank=True)   
+    memory_limit_mb = models.PositiveIntegerField(null=True, blank=True) 
+    created_at = models.DateTimeField(auto_now_add=True)   
+    updated_at = models.DateTimeField(auto_now=True)       
 
     class Meta:
+        db_table = 'problem_subtasks'
         constraints = [
-            models.UniqueConstraint(fields=['problem_id', 'id'], name='uq_problem_case_no')
+            models.UniqueConstraint(fields=['problem_id', 'subtask_no'],
+                                    name='uniq_problem_subtask_no'),
+            
+            models.CheckConstraint(
+                check=models.Q(subtask_no__gte=1) & models.Q(subtask_no__lte=99),
+                name='chk_subtask_no_1_99'
+            ),
         ]
         indexes = [
-            models.Index(fields=['problem_id', 'case_group']),
+            models.Index(fields=['problem_id']),  
         ]
 
     def __str__(self):
-        return f"{self.problem_id.id}#{self.id}"
+        return f'Subtask id={self.id} P{self.problem_id} #{self.subtask_no} (w={self.weight})'
 
 
+class Test_cases(models.Model):
+    
+    id = models.AutoField(primary_key=True)  
+    subtask_id = models.ForeignKey(
+        'problems.Problem_subtasks',  
+        on_delete=models.CASCADE,
+        related_name='test_cases',
+    )
+    idx = models.PositiveIntegerField()
+    
+    input_path = models.CharField(max_length=500, null=True, blank=True)
+    output_path = models.CharField(max_length=500, null=True, blank=True)
+    input_size = models.PositiveIntegerField(default=0)
+    output_size = models.PositiveIntegerField(default=0)
+    checksum_in = models.CharField(max_length=64, null=True, blank=True)
+    checksum_out = models.CharField(max_length=64, null=True, blank=True)
+
+    class status(models.TextChoices):
+        DRAFT = 'draft', 'draft'
+        READY = 'ready', 'ready'
+
+    status = models.CharField(
+        max_length=10,
+        choices=status.choices,
+        default=status.DRAFT,
+        db_index=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)  # default: now()
+
+    class Meta:
+        db_table = 'test_cases'
+        
+        constraints = [
+           
+            models.UniqueConstraint(fields=['subtask_id', 'idx'],
+                                    name='uniq_subtask_idx'),
+
+            models.CheckConstraint(
+                check=models.Q(idx__gte=1) & models.Q(idx__lte=99),
+                name='chk_idx_1_99'
+            ),
+            
+            models.CheckConstraint(
+                check=(
+                    models.Q(status='draft') |
+                    (
+                        models.Q(status='ready') &
+                        ~(
+                            models.Q(input_path__isnull=True) |
+                            models.Q(output_path__isnull=True) |
+                            models.Q(input_path='') |
+                            models.Q(output_path='')
+                        )
+                    )
+                ),
+                name='chk_ready_requires_both_paths'
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['subtask_id', 'status']),  # (subtask_id, status)
+        ]
+
+    def clean(self):
+        if not self.input_path and not self.output_path:
+            raise ValidationError('至少需要提供 input_path 或 output_path 其中之一。')
+        
+        if self.status == self.Status.READY:
+            if not self.input_path or not self.output_path:
+                raise ValidationError('status=ready 時，input_path 與 output_path 必須同時存在。')
+
+    def __str__(self):
+        return f'TC id={self.id} Subtask={self.subtask_id} idx={self.idx} [{self.status}]' 
+    
+    
 class Problem_tags(models.Model):
     problem_id = models.ForeignKey(Problems, on_delete=models.CASCADE)
     tag_id = models.ForeignKey(Tags, on_delete=models.CASCADE)
