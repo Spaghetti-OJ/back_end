@@ -180,7 +180,7 @@ class Test_cases(models.Model):
 
     def clean(self):
         if not self.input_path and not self.output_path:
-            raise ValidationError('至少需要提供 input_path 或 output_path 其中之一。')
+            raise ValidationError('At least one of input_path or output_path must be provided.')
         
         if self.status == self.status.READY:
             if not self.input_path or not self.output_path:
