@@ -45,7 +45,7 @@ DJANGO_DEBUG=True
 DJANGO_SECRET_KEY=dev-secret
 ALLOWED_HOSTS=127.0.0.1,localhost
 DB_ENGINE=sqlite
-CORS_ALLOWED_ORIGINS=http://localhost:3000
+CORS_ALLOWED_ORIGINS=http://localhost:5173
 ```
 
 SQLite 用於本機測試；正式環境將改為 **PostgreSQL**。
