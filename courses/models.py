@@ -135,7 +135,7 @@ class Announcements(models.Model):
 
     is_pinned = models.BooleanField(default=False)
     view_count = models.IntegerField(default=0, validators=[MinValueValidator(0)])
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -145,3 +145,41 @@ class Announcements(models.Model):
 
     def __str__(self):
         return self.title
+    
+class BatchImports(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    course_id = models.ForeignKey(
+        Courses,
+        on_delete=models.CASCADE,
+        related_name="batch_imports",
+    )
+    imported_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="imports_created",
+    )
+
+    file_name = models.CharField(max_length=255)
+    csv_path = models.CharField(max_length=500)
+    file_size = models.IntegerField(validators=[MinValueValidator(0)])
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    
+    import_result = models.BooleanField(null=True)
+    error_log = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "batch_imports"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.file_name} ({self.status})"
