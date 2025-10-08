@@ -104,3 +104,13 @@ class CourseMembers(models.Model):
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.STUDENT)
 
     joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "course_members"
+        unique_together = ("course_id", "user_id")
+        indexes = [
+            models.Index(fields=["role"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} in {self.course_id} ({self.role})"
