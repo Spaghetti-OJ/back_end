@@ -114,3 +114,34 @@ class CourseMembers(models.Model):
 
     def __str__(self):
         return f"{self.user_id} in {self.course_id} ({self.role})"
+    
+class Announcements(models.Model):
+    id = models.BigAutoField(primary_key=True)
+
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+
+    course_id = models.ForeignKey(
+        Courses,
+        on_delete=models.CASCADE,
+        related_name="announcements",
+    )
+    creator_id = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="announcements_created",
+    )
+
+    is_pinned = models.BooleanField(default=False)
+    view_count = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "announcements"
+        ordering = ["-is_pinned", "-created_at"]
+
+    def __str__(self):
+        return self.title
