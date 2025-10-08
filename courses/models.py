@@ -84,3 +84,23 @@ class Courses(models.Model):
 
         if self.join_code is None:
             self._assign_unique_join_code()
+
+class CourseMembers(models.Model):
+    course_id = models.ForeignKey(
+        Courses,
+        on_delete=models.CASCADE,
+        related_name="members",
+    )
+    user_id = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="course_memberships",
+    )
+
+    class Role(models.TextChoices):
+        STUDENT = "student", "Student"
+        TA = "ta", "Teaching Assistant"
+        TEACHER = "teacher", "Teacher"
+    role = models.CharField(max_length=16, choices=Role.choices, default=Role.STUDENT)
+
+    joined_at = models.DateTimeField(auto_now_add=True)
