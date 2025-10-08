@@ -184,7 +184,7 @@ class Test_cases(models.Model):
         
         if self.status == self.status.READY:
             if not self.input_path or not self.output_path:
-                raise ValidationError('status=ready 時，input_path 與 output_path 必須同時存在。')
+                raise ValidationError('When status is "ready", both input_path and output_path must be provided.')
 
     def __str__(self):
         return f'TC id={self.id} Subtask={self.subtask_id} idx={self.idx} [{self.status}]' 
