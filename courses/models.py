@@ -15,7 +15,7 @@ class Courses(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
 
-    teacher = models.ForeignKey(
+    teacher_id = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="courses_taught",
@@ -41,7 +41,7 @@ class Courses(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "courses"
+        db_table = "Courses"
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["join_code"]),
@@ -106,7 +106,7 @@ class CourseMembers(models.Model):
     joined_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = "course_members"
+        db_table = "Course_members"
         unique_together = ("course_id", "user_id")
         indexes = [
             models.Index(fields=["role"]),
@@ -140,7 +140,7 @@ class Announcements(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "announcements"
+        db_table = "Announcements"
         ordering = ["-is_pinned", "-created_at"]
 
     def __str__(self):
@@ -178,7 +178,7 @@ class BatchImports(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        db_table = "batch_imports"
+        db_table = "Batch_imports"
         ordering = ["-created_at"]
 
     def __str__(self):
