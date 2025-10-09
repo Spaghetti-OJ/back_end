@@ -15,7 +15,7 @@ class Courses(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
 
-    teacher = models.ForeignKey(
+    teacher_id = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="courses_taught",
@@ -41,7 +41,7 @@ class Courses(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "courses"
+        db_table = "Courses"
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["join_code"]),
@@ -84,3 +84,102 @@ class Courses(models.Model):
 
         if self.join_code is None:
             self._assign_unique_join_code()
+
+class Course_members(models.Model):
+    course_id = models.ForeignKey(
+        Courses,
+        on_delete=models.CASCADE,
+        related_name="members",
+    )
+    user_id = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="course_memberships",
+    )
+
+    class Role(models.TextChoices):
+        STUDENT = "student", "Student"
+        TA = "ta", "Teaching Assistant"
+        TEACHER = "teacher", "Teacher"
+    role = models.CharField(max_length=16, choices=Role.choices, default=Role.STUDENT)
+
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "Course_members"
+        unique_together = ("course_id", "user_id")
+        indexes = [
+            models.Index(fields=["role"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} in {self.course_id} ({self.role})"
+    
+class Announcements(models.Model):
+    id = models.BigAutoField(primary_key=True)
+
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+
+    course_id = models.ForeignKey(
+        Courses,
+        on_delete=models.CASCADE,
+        related_name="announcements",
+    )
+    creator_id = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="announcements_created",
+    )
+
+    is_pinned = models.BooleanField(default=False)
+    view_count = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "Announcements"
+        ordering = ["-is_pinned", "-created_at"]
+
+    def __str__(self):
+        return self.title
+    
+class Batch_imports(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    course_id = models.ForeignKey(
+        Courses,
+        on_delete=models.CASCADE,
+        related_name="batch_imports",
+    )
+    imported_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="imports_created",
+    )
+
+    file_name = models.CharField(max_length=255)
+    csv_path = models.CharField(max_length=500)
+    file_size = models.IntegerField(validators=[MinValueValidator(0)])
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    
+    import_result = models.BooleanField(null=True)
+    error_log = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "Batch_imports"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.file_name} ({self.status})"
