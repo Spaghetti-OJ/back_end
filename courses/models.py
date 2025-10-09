@@ -85,7 +85,7 @@ class Courses(models.Model):
         if self.join_code is None:
             self._assign_unique_join_code()
 
-class CourseMembers(models.Model):
+class Course_members(models.Model):
     course_id = models.ForeignKey(
         Courses,
         on_delete=models.CASCADE,
@@ -146,7 +146,7 @@ class Announcements(models.Model):
     def __str__(self):
         return self.title
     
-class BatchImports(models.Model):
+class Batch_imports(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     course_id = models.ForeignKey(
