@@ -66,7 +66,7 @@ class CourseCreateSerializer(serializers.ModelSerializer):
         teacher = obj.teacher_id
         if not isinstance(teacher, User):
             try:
-                teacher = User.objects.get(pk=obj.teacher_id_id)
+                teacher = User.objects.get(pk=obj.teacher_id)
             except User.DoesNotExist:
                 return {}
         return self.TeacherSerializer(teacher).data
