@@ -34,7 +34,7 @@ class CourseCreateAPITestCase(APITestCase):
             "description": "Matrix theory and linear equations.",
             "student_limit": 50,
             "semester": "Fall",
-            "academic_year": "2024",
+            "academic_year": 2024,
         }
 
         response = self.client.post(self.url, payload, format="json")
@@ -51,7 +51,7 @@ class CourseCreateAPITestCase(APITestCase):
             "name": "Forbidden Course",
             "student_limit": 30,
             "semester": "Spring",
-            "academic_year": "2024",
+            "academic_year": 2024,
         }
 
         response = self.client.post(self.url, payload, format="json")
@@ -65,7 +65,7 @@ class CourseCreateAPITestCase(APITestCase):
             "name": "Algorithms",
             "student_limit": 40,
             "semester": "Spring",
-            "academic_year": "2024",
+            "academic_year": 2024,
         }
 
         response = self.client.post(self.url, payload, format="json")
