@@ -88,7 +88,7 @@ class Assignment_problems(models.Model):
         Assignments, on_delete=models.CASCADE, related_name="assignment_problems"
     )
     problem = models.ForeignKey(
-        "problems.Problem", on_delete=models.PROTECT, related_name="in_assignments"
+        "problems.Problems", on_delete=models.PROTECT, related_name="in_assignments"
     )
 
     order_index = models.PositiveIntegerField()  # 題目在作業中的排序（1 起）
@@ -139,7 +139,7 @@ class Assignment_tags(models.Model):
         Assignments, on_delete=models.CASCADE, related_name="assignment_tags"
     )
     tag = models.ForeignKey(
-        "problems.Tag", on_delete=models.CASCADE, related_name="in_assignments"
+        "problems.Tags", on_delete=models.CASCADE, related_name="in_assignments"
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
