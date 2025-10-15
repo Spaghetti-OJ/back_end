@@ -1,3 +1,91 @@
-from django.shortcuts import render
+# from rest_framework.views import APIView
+# from rest_framework.response import Response
+# from rest_framework import status, permissions
+# from .serializers import ProblemCreateSerializer
 
-# Create your views here.
+# class ProblemManageView(APIView):
+#     permission_classes = [permissions.IsAdminUser]  # 建議：只有管理員可建題
+
+#     def post(self, request):
+#         ser = ProblemCreateSerializer(data=request.data, context={"request": request})
+#         if not ser.is_valid():
+#             return Response({"success": False, "errors": ser.errors}, status=422)
+#         problem = ser.save()
+#         return Response({"success": True, "problem_id": problem.id}, status=201)
+
+from rest_framework import viewsets, status
+from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
+
+from .models import Problems, Problem_subtasks, Test_cases, Tags
+from .serializers import (
+    ProblemSerializer, SubtaskSerializer, TestCaseSerializer, TagSerializer
+)
+from .permissions import IsOwnerOrReadOnly
+
+class ProblemsViewSet(viewsets.ModelViewSet):
+    queryset = Problems.objects.all().order_by("-created_at")
+    serializer_class = ProblemSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+
+    def perform_create(self, serializer):
+        serializer.save(creator_id=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(creator_id=self.get_object().creator_id)
+
+class SubtasksViewSet(viewsets.ModelViewSet):
+    queryset = Problem_subtasks.objects.all().order_by("problem_id", "subtask_no")
+    serializer_class = SubtaskSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+    def perform_create(self, serializer):
+        problem = serializer.validated_data["problem_id"]
+        if problem.creator_id != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Only the problem owner can modify its subtasks.")
+        serializer.save()
+
+    def perform_update(self, serializer):
+        problem = serializer.instance.problem_id
+        if problem.creator_id != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Only the problem owner can modify its subtasks.")
+        serializer.save()
+
+class TestCasesViewSet(viewsets.ModelViewSet):
+    queryset = Test_cases.objects.all().order_by("subtask_id", "idx")
+    serializer_class = TestCaseSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+    def _ensure_owner(self, subtask):
+        problem = subtask.problem_id
+        if problem.creator_id != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Only the problem owner can modify its test cases.")
+
+    def perform_create(self, serializer):
+        subtask = serializer.validated_data["subtask_id"]
+        self._ensure_owner(subtask)
+        serializer.save()
+
+    def perform_update(self, serializer):
+        subtask = serializer.instance.subtask_id
+        self._ensure_owner(subtask)
+        serializer.save()
+
+class TagsViewSet(viewsets.ModelViewSet):
+    queryset = Tags.objects.all().order_by("name")
+    serializer_class = TagSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
