@@ -64,9 +64,6 @@ class CourseCreateSerializer(serializers.ModelSerializer):
 
     def get_teacher(self, obj: Courses) -> Dict[str, Any]:
         teacher = obj.teacher_id
-        if not isinstance(teacher, User):
-            try:
-                teacher = User.objects.get(pk=obj.teacher_id)
-            except User.DoesNotExist:
-                return {}
+        if teacher is None:
+            return {}
         return self.TeacherSerializer(teacher).data
