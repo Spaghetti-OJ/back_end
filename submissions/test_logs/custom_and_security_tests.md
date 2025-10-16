@@ -82,9 +82,25 @@
 #### test_ip_address_logging
 **類型**: 單元測試  
 **覆蓋範圍**:
-- IP 地址記錄
-- 安全審計日誌
-- 請求追踪功能
+- IP 地址自動記錄到 submission.ip_address 字段
+- 用戶代理記錄到 submission.user_agent 字段  
+- 安全審計日誌：使用 Python logging 記錄提交活動
+- 請求追踪功能：支援 X-Forwarded-For 頭部
+
+**安全審計日誌具體內容**：
+```python
+# 在序列化器的 create 方法中自動記錄
+logger.info(
+    f'New submission: user_id={request.user.id}, '
+    f'problem_id={validated_data["problem_id"]}, '
+    f'ip={validated_data["ip_address"]}'
+)
+```
+
+**審計數據存儲**：
+- `ip_address`: GenericIPAddressField（支援 IPv4/IPv6）
+- `user_agent`: CharField（最大 500 字符）
+- 日誌級別：INFO，使用 'submission_audit' logger
 
 #### test_rate_limiting_duplicate_prevention
 **類型**: 單元測試  
