@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
+from rest_framework.test import APIClient
 
 from .models import Courses
 
@@ -11,6 +12,7 @@ User = get_user_model()
 
 class CourseCreateAPITestCase(APITestCase):
     def setUp(self):
+        self.client = APIClient()
         self.teacher = User.objects.create_user(
             username="teacher_one",
             email="teacher@example.com",
@@ -18,6 +20,7 @@ class CourseCreateAPITestCase(APITestCase):
             real_name="Teacher One",
             identity="teacher",
         )
+        self.client.force_authenticate(user=self.teacher)
         self.student = User.objects.create_user(
             username="student_one",
             email="student@example.com",
@@ -88,3 +91,21 @@ class CourseCreateAPITestCase(APITestCase):
         self.assertIn("student_limit", response.data)
         self.assertIn("semester", response.data)
         self.assertIn("academic_year", response.data)
+
+    def test_course_teacher_field(self):
+        data = {
+            "name": "測試課程",
+            "description": "這是一門測試課程",
+            "student_limit": 30,
+            "semester": "上學期",
+            "academic_year": 2025
+        }
+
+        response = self.client.post("/courses/", data, format="json")
+        self.assertEqual(response.status_code, 201)
+
+        # 驗證 teacher_id 是否正確綁定
+        course = Courses.objects.get(id=response.data["id"])
+        self.assertEqual(course.teacher_id, self.teacher)
+
+        print("課程建立成功，teacher_id 正確綁定至 User 物件：", course.teacher_id.username)
