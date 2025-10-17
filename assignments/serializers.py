@@ -25,7 +25,7 @@ class AssignmentProblemSerializer(serializers.ModelSerializer):
             "order_index", "weight",
             "special_judge",
             "time_limit", "memory_limit",
-            "attempt_quota",           # <- 新增欄位
+            "attempt_quota",           #新增
             "is_active", "partial_score",
             "hint_text", "created_at",
         )
