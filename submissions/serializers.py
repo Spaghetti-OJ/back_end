@@ -191,7 +191,6 @@ class CustomTestCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomTest
         fields = ['problem_id', 'language_type', 'source_code', 'input_data', 'expected_output']
-        exclude = ['user']
     
     def validate_source_code(self, value):
         """基本資料品質驗證"""
@@ -309,7 +308,6 @@ class EditorialCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Editorial
         fields = ['problem_id', 'title', 'content', 'difficulty_rating', 'is_official']
-        exclude = ['author']
     
     def validate_title(self, value):
         """標題驗證"""
