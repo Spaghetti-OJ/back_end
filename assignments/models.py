@@ -101,6 +101,9 @@ class Assignment_problems(models.Model):
     time_limit = models.IntegerField(null=True, blank=True)
     memory_limit = models.IntegerField(null=True, blank=True)
 
+    # 新增欄位：單題作答配額（None = 不限；>=1 表示限制）
+    attempt_quota = models.IntegerField(null=True, blank=True)
+
     is_active = models.BooleanField(default=True)
     partial_score = models.BooleanField(default=True)
     hint_text = models.TextField(blank=True)
