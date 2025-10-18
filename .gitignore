@@ -16,6 +16,13 @@ media/
 staticfiles/
 */migrations/__pycache__/
 
+# Testing
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+.tox/
+
 # Tools/IDE
 .vscode/
 .idea/
