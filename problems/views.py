@@ -33,7 +33,8 @@ class ProblemsViewSet(viewsets.ModelViewSet):
         serializer.save(creator_id=self.request.user)
 
     def perform_update(self, serializer):
-        serializer.save(creator_id=self.get_object().creator_id)
+        #serializer.save(creator_id=self.get_object().creator_id)
+        serializer.save(creator_id=serializer.instance.creator_id)
 
 class SubtasksViewSet(viewsets.ModelViewSet):
     queryset = Problem_subtasks.objects.all().order_by("problem_id", "subtask_no")
@@ -58,6 +59,13 @@ class SubtasksViewSet(viewsets.ModelViewSet):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Only the problem owner can modify its subtasks.")
         serializer.save()
+        
+    def perform_destroy(self, instance):
+        problem = instance.problem_id
+        if problem.creator_id != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Only the problem owner can delete its subtasks.")
+        instance.delete()
 
 class TestCasesViewSet(viewsets.ModelViewSet):
     queryset = Test_cases.objects.all().order_by("subtask_id", "idx")
@@ -84,8 +92,14 @@ class TestCasesViewSet(viewsets.ModelViewSet):
         subtask = serializer.instance.subtask_id
         self._ensure_owner(subtask)
         serializer.save()
+        
+    def perform_destroy(self, instance):
+        subtask = instance.subtask_id
+        self._ensure_owner(subtask)
+        instance.delete()
 
 class TagsViewSet(viewsets.ModelViewSet):
     queryset = Tags.objects.all().order_by("name")
     serializer_class = TagSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+
