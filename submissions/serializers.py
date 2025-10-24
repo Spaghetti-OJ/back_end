@@ -298,16 +298,10 @@ class EditorialCreateSerializer(serializers.ModelSerializer):
         }
     )
     
-    problem_id = serializers.IntegerField(
-        min_value=1,
-        error_messages={
-            'min_value': '題目 ID 必須大於 0'
-        }
-    )
-    
     class Meta:
         model = Editorial
-        fields = ['problem_id', 'title', 'content', 'difficulty_rating', 'is_official']
+        fields = ['id', 'title', 'content', 'difficulty_rating', 'is_official']
+        read_only_fields = ['id']
     
     def validate_title(self, value):
         """標題驗證"""
