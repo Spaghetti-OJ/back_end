@@ -54,16 +54,16 @@ class CourseView(generics.GenericAPIView):
         serializer.save()
         return Response({"message": "Success."}, status=status.HTTP_200_OK)
 
-    @staticmethod
-    def _extract_error_detail(errors):
+    @classmethod
+    def _extract_error_detail(cls, errors):
         if isinstance(errors, dict):
             for value in errors.values():
-                detail = CourseView._extract_error_detail(value)
+                detail = cls._extract_error_detail(value)
                 if detail is not None:
                     return detail
         elif isinstance(errors, list):
             for item in errors:
-                detail = CourseView._extract_error_detail(item)
+                detail = cls._extract_error_detail(item)
                 if detail is not None:
                     return detail
         elif isinstance(errors, ErrorDetail):
