@@ -23,19 +23,19 @@ class CourseCreateSerializer(serializers.Serializer):
     def validate_course(self, value: str) -> str:
         trimmed = value.strip()
         if not trimmed or not self.COURSE_PATTERN.match(trimmed):
-            raise serializers.ValidationError("Not allowed name.")
+            raise serializers.ValidationError("Not allowed name.", code="invalid_course_name")
         if Courses.objects.filter(name__iexact=trimmed).exists():
-            raise serializers.ValidationError("Course exists.")
+            raise serializers.ValidationError("Course exists.", code="course_exists")
         return trimmed
 
     def validate_teacher(self, value: str) -> User:
         try:
             teacher = User.objects.get(username=value)
         except User.DoesNotExist as exc:
-            raise serializers.ValidationError("User not found.") from exc
+            raise serializers.ValidationError("User not found.", code="user_not_found") from exc
 
         if teacher.identity != "teacher":
-            raise serializers.ValidationError("User not found.")
+            raise serializers.ValidationError("User not found.", code="user_not_found")
 
         return teacher
 

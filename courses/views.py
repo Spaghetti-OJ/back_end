@@ -1,5 +1,6 @@
 from django.db.models import Q
 from rest_framework import generics, permissions, status
+from rest_framework.exceptions import ErrorDetail
 from rest_framework.response import Response
 
 from .models import Courses
@@ -40,8 +41,10 @@ class CourseView(generics.GenericAPIView):
 
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
-            message = self._extract_error_message(serializer.errors)
-            status_code = status.HTTP_404_NOT_FOUND if message == "User not found." else status.HTTP_400_BAD_REQUEST
+            detail = self._extract_error_detail(serializer.errors)
+            message = str(detail) if detail else "Invalid data."
+            error_code = getattr(detail, "code", None) if detail else None
+            status_code = status.HTTP_404_NOT_FOUND if error_code == "user_not_found" else status.HTTP_400_BAD_REQUEST
             return Response({"message": message}, status=status_code)
 
         teacher = serializer.validated_data["teacher"]
@@ -52,12 +55,17 @@ class CourseView(generics.GenericAPIView):
         return Response({"message": "Success."}, status=status.HTTP_200_OK)
 
     @staticmethod
-    def _extract_error_message(errors) -> str:
+    def _extract_error_detail(errors):
         if isinstance(errors, dict):
             for value in errors.values():
-                msg = CourseView._extract_error_message(value)
-                if msg:
-                    return msg
-        elif isinstance(errors, list) and errors:
-            return str(errors[0])
-        return "Invalid data."
+                detail = CourseView._extract_error_detail(value)
+                if detail is not None:
+                    return detail
+        elif isinstance(errors, list):
+            for item in errors:
+                detail = CourseView._extract_error_detail(item)
+                if detail is not None:
+                    return detail
+        elif isinstance(errors, ErrorDetail):
+            return errors
+        return None
