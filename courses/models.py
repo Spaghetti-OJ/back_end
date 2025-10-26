@@ -15,10 +15,14 @@ class Courses(models.Model):
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
 
+    # 注意：資料庫現有欄位名為 teacher_id（非 teacher_id_id），
+    # 因欄位命名為 teacher_id + ForeignKey，Django 會預期欄位 teacher_id_id。
+    # 為了與既有資料庫對齊且不改 schema，明確指定 db_column='teacher_id'。
     teacher_id = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="courses_taught",
+        db_column='teacher_id',
     )
 
     join_code = models.CharField(

@@ -123,22 +123,29 @@ class ProblemManageView(APIView):
         return Response({"success": True, "problem_id": problem.id}, status=201)
 
 
-# 新增：PUT/DELETE /api/problem/manage/<id> — 修改/刪除題目
+# PUT/DELETE /api/problem/manage/<id> — 修改/刪除題目
 class ProblemManageDetailView(APIView):
-    """
-    用法：
-    - PUT /api/problem/manage/<id> 修改題目（僅 admin/teacher 且 owner）
-    - DELETE /api/problem/manage/<id> 刪除題目（僅 admin/teacher 且 owner）
-    <id> 就是題目的主鍵（建立題目時回傳的 problem_id）
-    """
     permission_classes = [IsTeacherOrAdmin, IsAuthenticated]
 
     def get_object(self, pk, user):
         problem = get_object_or_404(Problems, pk=pk)
-        # 僅允許 owner 操作
-        if problem.creator_id != user:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied("Only the problem owner can modify or delete this problem.")
+        
+        if problem.creator_id == user:
+            return problem
+        
+        if problem.course_id:
+            from courses.models import Course_members
+            is_course_staff = Course_members.objects.filter(
+                course_id=problem.course_id,
+                user_id=user,
+                role__in=['ta', 'teacher']
+            ).exists()
+            if is_course_staff:
+                return problem
+        
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("Only the problem owner or course TA/teacher can modify or delete this problem.")
+        
         return problem
 
     @transaction.atomic
