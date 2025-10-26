@@ -1,3 +1,7 @@
+from rest_framework import generics
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from django.db import transaction
 # from rest_framework.views import APIView
 # from rest_framework.response import Response
 # from rest_framework import status, permissions
@@ -14,6 +18,7 @@
 #         return Response({"success": True, "problem_id": problem.id}, status=201)
 
 from rest_framework import viewsets, status
+from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -22,7 +27,7 @@ from .models import Problems, Problem_subtasks, Test_cases, Tags
 from .serializers import (
     ProblemSerializer, SubtaskSerializer, TestCaseSerializer, TagSerializer
 )
-from .permissions import IsOwnerOrReadOnly
+from .permissions import IsOwnerOrReadOnly, IsTeacherOrAdmin
 
 class ProblemsViewSet(viewsets.ModelViewSet):
     queryset = Problems.objects.all().order_by("-created_at")
@@ -102,4 +107,53 @@ class TagsViewSet(viewsets.ModelViewSet):
     queryset = Tags.objects.all().order_by("name")
     serializer_class = TagSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+
+
+class ProblemManageView(APIView):
+    """
+    POST /api/problem/manage — 建立題目（僅 admin/teacher）
+    """
+    permission_classes = [IsTeacherOrAdmin]
+
+    def post(self, request):
+        serializer = ProblemSerializer(data=request.data, context={"request": request})
+        if not serializer.is_valid():
+            return Response({"success": False, "errors": serializer.errors}, status=422)
+        problem = serializer.save(creator_id=request.user)
+        return Response({"success": True, "problem_id": problem.id}, status=201)
+
+
+# 新增：PUT/DELETE /api/problem/manage/<id> — 修改/刪除題目
+class ProblemManageDetailView(APIView):
+    """
+    用法：
+    - PUT /api/problem/manage/<id> 修改題目（僅 admin/teacher 且 owner）
+    - DELETE /api/problem/manage/<id> 刪除題目（僅 admin/teacher 且 owner）
+    <id> 就是題目的主鍵（建立題目時回傳的 problem_id）
+    """
+    permission_classes = [IsTeacherOrAdmin, IsAuthenticated]
+
+    def get_object(self, pk, user):
+        problem = get_object_or_404(Problems, pk=pk)
+        # 僅允許 owner 操作
+        if problem.creator_id != user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Only the problem owner can modify or delete this problem.")
+        return problem
+
+    @transaction.atomic
+    def put(self, request, pk):
+        problem = self.get_object(pk, request.user)
+        serializer = ProblemSerializer(problem, data=request.data, partial=True, context={"request": request})
+        if not serializer.is_valid():
+            return Response({"success": False, "errors": serializer.errors}, status=422)
+        serializer.save(creator_id=problem.creator_id)  # 保留 owner
+        return Response({"success": True, "problem_id": problem.id}, status=200)
+
+    @transaction.atomic
+    def delete(self, request, pk):
+        problem = self.get_object(pk, request.user)
+        problem.delete()
+        return Response({"success": True}, status=204)
+
 
