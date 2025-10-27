@@ -68,7 +68,7 @@ class UserActivitySerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     
     # 為了顯示中文名稱 ('登入') 而不是英文鍵 ('login')
-    activity_type = serializers.CharField(source='get_activity_type_display')
+    activity_type = serializers.CharField(source='get_activity_type_display', read_only=True)
 
     # 顯示關聯物件的字串表示，例如 'Problem: Two Sum'
     # 我們的 Model __str__ 裡有更詳細的表示，但這裡用 StringRelatedField 獲取基本資訊
