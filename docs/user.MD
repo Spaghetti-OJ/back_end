@@ -8,7 +8,7 @@
 
 ## 使用者註冊 API
 
-**路徑**：`POST /auth/signup/`
+**路徑**：`POST /user/signup/`
 
 **說明**：建立新使用者帳號。
 
@@ -93,7 +93,7 @@ curl -X POST http://127.0.0.1:8000/auth/signup/ \
 
 ## 使用者登入 API
 
-**路徑**：`POST /auth/session/`
+**路徑**：`POST /user/session/`
 
 **說明**：以帳號密碼登入，取得 JWT。
 
@@ -141,79 +141,6 @@ curl -X POST http://127.0.0.1:8000/auth/session/ \
 >
 > * `access`：短效 token，之後的 API 需帶 `Authorization: Bearer <access>`。
 > * `refresh`：用於在 access 過期時換取新 access。
-
----
-
-## 取得新 access token（refresh 機制）
-
-**路徑**：`POST /auth/refresh/`
-
-**請求（JSON）**
-
-```json
-{ "refresh": "<你的 refresh token>" }
-```
-
-**成功回應（200, JSON）**
-
-```json
-{ "access": "<new.access.jwt>" }
-```
-
-**失敗（refresh 無效/過期）**：
-
-```json
-{ "detail": "Token is invalid or expired", "code": "token_not_valid" }
-```
-
-**cURL 測試**：
-
-```bash
-curl -X POST http://127.0.0.1:8000/auth/refresh/ \
-  -H "Content-Type: application/json" \
-  -d '{"refresh":"<你的 refresh token>"}'
-```
-
----
-
-## 取得自己的資料
-
-**路徑**：`GET /auth/me/`
-
-**Headers**：`Authorization: Bearer <access>`
-
-**成功回應（200, JSON）**（示例）
-
-```json
-{
-  "id": "b1b6c3f4-6e9b-4bfa-9a78-9e1d1e6b8a21",
-  "username": "momo",
-  "email": "momo@example.com",
-  "real_name": "小桃",
-  "identity": "student",
-  "date_joined": "2025-10-03T07:15:14.123Z",
-  "last_login": "2025-10-03T07:20:18.000Z",
-  "profile": {
-    "student_id": "1160001",
-    "bio": "我愛娃娃",
-    "avatar": null,
-    "email_verified": false,
-    "updated_at": "2025-10-03T07:15:14.123Z"
-  }
-}
-```
-
-**失敗回應（401）**：
-
-```json
-{ "detail": "Authentication credentials were not provided." }
-```
-
-**cURL 測試**：
-
-```bash
-curl http://127.0.0.1:8000/auth/me -H "Authorization: Bearer <access>"
-```
 
 ---
 
