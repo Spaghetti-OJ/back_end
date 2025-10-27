@@ -64,22 +64,24 @@ class UserActivitySerializer(serializers.ModelSerializer):
     對應 GET /me/activities 和 GET /admin/users/{userId}/activities 的回應。
     """
     # 為了讓輸出的 JSON 更易讀，我們把 ForeignKey 關聯的 user 物件換成它的字串表示 (username)
-    user = serializers.StringRelatedField()
+    user_id = serializers.UUIDField(source='user.id', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
     
     # 為了顯示中文名稱 ('登入') 而不是英文鍵 ('login')
-    activity_type = serializers.CharField(source='get_activity_type_display')
+    activity_type = serializers.CharField(source='get_activity_type_display', read_only=True)
 
     # 顯示關聯物件的字串表示，例如 'Problem: Two Sum'
     # 我們的 Model __str__ 裡有更詳細的表示，但這裡用 StringRelatedField 獲取基本資訊
-    content_object = serializers.StringRelatedField()
+    related_object = serializers.SerializerMethodField()
 
     class Meta:
         model = UserActivity
         fields = [
             'id',
-            'user',
+            'user_id',
+            'username',
             'activity_type',
-            'content_object', # 顯示關聯的物件
+            'related_object',
             'description',
             'ip_address',
             'user_agent',
@@ -87,6 +89,19 @@ class UserActivitySerializer(serializers.ModelSerializer):
             'success'
         ]
 
+    # For SerializerMethodField
+    def get_related_object(self, obj):
+        """
+        為 content_object 提供一個結構化的標示。
+        """
+        if obj.content_object is None:
+            return None
+        
+        return {
+            'type': obj.content_type.model, # 例如: "problem" 或 "submission"
+            'id': obj.object_id,
+            'representation': str(obj.content_object) # 返回物件的字串表示，例如 "Problem: Two Sum"
+        }
 
 # ==============================================================================
 # 3. LoginLog Serializer (對應 LoginLog Model)
@@ -98,7 +113,7 @@ class LoginLogSerializer(serializers.ModelSerializer):
     對應 GET /me/login-logs 和 GET /admin/users/{userId}/login-logs 的回應。
     """
     # 為了顯示中文名稱 ('成功') 而不是英文鍵 ('success')
-    login_status = serializers.CharField(source='get_login_status_display')
+    login_status = serializers.CharField(source='get_login_status_display', read_only=True)
 
     class Meta:
         model = LoginLog
