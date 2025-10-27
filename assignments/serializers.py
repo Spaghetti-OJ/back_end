@@ -1,48 +1,59 @@
-from decimal import Decimal
 from rest_framework import serializers
-from .models import Assignments
-from courses.models import Courses 
+from django.utils import timezone
+from .models import Assignments, Assignment_problems
+from courses.models import Courses, Course_members
 
-class AssignmentCreateSerializer(serializers.ModelSerializer):
-    # 前端只傳 course_id；creator 由後端填
-    course_id = serializers.PrimaryKeyRelatedField(
-        source="course", queryset=Courses.objects.all(), write_only=True
+# ---- 通用工具 ----
+def epoch_to_dt(v):
+    if v is None:
+        return None
+    try:
+        v = int(v)
+    except (TypeError, ValueError):
+        return None
+    return timezone.datetime.fromtimestamp(v, tz=timezone.utc)
+
+# ---- 輸入序列化 (對應測試 payload 欄位) ----
+class HomeworkInSerializer(serializers.Serializer):
+    # 測試使用的欄位命名
+    name = serializers.CharField(required=True, allow_blank=False)
+    course_id = serializers.CharField(required=True)  # 測試用字串，可能傳不存在的 UUID 字串
+    markdown = serializers.CharField(required=False, allow_blank=True, default="")
+    start = serializers.IntegerField(required=False, allow_null=True)
+    end = serializers.IntegerField(required=False, allow_null=True)
+    problem_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list
     )
 
-    class Meta:
-        model = Assignments
-        fields = (
-            "id",
-            "title",
-            "description",
-            "course_id",
-            "start_time",
-            "due_time",
-            "late_penalty",
-            "max_attempts",
-            "visibility",
-            "status",
-            "ip_restriction",
-            "created_at",
-            "updated_at",
-        )
-        read_only_fields = ("id", "created_at", "updated_at")
+    def validate_course_id(self, value):
+        # 依照測試：不存在要回 {"course_id": "course not exists"} 且 400
+        try:
+            course = Courses.objects.get(pk=value)
+        except (Courses.DoesNotExist, ValueError):
+            raise serializers.ValidationError("course not exists")
+        return value  # 保留原值，真正的 Course 物件在 create/update 由 view 取
+
     def validate(self, attrs):
-        start = attrs.get("start_time")
-        due = attrs.get("due_time")
-        if start and due and due < start:
-            raise serializers.ValidationError("due_time must be >= start_time.")
-
-        late_penalty = attrs.get("late_penalty", Decimal("0.00"))
-        if not (Decimal("0.00") <= late_penalty <= Decimal("100.00")):
-            raise serializers.ValidationError("late_penalty must be between 0 and 100.")
-
-        max_attempts = attrs.get("max_attempts", -1)
-        if max_attempts != -1 and max_attempts < 1:
-            raise serializers.ValidationError("max_attempts must be -1 or >= 1.")
+        start = attrs.get("start")
+        end = attrs.get("end")
+        if start is not None and end is not None:
+            try:
+                if int(end) < int(start):
+                    # 依照測試：要在 'end' 欄位下回錯
+                    raise serializers.ValidationError({"end": "end must be >= start"})
+            except (TypeError, ValueError):
+                pass
         return attrs
 
-    def create(self, validated):
-        # 由後端灌入建立者
-        validated["creator"] = self.context["request"].user
-        return super().create(validated)
+
+# ---- 輸出序列化 (GET /homework/{id} 期待欄位) ----
+class HomeworkDetailOutSerializer(serializers.Serializer):
+    # 測試預期有 message、name、problemIds 等
+    id = serializers.IntegerField()
+    message = serializers.CharField()
+    name = serializers.CharField()
+    course_id = serializers.IntegerField()
+    markdown = serializers.CharField(allow_blank=True)
+    start = serializers.IntegerField(allow_null=True)
+    end = serializers.IntegerField(allow_null=True)
+    problemIds = serializers.ListField(child=serializers.IntegerField())
