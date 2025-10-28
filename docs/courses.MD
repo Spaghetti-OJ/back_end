@@ -90,3 +90,36 @@ curl -X POST http://127.0.0.1:8000/course/ \
     "teacher": "teacher01"
     }'
 ```
+
+---
+
+## 課程統計摘要 API
+
+**路徑**：`GET /course/summary`
+
+**說明**：僅管理員可呼叫，回傳所有課程的統計摘要。
+
+**成功回應 (200 OK)**
+
+```json
+{
+  "message": "Success.",
+  "courseCount": 1,
+  "breakdown": [
+    {
+      "course": "人工智慧導論",
+      "userCount": 35,
+      "homeworkCount": 5,
+      "submissionCount": 120,
+      "problemCount": 12
+    }
+  ]
+}
+```
+
+**失敗回應**
+
+| 狀況      | HTTP | 範例訊息                                      |
+| ------- | ---- | ----------------------------------------- |
+| 未登入     | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 非管理員   | 403  | `{ "detail": "只有管理員可以查看課程統計。" }` |
