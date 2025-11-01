@@ -292,9 +292,10 @@ class EditorialCreateSerializer(serializers.ModelSerializer):
     )
     
     content = serializers.CharField(
-        min_length=10,
+        min_length=1,
         error_messages={
-            'min_length': '內容至少需要 10 個字元',
+            'min_length': '內容不能為空',
+            'blank': '內容不能為空'
         }
     )
     

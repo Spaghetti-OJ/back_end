@@ -1,10 +1,12 @@
 from django.shortcuts import render, get_object_or_404
 from django.db import models, transaction
+from django.http import Http404
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.exceptions import PermissionDenied, NotFound
+from rest_framework.exceptions import PermissionDenied, NotFound, ValidationError
 from django.utils import timezone
+import uuid
 
 from .models import Editorial, EditorialLike
 from .serializers import (
@@ -54,6 +56,13 @@ class EditorialListCreateView(EditorialPermissionMixin, generics.ListCreateAPIVi
     
     def get_queryset(self):
         problem_id = self.kwargs['problem_id']
+        
+        # 檢查問題是否存在
+        try:
+            Problems.objects.get(id=problem_id)
+        except Problems.DoesNotExist:
+            raise NotFound("問題不存在")
+            
         return Editorial.objects.filter(
             problem_id=problem_id,
             status='published'
@@ -118,6 +127,18 @@ class EditorialDetailView(EditorialPermissionMixin, generics.RetrieveUpdateDestr
         problem_id = self.kwargs['problem_id']
         solution_id = self.kwargs['solution_id']
         
+        # 驗證UUID格式
+        try:
+            uuid.UUID(str(solution_id))
+        except (ValueError, TypeError):
+            raise ValidationError("無效的題解ID格式")
+        
+        # 檢查問題是否存在
+        try:
+            Problems.objects.get(id=problem_id)
+        except Problems.DoesNotExist:
+            raise NotFound("問題不存在")
+        
         obj = get_object_or_404(
             Editorial,
             id=solution_id,
@@ -146,6 +167,24 @@ class EditorialDetailView(EditorialPermissionMixin, generics.RetrieveUpdateDestr
 @permission_classes([permissions.IsAuthenticated])
 def editorial_like_toggle(request, problem_id, solution_id):
     """題解按讚/取消按讚"""
+    
+    # 驗證UUID格式
+    try:
+        uuid.UUID(str(solution_id))
+    except (ValueError, TypeError):
+        return Response(
+            {'error': '無效的題解ID格式'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # 檢查問題是否存在
+    try:
+        Problems.objects.get(id=problem_id)
+    except Problems.DoesNotExist:
+        return Response(
+            {'error': '問題不存在'},
+            status=status.HTTP_404_NOT_FOUND
+        )
     
     # 驗證題解是否存在
     editorial = get_object_or_404(
