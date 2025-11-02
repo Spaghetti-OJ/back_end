@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 from django.db.models import Count, Q
 from assignments.models import Assignments
@@ -89,7 +89,7 @@ class CourseSummaryView(APIView):
             raise PermissionDenied("只有管理員可以查看課程統計。")
 
         courses = Courses.objects.all().order_by("name")
-        course_ids = list(courses.values_list("id", flat=True))
+        course_ids = [course.id for course in courses]
 
         member_counts = Course_members.objects.filter(course_id__in=course_ids).values("course_id").annotate(total=Count("id"))
         member_count_map = {entry["course_id"]: entry["total"] for entry in member_counts}
@@ -97,10 +97,8 @@ class CourseSummaryView(APIView):
         assignment_counts = Assignments.objects.filter(course_id__in=course_ids).values("course_id").annotate(total=Count("id"))
         assignment_count_map = {entry["course_id"]: entry["total"] for entry in assignment_counts}
 
-        problem_counts = Problems.objects.filter(course_id__in=course_ids).values("course_id").annotate(total=Count("id"))
-        problem_count_map = {entry["course_id"]: entry["total"] for entry in problem_counts}
-
         problem_rows = list(Problems.objects.filter(course_id__in=course_ids).values("id", "course_id"))
+        problem_count_map = dict(Counter(row["course_id"] for row in problem_rows))
         problem_ids = [row["id"] for row in problem_rows]
 
         submission_count_map = defaultdict(int)
