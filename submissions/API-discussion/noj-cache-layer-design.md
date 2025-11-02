@@ -16,14 +16,21 @@
 ```
 submissions/
 ├── cache/
-│   ├── __init__.py
-│   ├── keys.py              # Cache Key 生成器
-│   ├── protection.py        # 布隆過濾器和分散式鎖
-│   └── utils.py             # 快取工具函數
-├── models.py
-├── views.py
-├── signals.py               # 快取失效 signals
-└── ...
+│   ├── __init__.py          # 模組匯出
+│   ├── keys.py              # 快取鍵管理
+│   ├── protection.py        # 布隆過濾器
+│   ├── lock.py              # 分散式鎖
+│   ├── fallback.py          # 降級機制
+│   ├── monitoring.py        # 監控系統
+│   ├── signals.py           # Django 信號
+│   └── utils.py             # 工具函數
+├── management/commands/
+│   ├── cache_stats.py       # 快取統計命令
+│   └── monitor_redis_memory.py  # 記憶體監控命令
+├── test_file/
+│   └── test_redis_cache.py  # 快取測試
+└── test_logs/
+    └── redis-cache-testing-log-2025-11-02.md
 ```
 
 ### Cache Key 生成器 (`cache/keys.py`)
