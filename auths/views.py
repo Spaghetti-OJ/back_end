@@ -65,3 +65,61 @@ class ApiTokenListView(APIView):
             },
             status=status.HTTP_201_CREATED
         )
+    
+class ApiTokenDetailView(APIView):
+    """
+    處理對單一 API Token 的請求。
+    - GET: 檢視單一 Token 的詳細資訊。
+    - DELETE: 撤銷 (刪除) 一個 Token。
+    """
+
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, request, tokenId):
+        """
+        一個輔助方法，用於根據 tokenId 獲取 Token 物件。
+        同時會檢查這個 Token 是否屬於當前登入的使用者。
+        如果找不到或權限不符，會回傳 None。
+        """
+        try:
+            # 我們要找的物件必須同時滿足兩個條件：
+            # 1. id 符合 URL 傳來的 tokenId
+            # 2. user 必須是當前發出請求的使用者
+            token = ApiToken.objects.get(id=tokenId, user=request.user)
+            return token
+        except ApiToken.DoesNotExist:
+            return None
+
+    def get(self, request, tokenId):
+        """
+        處理 GET 請求，回傳單一 Token 的詳細資訊。
+        """
+        token = self.get_object(request, tokenId)
+        if token is None:
+            # 如果 get_object 回傳 None，代表找不到或權限不足
+            return Response(
+                {"detail": "Not found or permission denied."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # 使用 ApiTokenListSerializer 來序列化單一物件
+        serializer = ApiTokenListSerializer(token)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def delete(self, request, tokenId):
+        """
+        處理 DELETE 請求，刪除指定的 Token。
+        """
+        token = self.get_object(request, tokenId)
+        if token is None:
+            return Response(
+                {"detail": "Not found or permission denied."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # 執行刪除操作
+        token.delete()
+        
+        # 依照 RESTful 慣例，刪除成功後回傳 204 No Content
+        return Response(status=status.HTTP_204_NO_CONTENT)
