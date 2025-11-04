@@ -13,9 +13,9 @@ router.register(r"test-cases", TestCasesViewSet, basename="test-cases")
 router.register(r"tags", TagsViewSet, basename="tags")
 
 urlpatterns = [
-    path("problem/manage", ProblemManageView.as_view(), name="problem-manage"),
-    path("problem/manage/<int:pk>", ProblemManageDetailView.as_view(), name="problem-manage-detail"),
-    path("problem/<int:pk>", ProblemDetailView.as_view(), name="problem-detail"),
-    path("problem/", ProblemListView.as_view(), name="problem-list"),
-    path("", include(router.urls)),
+    path("manage", ProblemManageView.as_view(), name="problem-manage"),
+    path("manage/<int:pk>", ProblemManageDetailView.as_view(), name="problem-manage-detail"),
+    path("<int:pk>", ProblemDetailView.as_view(), name="problem-detail"),
+    path("", ProblemListView.as_view(), name="problem-list"),
+    path("router/", include(router.urls)),  # 保留 router 在子路徑避免衝突
 ]

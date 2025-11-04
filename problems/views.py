@@ -216,13 +216,8 @@ class ProblemDetailView(APIView):
         serializer = ProblemStudentSerializer(problem)
         data = serializer.data
         
-        # 加上個人化資訊（如果已登入）
+        
         if user.is_authenticated:
-            # TODO: 當有 submissions app 時，查詢該用戶對此題目的提交次數和最高分
-            # from submissions.models import Submissions
-            # user_submissions = Submissions.objects.filter(problem_id=problem, user_id=user)
-            # data['submit_count'] = user_submissions.count()
-            # data['high_score'] = user_submissions.aggregate(Max('score'))['score__max'] or 0
             data['submit_count'] = 0  # 暫時預設值
             data['high_score'] = 0
         else:
@@ -303,24 +298,10 @@ class ProblemManageDetailView(APIView):
         
         # 使用完整版 serializer
         serializer = ProblemDetailSerializer(problem)
-        data = serializer.data
-        
-        # 加上統計資訊
-        # TODO: 當有 submissions app 時，計算統計
-        # from submissions.models import Submissions
-        # from django.db.models import Count, Q
-        # stats = Submissions.objects.filter(problem_id=problem).aggregate(
-        #     ac_users=Count('user_id', filter=Q(status='AC'), distinct=True),
-        #     submitters=Count('user_id', distinct=True),
-        #     total_submissions=Count('id')
-        # )
-        # data['ac_user_count'] = stats['ac_users']
-        # data['submitter_count'] = stats['submitters']
-        
+        data = serializer.data 
         data['ac_user_count'] = 0  # 暫時預設值
         data['submitter_count'] = 0
         data['can_view_stdout'] = True  # 預設值，可從 settings 或題目設定讀取
-        
         return Response(data)
 
     @transaction.atomic
