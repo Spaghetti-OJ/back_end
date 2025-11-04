@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "problems",
     "assignments",
     "submissions",
+    "api_tokens",
 ]
 
 AUTH_USER_MODEL = 'user.User'
