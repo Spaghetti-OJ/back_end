@@ -1,7 +1,7 @@
+import re
 from typing import Any, Dict
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
 from rest_framework import serializers
 
 from .models import Courses
@@ -9,61 +9,58 @@ from .models import Courses
 User = get_user_model()
 
 
-class CourseCreateSerializer(serializers.ModelSerializer):
-    teacher = serializers.SerializerMethodField(read_only=True)
+class TeacherSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ("id", "username", "real_name", "identity")
 
-    class TeacherSerializer(serializers.ModelSerializer):
-        class Meta:
-            model = User
-            fields = ("id", "username", "real_name", "identity")
+class CourseCreateSerializer(serializers.Serializer):
+    COURSE_PATTERN = re.compile(r"^[a-zA-Z0-9._\- ]+$")
+
+    course = serializers.CharField(required=True)
+    teacher = serializers.CharField(required=True)
+
+    def validate_course(self, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed or not self.COURSE_PATTERN.match(trimmed):
+            raise serializers.ValidationError("Not allowed name.", code="invalid_course_name")
+        if Courses.objects.filter(name__iexact=trimmed).exists():
+            raise serializers.ValidationError("Course exists.", code="course_exists")
+        return trimmed
+
+    def validate_teacher(self, value: str) -> User:
+        try:
+            teacher = User.objects.get(username=value)
+        except User.DoesNotExist as exc:
+            raise serializers.ValidationError("User not found.", code="user_not_found") from exc
+
+        if teacher.identity != "teacher":
+            raise serializers.ValidationError("User not found.", code="user_not_found")
+
+        return teacher
+
+    def create(self, validated_data: Dict[str, Any]) -> Courses:
+        teacher: User = validated_data["teacher"]
+        course_name: str = validated_data["course"]
+        return Courses.objects.create(name=course_name, teacher_id=teacher)
+
+class CourseListSerializer(serializers.ModelSerializer):
+    course = serializers.CharField(source="name")
+    teacher = TeacherSerializer(source="teacher_id", read_only=True)
 
     class Meta:
         model = Courses
-        fields = [
-            "id",
-            "name",
-            "description",
-            "student_limit",
-            "semester",
-            "academic_year",
-            "join_code",
-            "is_active",
-            "student_count",
-            "created_at",
-            "updated_at",
-            "teacher",
-        ]
-        read_only_fields = [
-            "id",
-            "join_code",
-            "is_active",
-            "student_count",
-            "created_at",
-            "updated_at",
-            "teacher",
-        ]
-        extra_kwargs = {
-            "student_limit": {"required": True, "allow_null": False},
-            "semester": {"required": True, "allow_blank": False, "allow_null": False},
-            "academic_year": {"required": True, "allow_blank": False, "allow_null": False},
-        }
+        fields = ("id", "course", "teacher")
 
-    def create(self, validated_data: Dict[str, Any]) -> Courses:
-        request = self.context.get("request")
-        if request is None or request.user.is_anonymous:
-            raise serializers.ValidationError("無法辨識當前使用者。")
 
-        validated_data["teacher_id"] = request.user
+class CourseSummarySerializer(serializers.Serializer):
+    class BreakdownItem(serializers.Serializer):
+        course = serializers.CharField()
+        userCount = serializers.IntegerField()
+        homeworkCount = serializers.IntegerField()
+        submissionCount = serializers.IntegerField()
+        problemCount = serializers.IntegerField()
 
-        try:
-            return super().create(validated_data)
-        except IntegrityError as exc:
-            raise serializers.ValidationError(
-                {"join_code": ["無法產生唯一的 join_code，請稍後再試。"]}
-            ) from exc
-
-    def get_teacher(self, obj: Courses) -> Dict[str, Any]:
-        teacher = obj.teacher_id
-        if teacher is None:
-            return {}
-        return self.TeacherSerializer(teacher).data
+    message = serializers.CharField(default="Success.")
+    courseCount = serializers.IntegerField()
+    breakdown = BreakdownItem(many=True)

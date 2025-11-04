@@ -258,7 +258,6 @@ class CodeDraftCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = CodeDraft
         fields = ['problem_id', 'assignment_id', 'language_type', 'source_code', 'title', 'auto_saved']
-        exclude = ['user']
     
     def validate_source_code(self, value):
         """基本資料品質驗證"""
