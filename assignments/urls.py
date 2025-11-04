@@ -1,17 +1,22 @@
+# assignments/urls.py
 from django.urls import path
-from .views import (
-    HomeworkCreateView,
-    HomeworkDetailView,
-    HomeworkUpdateView,
-    HomeworkDeleteView,
-    CourseHomeworkListView,
-)
+from . import views
+
+app_name = "assignments"
 
 urlpatterns = [
-    # /homework
-    path("homework/", HomeworkCreateView.as_view(), name="homework-create"),
-    path("homework/<int:id>", HomeworkDetailView.as_view(), name="homework-detail"),
-    path("homework/<int:id>", HomeworkUpdateView.as_view(), name="homework-update"),
-    path("homework/<int:id>", HomeworkDeleteView.as_view(), name="homework-delete"),
-    path("homework/course/<course_id>/", CourseHomeworkListView.as_view(), name="course-homework-list"),
+    # POST /homework/
+    path("", views.HomeworkCreateView.as_view(), name="homework-create"),
+
+    # GET/PUT/DELETE /homework/<id>
+    path("<int:homework_id>", views.HomeworkDetailView.as_view(), name="homework-detail"),
+    path("<int:homework_id>/", views.HomeworkDetailView.as_view(), name="homework-detail-slash"),
+
+    # POST /homework/<id>/problems
+    path("<int:homework_id>/problems", views.AddProblemsToHomeworkView.as_view(), name="homework-add-problems"),
+    path("<int:homework_id>/problems/", views.AddProblemsToHomeworkView.as_view(), name="homework-add-problems-slash"),
+
+    # GET /homework/course/<course_id>  (course_id 為 UUID)
+    path("course/<uuid:course_id>", views.CourseHomeworkListView.as_view(), name="course-homework-list"),
+    path("course/<uuid:course_id>/", views.CourseHomeworkListView.as_view(), name="course-homework-list-slash"),
 ]

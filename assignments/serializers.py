@@ -1,59 +1,186 @@
-from rest_framework import serializers
+from typing import List, Optional
 from django.utils import timezone
-from .models import Assignments, Assignment_problems
-from courses.models import Courses, Course_members
+from rest_framework import serializers
+from datetime import datetime
 
-# ---- 通用工具 ----
-def epoch_to_dt(v):
-    if v is None:
+
+from assignments.models import Assignments, Assignment_problems
+from courses.models import Courses
+from problems.models import Problems
+from rest_framework import serializers
+
+def to_dt_from_epoch(value: Optional[int]):
+    if value in (None, "", 0):
         return None
     try:
-        v = int(v)
-    except (TypeError, ValueError):
-        return None
-    return timezone.datetime.fromtimestamp(v, tz=timezone.utc)
+        return timezone.datetime.fromtimestamp(int(value), tz=timezone.get_current_timezone())
+    except Exception:
+        raise serializers.ValidationError("invalid timestamp")
 
-# ---- 輸入序列化 (對應測試 payload 欄位) ----
-class HomeworkInSerializer(serializers.Serializer):
-    # 測試使用的欄位命名
-    name = serializers.CharField(required=True, allow_blank=False)
-    course_id = serializers.CharField(required=True)  # 測試用字串，可能傳不存在的 UUID 字串
+def to_epoch_from_dt(dt):
+    if not dt:
+        return None
+    return int(dt.timestamp())
+
+
+# ---------- 建立 ----------
+class HomeworkCreateSerializer(serializers.Serializer):
+    name = serializers.CharField(required=True)
+    course_id = serializers.UUIDField()
     markdown = serializers.CharField(required=False, allow_blank=True, default="")
     start = serializers.IntegerField(required=False, allow_null=True)
     end = serializers.IntegerField(required=False, allow_null=True)
     problem_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, default=list
     )
+    scoreboard_status = serializers.IntegerField(required=False, allow_null=True)
+    penalty = serializers.CharField(required=False, allow_blank=True, default="")
 
-    def validate_course_id(self, value):
-        # 依照測試：不存在要回 {"course_id": "course not exists"} 且 400
-        try:
-            course = Courses.objects.get(pk=value)
-        except (Courses.DoesNotExist, ValueError):
-            raise serializers.ValidationError("course not exists")
-        return value  # 保留原值，真正的 Course 物件在 create/update 由 view 取
+    # 內部解析後使用
+    course_obj: Optional[Courses] = None
 
     def validate(self, attrs):
-        start = attrs.get("start")
-        end = attrs.get("end")
-        if start is not None and end is not None:
-            try:
-                if int(end) < int(start):
-                    # 依照測試：要在 'end' 欄位下回錯
-                    raise serializers.ValidationError({"end": "end must be >= start"})
-            except (TypeError, ValueError):
-                pass
+        course_id = attrs.get("course_id")
+        try:
+            course = Courses.objects.get(id=course_id)
+        except Courses.DoesNotExist:
+            # 依測試規格：課程不存在 → 400，且錯誤 key 應是 course_id
+            raise serializers.ValidationError({"course_id": "course not exists"})
+
+        # 時間檢查
+        start_epoch = attrs.get("start")
+        end_epoch = attrs.get("end")
+        start_dt = to_dt_from_epoch(start_epoch) if start_epoch is not None else None
+        end_dt = to_dt_from_epoch(end_epoch) if end_epoch is not None else None
+        if start_dt and end_dt and end_dt < start_dt:
+            # 依規格：「end < start」→ 400，且要能看出是 end 的錯
+            raise serializers.ValidationError({"end": "end earlier than start"})
+
+        # 同課程、同名不可重複
+        if Assignments.objects.filter(course=self.course_obj, title=attrs["name"]).exists():
+            raise serializers.ValidationError("homework exists in this course")
+            # 問題 id 基本檢查
+            pids = attrs.get("problem_ids", [])
+            not_found = []
+            for pid in pids:
+                if not Problems.objects.filter(pk=pid).exists():
+                    not_found.append(pid)
+            if not_found:
+                raise serializers.ValidationError({"problem_ids": f"problems not found: {not_found}"})
+
+            attrs["_course"] = self.course
+            attrs["_start_dt"] = start_dt
+            attrs["_end_dt"] = end_dt
         return attrs
 
-
-# ---- 輸出序列化 (GET /homework/{id} 期待欄位) ----
-class HomeworkDetailOutSerializer(serializers.Serializer):
-    # 測試預期有 message、name、problemIds 等
-    id = serializers.IntegerField()
+# ---------- 詳情輸出 ----------
+class HomeworkDetailSerializer(serializers.Serializer):
+    # 指定的輸出格式
     message = serializers.CharField()
     name = serializers.CharField()
-    course_id = serializers.IntegerField()
-    markdown = serializers.CharField(allow_blank=True)
     start = serializers.IntegerField(allow_null=True)
     end = serializers.IntegerField(allow_null=True)
     problemIds = serializers.ListField(child=serializers.IntegerField())
+    markdown = serializers.CharField(allow_blank=True)
+    studentStatus = serializers.CharField()
+    penalty = serializers.CharField(allow_blank=True)
+
+    @staticmethod
+    def from_instance(hw: Assignments, problem_ids: List[int], is_teacher_or_ta: bool, penalty_text: str = ""):
+        return {
+            "message": "get homework",
+            "name": hw.title,
+            "start": to_epoch_from_dt(hw.start_time),
+            "end": to_epoch_from_dt(hw.due_time),
+            "problemIds": problem_ids,
+            "markdown": hw.description or "",
+            "studentStatus": "teacher_or_ta" if is_teacher_or_ta else "student",
+            "penalty": penalty_text or "",
+        }
+
+
+# ---------- 更新 ----------
+class HomeworkUpdateSerializer(serializers.Serializer):
+    name = serializers.CharField(required=False)
+    markdown = serializers.CharField(required=False, allow_blank=True)
+    start = serializers.IntegerField(required=False, allow_null=True)
+    end = serializers.IntegerField(required=False, allow_null=True)
+    problem_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False
+    )
+    scoreboard_status = serializers.IntegerField(required=False, allow_null=True)
+    penalty = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        # 時間檢查
+        start_epoch = attrs.get("start", None)
+        end_epoch = attrs.get("end", None)
+        start_dt = to_dt_from_epoch(start_epoch) if start_epoch is not None else None
+        end_dt = to_dt_from_epoch(end_epoch) if end_epoch is not None else None
+        if start_dt and end_dt and end_dt < start_dt:
+            raise serializers.ValidationError({"end": "end earlier than start"})
+
+        # 若指定 problem_ids，檢查是否存在
+        if "problem_ids" in attrs:
+            pids = attrs.get("problem_ids") or []
+            not_found = []
+            for pid in pids:
+                if not Problems.objects.filter(pk=pid).exists():
+                    not_found.append(pid)
+            if not_found:
+                raise serializers.ValidationError({"problem_ids": f"problems not found: {not_found}"})
+
+        attrs["_start_dt"] = start_dt
+        attrs["_end_dt"] = end_dt
+        return attrs
+    
+class HomeworkListResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+    items = serializers.ListField(child=serializers.DictField())
+
+def make_list_item_from_instance(
+    hw: Assignments, problem_ids: List[int], is_teacher_or_ta: bool, penalty_text: str = ""
+):
+    """課程清單每一個 item 的輸出 shape"""
+    return {
+        "id": hw.id,
+        "name": hw.title,
+        "start": to_epoch_from_dt(hw.start_time),
+        "end": to_epoch_from_dt(hw.due_time),
+        "problemIds": problem_ids,
+        "markdown": hw.description or "",
+        "studentStatus": "teacher_or_ta" if is_teacher_or_ta else "student",
+        "penalty": penalty_text or "",
+    }
+class AddProblemsItemSerializer(serializers.Serializer):
+    """
+    單題目的可選參數：
+    - id: 題目 ID（必填）
+    - weight/special_judge/time_limit/memory_limit/attempt_quota/order_index 皆為可選
+    """
+    id = serializers.IntegerField(required=True)
+    weight = serializers.DecimalField(max_digits=5, decimal_places=2, required=False)
+    special_judge = serializers.BooleanField(required=False)
+    time_limit = serializers.IntegerField(required=False, allow_null=True)
+    memory_limit = serializers.IntegerField(required=False, allow_null=True)
+    attempt_quota = serializers.IntegerField(required=False, allow_null=True)
+    order_index = serializers.IntegerField(required=False)
+
+class AddProblemsInSerializer(serializers.Serializer):
+    """
+    支援兩種輸入格式：
+    1) {"problem_ids": [1,2,3]}
+    2) {"problems": [{"id":1,"weight":1.5}, {"id":2,"special_judge":true}]}
+    兩者擇一即可；若同時提供，以 problems 為主。
+    """
+    problem_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, allow_empty=False
+    )
+    problems = serializers.ListField(
+        child=AddProblemsItemSerializer(), required=False, allow_empty=False
+    )
+
+    def validate(self, data):
+        if not data.get("problems") and not data.get("problem_ids"):
+            raise serializers.ValidationError("problem_ids or problems is required")
+        return data
