@@ -23,12 +23,12 @@ from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnl
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 
-from .models import Problems, Problem_subtasks, Test_cases, Tags
-from .serializers import (
+from ..models import Problems, Problem_subtasks, Test_cases, Tags
+from ..serializers import (
     ProblemSerializer, ProblemDetailSerializer, ProblemStudentSerializer,
     SubtaskSerializer, TestCaseSerializer, TagSerializer
 )
-from .permissions import IsOwnerOrReadOnly, IsTeacherOrAdmin
+from ..permissions import IsOwnerOrReadOnly, IsTeacherOrAdmin
 from rest_framework.pagination import PageNumberPagination
 
 class ProblemsViewSet(viewsets.ModelViewSet):
@@ -318,5 +318,3 @@ class ProblemManageDetailView(APIView):
         problem = self.get_object_for_modify(pk, request.user)
         problem.delete()
         return Response({"success": True}, status=204)
-
-

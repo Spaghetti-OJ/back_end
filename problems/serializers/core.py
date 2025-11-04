@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Problems, Problem_subtasks, Test_cases, Tags, Problem_tags
+from ..models import Problems, Problem_subtasks, Test_cases, Tags, Problem_tags
 
 class TagSerializer(serializers.ModelSerializer):
     class Meta:

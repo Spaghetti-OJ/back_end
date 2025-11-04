@@ -55,7 +55,7 @@ class Problems(models.Model):
     subtask_description = models.TextField(blank=True, null=True)
     supported_languages = models.JSONField(default=default_supported_langs)
     creator_id = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_problems')
-    course_id = models.ForeignKey('courses.Courses', on_delete=models.SET_NULL, null=True, blank=True, related_name='courses')
+    course_id = models.ForeignKey('courses.Courses', on_delete=models.PROTECT, null=False, blank=False, related_name='courses')
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     tags = models.ManyToManyField('Tags', through='Problem_tags', related_name='problems')
