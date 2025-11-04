@@ -45,7 +45,7 @@ class Courses(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "Courses"
+        db_table = "courses"
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["join_code"]),
