@@ -15,7 +15,7 @@ class Submission(models.Model):
     
     # Status choices - enum
     STATUS_CHOICES = [
-        ('pending', 'Pending'), # shema.sql 有一個 judge 重複了，所以我刪掉了
+        ('pending', 'Pending'), # schema.sql 有一個 judge 重複了，所以我刪掉了
         ('accepted', 'Accepted'),
         ('wrong_answer', 'Wrong Answer'),
         ('time_limit_exceeded', 'Time Limit Exceeded'),
