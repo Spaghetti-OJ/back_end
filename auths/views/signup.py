@@ -3,7 +3,7 @@ from rest_framework import generics, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
-from auths.serializers import RegisterSerializer, MeSerializer
+from auths.serializers.signup import RegisterSerializer, MeSerializer
 
 User = get_user_model()
 
