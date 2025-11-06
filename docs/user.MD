@@ -8,7 +8,7 @@
 
 ## 使用者註冊 API
 
-**路徑**：`POST /user/signup/`
+**路徑**：`POST /auth/signup/`
 
 **說明**：建立新使用者帳號。
 
@@ -93,7 +93,7 @@ curl -X POST http://127.0.0.1:8000/auth/signup/ \
 
 ## 使用者登入 API
 
-**路徑**：`POST /user/session/`
+**路徑**：`POST /auth/session/`
 
 **說明**：以帳號密碼登入，取得 JWT。
 
