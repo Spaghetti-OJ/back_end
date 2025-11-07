@@ -14,7 +14,16 @@ User = get_user_model()
 
 class CourseSummaryAPITestCase(APITestCase):
     def setUp(self):
+        from uuid import uuid4
+
+        unique = uuid4().hex[:6]
         self.client = APIClient()
+        self.client.defaults["HTTP_HOST"] = "127.0.0.1"
+        Submission.objects.all().delete()
+        Problems.objects.all().delete()
+        Assignments.objects.all().delete()
+        Course_members.objects.all().delete()
+        Courses.objects.all().delete()
         self.admin = User.objects.create_user(
             username="admin_user",
             email="admin@example.com",
@@ -37,8 +46,11 @@ class CourseSummaryAPITestCase(APITestCase):
             identity="student",
         )
 
+        self.course1_name = f"Algorithms_{unique}"
+        self.course2_name = f"Databases_{unique}"
+
         self.course1 = Courses.objects.create(
-            name="Algorithms",
+            name=self.course1_name,
             description="Algo course",
             student_limit=50,
             semester="Fall",
@@ -46,7 +58,7 @@ class CourseSummaryAPITestCase(APITestCase):
             teacher_id=self.teacher,
         )
         self.course2 = Courses.objects.create(
-            name="Databases",
+            name=self.course2_name,
             description="DB course",
             student_limit=40,
             semester="Spring",
@@ -124,9 +136,9 @@ class CourseSummaryAPITestCase(APITestCase):
         summary = {item["course"]: item for item in response.data["breakdown"]}
 
         self.assertEqual(
-            summary["Algorithms"],
+            summary[self.course1_name],
             {
-                "course": "Algorithms",
+                "course": self.course1_name,
                 "userCount": 2,
                 "homeworkCount": 2,
                 "submissionCount": 3,
@@ -134,9 +146,9 @@ class CourseSummaryAPITestCase(APITestCase):
             },
         )
         self.assertEqual(
-            summary["Databases"],
+            summary[self.course2_name],
             {
-                "course": "Databases",
+                "course": self.course2_name,
                 "userCount": 0,
                 "homeworkCount": 0,
                 "submissionCount": 0,
