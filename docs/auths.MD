@@ -96,6 +96,7 @@
 ```
 
 **回應格式 (201, JSON)**：
+
 **重要**：`full_token` 只會在此次建立成功時回傳**一次**，前端務必提示使用者妥善保存。
 
 ```json
@@ -208,4 +209,5 @@ curl -X DELETE http://127.0.0.1:8000/api-tokens/a1b2c3d4-e5f6-7890-1234-567890ab
         "detail": "You do not have permission to perform this action."
     }
     ```
+
 
