@@ -4,7 +4,11 @@ from rest_framework.exceptions import ErrorDetail
 from rest_framework.response import Response
 
 from ..models import Courses
-from ..serializers import CourseCreateSerializer, CourseListSerializer
+from ..serializers import (
+    CourseCreateSerializer,
+    CourseListSerializer,
+    CourseUpdateSerializer,
+)
 
 
 class CourseListCreateView(generics.GenericAPIView):
@@ -19,6 +23,8 @@ class CourseListCreateView(generics.GenericAPIView):
     def get_serializer_class(self):
         if self.request.method == "GET":
             return CourseListSerializer
+        if self.request.method == "PUT":
+            return CourseUpdateSerializer
         return CourseCreateSerializer
 
     def get_queryset(self):
@@ -55,6 +61,43 @@ class CourseListCreateView(generics.GenericAPIView):
         teacher = serializer.validated_data["teacher"]
         if user.identity == "teacher" and teacher != user:
             return Response({"message": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer.save()
+        return Response({"message": "Success."}, status=status.HTTP_200_OK)
+
+    def put(self, request, *args, **kwargs):
+        user = request.user
+        if getattr(user, "identity", None) not in ("teacher", "admin"):
+            return Response({"message": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+
+        course_name = request.data.get("course", "")
+        course_name = course_name.strip() if isinstance(course_name, str) else ""
+        if not course_name:
+            return Response({"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            course_obj = Courses.objects.get(name__iexact=course_name)
+        except Courses.DoesNotExist:
+            return Response({"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.identity != "admin" and course_obj.teacher_id != user:
+            return Response({"message": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+
+        payload = {
+            "new_course": request.data.get("new_course"),
+            "teacher": request.data.get("teacher"),
+        }
+        serializer = self.get_serializer(instance=course_obj, data=payload)
+        if not serializer.is_valid():
+            detail = self._extract_error_detail(serializer.errors)
+            message = str(detail) if detail else "Invalid data."
+            error_code = getattr(detail, "code", None) if detail else None
+            status_code = (
+                status.HTTP_404_NOT_FOUND
+                if error_code == "user_not_found"
+                else status.HTTP_400_BAD_REQUEST
+            )
+            return Response({"message": message}, status=status_code)
 
         serializer.save()
         return Response({"message": "Success."}, status=status.HTTP_200_OK)
