@@ -1,4 +1,4 @@
-# 後端 API 說明（提供給前端）
+# 後端 API 說明
 
 本專案後端使用 **Django + Django REST Framework**，所有 API 採 **JSON** 傳輸。
 
@@ -208,3 +208,4 @@ curl -X DELETE http://127.0.0.1:8000/api-tokens/a1b2c3d4-e5f6-7890-1234-567890ab
         "detail": "You do not have permission to perform this action."
     }
     ```
+
