@@ -147,3 +147,125 @@ class CourseAPITestCase(APITestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def _create_course(self, *, name="SampleCourse", teacher=None):
+        return Courses.objects.create(name=name, teacher_id=teacher or self.teacher)
+
+    def test_teacher_can_update_own_course(self):
+        course = self._create_course(name="Algorithms2024", teacher=self.teacher)
+        self.client.force_authenticate(user=self.teacher)
+        payload = {
+            "course": "Algorithms2024",
+            "new_course": "Algorithms2025",
+            "teacher": self.another_teacher.username,
+        }
+
+        response = self.client.put(self.url, payload, format="json")
+
+        course.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["message"], "Success.")
+        self.assertEqual(course.name, "Algorithms2025")
+        self.assertEqual(course.teacher_id, self.another_teacher)
+
+    def test_admin_can_update_any_course(self):
+        course = self._create_course(name="DataStructures", teacher=self.teacher)
+        self.client.force_authenticate(user=self.admin)
+        payload = {
+            "course": "DataStructures",
+            "new_course": "AdvancedDS",
+            "teacher": self.another_teacher.username,
+        }
+
+        response = self.client.put(self.url, payload, format="json")
+
+        course.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(course.name, "AdvancedDS")
+        self.assertEqual(course.teacher_id, self.another_teacher)
+
+    def test_teacher_cannot_update_course_they_do_not_own(self):
+        self._create_course(name="Physics101", teacher=self.another_teacher)
+        self.client.force_authenticate(user=self.teacher)
+        payload = {
+            "course": "Physics101",
+            "new_course": "Physics102",
+            "teacher": self.teacher.username,
+        }
+
+        response = self.client.put(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "Forbidden.")
+
+    def test_student_cannot_update_course(self):
+        self._create_course(name="Chemistry101", teacher=self.teacher)
+        self.client.force_authenticate(user=self.student)
+        payload = {
+            "course": "Chemistry101",
+            "new_course": "Chemistry102",
+            "teacher": self.teacher.username,
+        }
+
+        response = self.client.put(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "Forbidden.")
+
+    def test_update_invalid_new_name_returns_error(self):
+        self._create_course(name="Math101", teacher=self.teacher)
+        self.client.force_authenticate(user=self.teacher)
+        payload = {
+            "course": "Math101",
+            "new_course": "Invalid Name!",
+            "teacher": self.teacher.username,
+        }
+
+        response = self.client.put(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["message"], "Not allowed name.")
+
+    def test_update_duplicate_course_name_returns_error(self):
+        self._create_course(name="ExistingCourse", teacher=self.teacher)
+        course = self._create_course(name="OriginalCourse", teacher=self.teacher)
+        self.client.force_authenticate(user=self.teacher)
+        payload = {
+            "course": "OriginalCourse",
+            "new_course": "existingcourse",
+            "teacher": self.teacher.username,
+        }
+
+        response = self.client.put(self.url, payload, format="json")
+
+        course.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["message"], "Course exists.")
+        self.assertEqual(course.name, "OriginalCourse")
+
+    def test_update_with_nonexistent_teacher_returns_not_found(self):
+        self._create_course(name="History101", teacher=self.teacher)
+        self.client.force_authenticate(user=self.teacher)
+        payload = {
+            "course": "History101",
+            "new_course": "History102",
+            "teacher": "unknown_teacher",
+        }
+
+        response = self.client.put(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["message"], "User not found.")
+
+    def test_update_with_missing_course_returns_not_found(self):
+        self.client.force_authenticate(user=self.teacher)
+        payload = {
+            "course": "NonExistingCourse",
+            "new_course": "AnyCourse",
+            "teacher": self.teacher.username,
+        }
+
+        response = self.client.put(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["message"], "Course not found.")
