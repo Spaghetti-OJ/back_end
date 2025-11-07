@@ -6,7 +6,7 @@ from django.urls import path
 # 你的檔案在 auths/views/login_logs.py
 from .views import login_logs 
 from .views.signup import RegisterView, MeView
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 
 urlpatterns = [
     # 把 'login-logs' 路徑連到 View
@@ -15,4 +15,6 @@ urlpatterns = [
     # ... 這裡未來可以放 'register', 'password-reset' 等路由
     path('signup/', RegisterView.as_view(), name='register'),
     path('session/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path("refresh/", TokenRefreshView.as_view(), name="token_refresh"), 
+    path("verify/", TokenVerifyView.as_view(), name="token_verify"),
 ]
