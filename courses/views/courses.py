@@ -112,7 +112,7 @@ class CourseListCreateView(generics.GenericAPIView):
         course_name = request.data.get("course", "")
         course_name = course_name.strip() if isinstance(course_name, str) else ""
         if not course_name:
-            return Response({"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"message": "Course name is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             course_obj = Courses.objects.get(name__iexact=course_name)
