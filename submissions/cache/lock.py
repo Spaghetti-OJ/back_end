@@ -7,6 +7,7 @@
 import logging
 import uuid
 import time
+import random
 from typing import Optional
 from django_redis import get_redis_connection
 
@@ -49,18 +50,26 @@ class RedisDistributedLock:
         lock_key = f"lock:{key}"
         end_time = time.time() + timeout
         
+        # 指數退避參數
+        attempt = 0
+        base_delay = 0.01  # 初始 10ms
+        max_delay = 0.5    # 最大 500ms
+        
         try:
             while time.time() < end_time:
                 # 嘗試獲取鎖（NX: 不存在才設定，EX: 過期時間）
                 if self.redis.set(lock_key, identifier, nx=True, ex=expire):
-                    logger.debug(f"Lock acquired: {lock_key}")
+                    logger.debug(f"Lock acquired: {lock_key} after {attempt} attempts")
                     return identifier
                 
-                # 短暫休息後重試
-                time.sleep(0.01)  # 10ms
+                # 指數退避 + 抖動
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                jitter = random.uniform(0, delay * 0.5)  # 0-50% 的隨機抖動
+                time.sleep(delay + jitter)
+                attempt += 1
             
             # 超時未獲取到鎖
-            logger.warning(f"Lock acquire timeout for {lock_key}")
+            logger.warning(f"Lock acquire timeout for {lock_key} after {attempt} attempts")
             return None
             
         except Exception as e:

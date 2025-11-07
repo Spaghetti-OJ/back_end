@@ -20,6 +20,9 @@ class CachePenetrationProtection:
     使用布隆過濾器預先過濾不存在的 key，防止惡意查詢穿透快取直達資料庫
     """
     
+    # 用於表示快取空值的常數
+    NULL_CACHE_VALUE = '__NULL__'
+    
     def __init__(self, capacity: int = 1000000, error_rate: float = 0.001):
         """
         初始化布隆過濾器
@@ -114,7 +117,7 @@ class CachePenetrationProtection:
         cached_data = cache.get(cache_key)
         if cached_data is not None:
             # 處理空值快取
-            if cached_data == '__NULL__':
+            if cached_data == self.NULL_CACHE_VALUE:
                 if raise_404:
                     raise Http404(f"Object {key} not found")
                 return None
@@ -126,7 +129,7 @@ class CachePenetrationProtection:
             
             if result is None:
                 # 快取空值，防止重複查詢（較短 TTL）
-                cache.set(cache_key, '__NULL__', 60)
+                cache.set(cache_key, self.NULL_CACHE_VALUE, 60)
                 logger.warning(f"Bloom filter false positive for {key}")
                 if raise_404:
                     raise Http404(f"Object {key} not found")

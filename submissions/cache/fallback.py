@@ -115,6 +115,8 @@ class CacheWithFallback:
         """
         安全刪除符合模式的所有快取
         
+        使用 scan_iter() 避免阻塞 Redis 服務器
+        
         Args:
             pattern: 快取鍵模式（例如 "SUBMISSION_LIST:123:*"）
         
@@ -124,9 +126,21 @@ class CacheWithFallback:
         try:
             from django_redis import get_redis_connection
             conn = get_redis_connection("default")
-            keys = conn.keys(pattern)
-            if keys:
-                conn.delete(*keys)
+            
+            # 使用 scan_iter() 非阻塞式掃描
+            keys_to_delete = []
+            for key in conn.scan_iter(match=pattern, count=100):
+                keys_to_delete.append(key)
+                
+                # 批次刪除，避免一次刪除太多
+                if len(keys_to_delete) >= 1000:
+                    conn.delete(*keys_to_delete)
+                    keys_to_delete = []
+            
+            # 刪除剩餘的鍵
+            if keys_to_delete:
+                conn.delete(*keys_to_delete)
+            
             return True
         except Exception as e:
             logger.error(f"Redis pattern delete failed for {pattern}: {e}")
