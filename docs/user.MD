@@ -203,6 +203,60 @@ curl -X POST http://127.0.0.1:8000/auth/refresh/ \
 
 ---
 
+## Verify Token API
+
+**路徑**：`POST /auth/verify/`
+
+**說明**：驗證指定的 access token 是否有效（未過期、未竄改）。
+
+### 請求格式（JSON）
+
+| 欄位名     | 型別     |  必填 | 說明                |
+| ------- | ------ | :-: | ----------------- |
+| `token` | string |  ✅  | 要驗證的 access token |
+
+**成功請求範例**：
+
+```json
+{ "token": "<access.jwt>" }
+```
+
+**成功回應（200, JSON）**
+
+```json
+{}
+```
+
+> 表示該 access token 有效。
+
+**失敗回應**
+
+* token 無效或過期（401）：
+
+  ```json
+  { "detail": "Token is invalid or expired", "code": "token_not_valid" }
+  ```
+
+* 缺少欄位（400）：
+
+  ```json
+  { "token": ["This field is required."] }
+  ```
+
+**cURL 測試**：
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/verify/ \
+  -H "Content-Type: application/json" \
+  -d '{"token":"<access.jwt>"}'
+```
+
+> 欄位說明：
+>
+> * `token`：欲驗證的 access token。若 token 已過期、被修改或不合法，伺服器會回傳 401 錯誤。
+
+---
+
 ## 附錄：常見錯誤總表
 
 | 錯誤情境                | HTTP 狀態 | 回應訊息                                                                          |
