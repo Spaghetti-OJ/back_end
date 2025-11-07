@@ -257,7 +257,12 @@ def editorial_like_toggle(request, problem_id, solution_id):
                 )
     
     except Exception as e:
+        # 記錄完整錯誤但不回傳給客戶端
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Editorial update failed: {str(e)}", exc_info=True)
+        
         return Response(
-            {'detail': f'操作失敗: {str(e)}'},
+            {'detail': '操作失敗，請稍後再試'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
