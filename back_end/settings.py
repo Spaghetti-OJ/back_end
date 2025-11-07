@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "api_tokens",
     "announcements",
     "profiles",
+    "announcements",
 ]
 
 AUTH_USER_MODEL = 'user.User'
