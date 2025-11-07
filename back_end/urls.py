@@ -24,6 +24,7 @@ urlpatterns = [
     path('user/', include('user.urls')), 
     path('course/', include('courses.urls')),
     path('auth/', include('auths.urls')),
+    path('submissions/', include('submissions.urls')),
 ]
 
 if settings.DEBUG:
