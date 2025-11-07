@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "assignments",
     "submissions",
     "api_tokens",
+    "announcements",
 ]
 
 AUTH_USER_MODEL = 'user.User'
