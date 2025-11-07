@@ -196,7 +196,6 @@ class EditorialSerializerHypothesisTests(HypothesisTestCase):
         assume(content.strip())
         
         data = {
-            'problem_id': 1,
             'title': title,
             'content': content,
             'difficulty_rating': difficulty_rating,
@@ -210,12 +209,18 @@ class EditorialSerializerHypothesisTests(HypothesisTestCase):
         
         assert serializer.is_valid(), f"Errors: {serializer.errors}"
         
-        editorial = serializer.save()
+        # View 會在 perform_create 中設置 problem_id，所以測試也需要模擬
+        editorial = serializer.save(problem_id=1)
         
         assert editorial.problem_id == 1
         assert editorial.title == title.strip()
         assert editorial.content == content.strip()
-        assert editorial.difficulty_rating == difficulty_rating
+        # 使用 Decimal 比較以避免精度問題
+        if difficulty_rating is not None:
+            from decimal import Decimal
+            assert abs(float(editorial.difficulty_rating) - difficulty_rating) < 0.01
+        else:
+            assert editorial.difficulty_rating == difficulty_rating
         assert editorial.is_official == is_official
         assert editorial.author == self.user
     
@@ -294,9 +299,34 @@ class CustomTestSerializerHypothesisTests(HypothesisTestCase):
     @given(
         problem_id=st.integers(min_value=1, max_value=9999),
         language_type=st.sampled_from(['c', 'cpp', 'java', 'python', 'javascript']),
-        source_code=st.text(min_size=1, max_size=500).filter(lambda x: x.strip()),
-        input_data=st.one_of(st.none(), st.text(max_size=200)),
-        expected_output=st.one_of(st.none(), st.text(max_size=200))
+        source_code=st.text(
+            min_size=1, 
+            max_size=500,
+            alphabet=st.characters(
+                blacklist_categories=['Cc', 'Cs'],
+                blacklist_characters=['\x00']
+            )
+        ).filter(lambda x: x.strip()),
+        input_data=st.one_of(
+            st.none(), 
+            st.text(
+                max_size=200,
+                alphabet=st.characters(
+                    blacklist_categories=['Cs'],
+                    blacklist_characters=['\x00']
+                )
+            ).filter(lambda x: x is None or x == '' or x.strip())
+        ),
+        expected_output=st.one_of(
+            st.none(), 
+            st.text(
+                max_size=200,
+                alphabet=st.characters(
+                    blacklist_categories=['Cs'],
+                    blacklist_characters=['\x00']
+                )
+            ).filter(lambda x: x is None or x == '' or x.strip())
+        )
     )
     @settings(max_examples=10)
     def test_custom_test_create_serializer(

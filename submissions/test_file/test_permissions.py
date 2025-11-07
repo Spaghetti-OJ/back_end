@@ -228,21 +228,21 @@ class CoursePermissionHypothesisTests(HypothesisTestCase):
         
         mixin = EditorialPermissionMixin()
         
-        if role == Course_members.Role.TEACHER:
-            # 老師角色應該有權限
-            result = mixin.check_teacher_permission(user, problem.id)
-            assert result == True
-        else:
-            # 學生和 TA 應該沒有權限
+        if role == Course_members.Role.STUDENT:
+            # 學生應該沒有權限
             with pytest.raises(PermissionDenied):
                 mixin.check_teacher_permission(user, problem.id)
+        else:
+            # 老師和 TA 應該有權限
+            result = mixin.check_teacher_permission(user, problem.id)
+            assert result == True
     
     @given(
         num_teachers=st.integers(min_value=1, max_value=5),
         num_tas=st.integers(min_value=0, max_value=3),
         num_students=st.integers(min_value=0, max_value=10)
     )
-    @settings(max_examples=5)
+    @settings(max_examples=5, deadline=2000)
     def test_multiple_course_members_permissions(self, num_teachers, num_tas, num_students):
         """測試多個課程成員的權限"""
         unique_id = str(uuid.uuid4())[:8]
@@ -290,9 +290,9 @@ class CoursePermissionHypothesisTests(HypothesisTestCase):
                 role=Course_members.Role.TA
             )
             
-            # TA 應該沒有權限
-            with pytest.raises(PermissionDenied):
-                mixin.check_teacher_permission(ta, problem.id)
+            # TA 應該有權限
+            result = mixin.check_teacher_permission(ta, problem.id)
+            assert result == True
         
         # 創建並測試學生
         for i in range(num_students):

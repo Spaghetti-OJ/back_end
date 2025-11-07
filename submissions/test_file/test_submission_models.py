@@ -294,7 +294,7 @@ class SubmissionResultHypothesisTests(HypothesisTestCase):
         )
     
     @given(
-        task_id=st.text(min_size=1, max_size=50),
+        test_case_id=st.integers(min_value=1, max_value=100),
         test_case_index=st.integers(min_value=1, max_value=100),
         status=st.sampled_from(['accepted', 'wrong_answer', 'time_limit_exceeded', 'memory_limit_exceeded']),
         execution_time=st.integers(min_value=0, max_value=30000),
@@ -302,12 +302,13 @@ class SubmissionResultHypothesisTests(HypothesisTestCase):
     )
     @settings(max_examples=10)
     def test_submission_result_creation(
-        self, task_id, test_case_index, status, execution_time, memory_usage
+        self, test_case_id, test_case_index, status, execution_time, memory_usage
     ):
         """測試 SubmissionResult 用各種隨機資料建立"""
         result = SubmissionResult.objects.create(
             submission=self.submission,
-            task_id=task_id,
+            problem_id=1,
+            test_case_id=test_case_id,
             test_case_index=test_case_index,
             status=status,
             execution_time=execution_time,
@@ -315,7 +316,8 @@ class SubmissionResultHypothesisTests(HypothesisTestCase):
         )
         
         assert result.submission == self.submission
-        assert result.task_id == task_id
+        assert result.problem_id == 1
+        assert result.test_case_id == test_case_id
         assert result.test_case_index == test_case_index
         assert result.status == status
         assert result.execution_time == execution_time
