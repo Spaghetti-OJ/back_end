@@ -25,6 +25,7 @@ urlpatterns = [
         'course/',
         include(('courses.urls', 'courses'), namespace='courses'),
     ),
+    path('ann/', include(('announcements.urls', 'announcements'), namespace='system_announcements')),
     path('user/', include('user.urls')), 
     path('auth/', include('auths.urls')), 
     path('api-tokens/', include('api_tokens.urls')),
