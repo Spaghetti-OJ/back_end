@@ -97,5 +97,5 @@ class CourseUpdateSerializer(serializers.Serializer):
     def update(self, instance: Courses, validated_data: Dict[str, Any]) -> Courses:
         instance.name = validated_data["new_course"]
         instance.teacher_id = validated_data["teacher"]
-        instance.save(update_fields=["name", "teacher_id", "updated_at"])
+        instance.save(update_fields=["name", "teacher_id"])
         return instance
