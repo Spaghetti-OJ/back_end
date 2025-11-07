@@ -269,3 +269,51 @@ class CourseAPITestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.data["message"], "Course not found.")
+
+    def test_teacher_can_delete_own_course(self):
+        course = self._create_course(name="DeleteMe", teacher=self.teacher)
+        self.client.force_authenticate(user=self.teacher)
+
+        response = self.client.delete(self.url, {"course": "DeleteMe"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["message"], "Success.")
+        self.assertFalse(Courses.objects.filter(pk=course.pk).exists())
+
+    def test_admin_can_delete_course(self):
+        course = self._create_course(name="AdminDelete", teacher=self.teacher)
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.delete(self.url, {"course": "AdminDelete"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["message"], "Success.")
+        self.assertFalse(Courses.objects.filter(pk=course.pk).exists())
+
+    def test_teacher_cannot_delete_other_course(self):
+        course = self._create_course(name="NotYours", teacher=self.another_teacher)
+        self.client.force_authenticate(user=self.teacher)
+
+        response = self.client.delete(self.url, {"course": "NotYours"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "Forbidden.")
+        self.assertTrue(Courses.objects.filter(pk=course.pk).exists())
+
+    def test_student_cannot_delete_course(self):
+        course = self._create_course(name="StudentNope", teacher=self.teacher)
+        self.client.force_authenticate(user=self.student)
+
+        response = self.client.delete(self.url, {"course": "StudentNope"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "Forbidden.")
+        self.assertTrue(Courses.objects.filter(pk=course.pk).exists())
+
+    def test_delete_missing_course_returns_not_found(self):
+        self.client.force_authenticate(user=self.teacher)
+
+        response = self.client.delete(self.url, {"course": "UnknownCourse"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["message"], "Course not found.")
