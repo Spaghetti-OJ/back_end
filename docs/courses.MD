@@ -103,7 +103,7 @@ curl -X POST http://127.0.0.1:8000/course/ \
 
 | 欄位名        | 型別   | 必填 | 說明                                             |
 | ------------- | ------ | ---- | ------------------------------------------------ |
-| `course`      | string | ✅   | 目前課程名稱（大小寫不敏感）                          |
+| `course_id`   | string | ✅   | 需要編輯的課程 ID（UUID）                              |
 | `new_course`  | string | ✅   | 新課程名稱；需符合 `^[a-zA-Z0-9._\- ]+$` 格式        |
 | `teacher`     | string | ✅   | 新教師的使用者名稱；必須為已存在的教師帳號             |
 
@@ -113,7 +113,7 @@ curl -X POST http://127.0.0.1:8000/course/ \
 
 ```json
 {
-  "course": "Algorithms_2025",
+  "course_id": "4b1c2a3d-8e1f-45c3-9c62-ff33b4aa6f12",
   "new_course": "Algorithms_2026",
   "teacher": "teacher02"
 }
@@ -144,7 +144,7 @@ curl -X PUT http://127.0.0.1:8000/course/ \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer <access>" \
     -d '{
-    "course": "Algorithms_2025",
+    "course_id": "4b1c2a3d-8e1f-45c3-9c62-ff33b4aa6f12",
     "new_course": "Algorithms_2026",
     "teacher": "teacher02"
     }'
@@ -162,7 +162,7 @@ curl -X PUT http://127.0.0.1:8000/course/ \
 
 | 欄位名   | 型別   | 必填 | 說明                         |
 | -------- | ------ | ---- | ---------------------------- |
-| `course` | string | ✅   | 需要刪除的課程名稱（大小寫不敏感） |
+| `course_id` | string | ✅   | 需要刪除的課程 ID（UUID） |
 
 ---
 
@@ -170,7 +170,7 @@ curl -X PUT http://127.0.0.1:8000/course/ \
 
 ```json
 {
-  "course": "Algorithms_2025"
+  "course_id": "4b1c2a3d-8e1f-45c3-9c62-ff33b4aa6f12"
 }
 ```
 
@@ -196,7 +196,7 @@ curl -X DELETE http://127.0.0.1:8000/course/ \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer <access>" \
     -d '{
-    "course": "Algorithms_2025"
+    "course_id": "4b1c2a3d-8e1f-45c3-9c62-ff33b4aa6f12"
     }'
 ```
 
