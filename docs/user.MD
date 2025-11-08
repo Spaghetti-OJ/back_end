@@ -324,7 +324,7 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 | 登入         | `/auth/session/`        | POST     | SimpleJWT 取得 `access` + `refresh`                |
 | Refresh    | `/auth/refresh/`        | POST     | 用 `refresh` 換新 `access`；若啟用 rotate，會回新 `refresh` |
 | Verify（可選） | `/auth/verify/`         | POST     | 驗證 `access` 是否有效（有效時回 `{}`）                      |
-| **安全登出**   | `/auth/session/revoke/` | **POST** | 將 `refresh` 加入黑名單（立即失效）                          |          |
+| **安全登出**   | `/auth/session/revoke/` | **POST** | 將 `refresh` 加入黑名單（立即失效）                          |
 
 ---
 
