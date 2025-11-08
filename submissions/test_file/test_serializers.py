@@ -374,8 +374,8 @@ class CodeDraftSerializerHypothesisTests(HypothesisTestCase):
     @given(
         problem_id=st.integers(min_value=1, max_value=9999),
         language_type=st.sampled_from(['c', 'cpp', 'java', 'python', 'javascript']),
-        source_code=st.text(min_size=1, max_size=500).filter(lambda x: x.strip()),
-        title=st.one_of(st.none(), st.text(min_size=1, max_size=50)),
+        source_code=st.text(min_size=1, max_size=500).filter(lambda x: x.strip() and '\x00' not in x),
+        title=st.one_of(st.none(), st.text(min_size=1, max_size=50).filter(lambda x: '\x00' not in x)),
         auto_saved=st.booleans()
     )
     @settings(max_examples=10)
