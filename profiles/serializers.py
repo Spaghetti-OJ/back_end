@@ -14,7 +14,7 @@ class MeProfileSerializer(serializers.ModelSerializer):
 
     # 來自 UserProfile
     student_id = serializers.CharField(allow_blank=True, allow_null=True)
-    introduction = serializers.CharField(source="bio", allow_blank=True)
+    introduction = serializers.CharField(source="bio", allow_blank=True, required=False)
 
     # 顯示 choices 的「標籤」（Student/Teacher/Admin）
     role = serializers.SerializerMethodField()
