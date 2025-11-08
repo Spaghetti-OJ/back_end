@@ -35,7 +35,19 @@ class Problems(models.Model):
     title = models.CharField(max_length=200)
     difficulty = models.CharField(max_length=10, choices=Difficulty.choices, default=Difficulty.MEDIUM)
     max_score = models.IntegerField(default=100)
-    is_public = models.BooleanField(default=False)
+    class Visibility(models.TextChoices):
+        HIDDEN = 'hidden', 'Hidden'
+        COURSE = 'course', 'Course only'
+        PUBLIC = 'public', 'Public'
+
+    # Visibility of problem: hidden (only owner/admin), course (course members), public (everyone)
+    # Keep field name `is_public` for backward compatibility, but store tri-state choice value.
+    is_public = models.CharField(
+        max_length=10,
+        choices=Visibility.choices,
+        default=Visibility.HIDDEN,
+        db_index=True,
+    )
     total_submissions = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     accepted_submissions = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     acceptance_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0), MaxValueValidator(100)])

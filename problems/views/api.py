@@ -30,6 +30,8 @@ from ..serializers import (
 )
 from ..permissions import IsOwnerOrReadOnly, IsTeacherOrAdmin
 from rest_framework.pagination import PageNumberPagination
+from django.db.models import Count, Max
+from submissions.models import Submission
 
 class ProblemsViewSet(viewsets.ModelViewSet):
     queryset = Problems.objects.all().order_by("-created_at")
@@ -120,10 +122,16 @@ class ProblemPagination(PageNumberPagination):
 class ProblemListView(APIView):
     """
     GET /api/problem/ — 題目列表
-    支援篩選: ?difficulty=easy&is_public=true&course_id=3
+    支援篩選: ?difficulty=easy&is_public=public|course|hidden&course_id=3
     支援分頁: ?page=1&page_size=20
     """
     permission_classes = []
+
+    def get_permissions(self):
+        # allow anonymous GET, but require teacher/admin for POST
+        if getattr(self, 'request', None) is not None and self.request.method == 'POST':
+            return [IsTeacherOrAdmin()]
+        return []
 
     def get(self, request):
         queryset = Problems.objects.all().select_related('creator_id').prefetch_related('tags', 'subtasks')
@@ -134,27 +142,27 @@ class ProblemListView(APIView):
             queryset = queryset.filter(difficulty=difficulty)
         
         # 篩選：is_public
-        is_public = request.query_params.get('is_public')
-        if is_public is not None:
-            is_public_bool = is_public.lower() in ('true', '1', 'yes')
-            queryset = queryset.filter(is_public=is_public_bool)
+        visibility = request.query_params.get('is_public')
+        if visibility in ('public','course','hidden'):
+            queryset = queryset.filter(is_public=visibility)
         
         # 篩選：course_id
         course_id = request.query_params.get('course_id')
         if course_id:
             queryset = queryset.filter(course_id=course_id)
         
-        # 權限過濾：未登入或非 owner/課程成員只能看 is_public=True
+    # 權限過濾：未登入或非 owner/課程成員只能看 is_public=public
         user = request.user
         if not user.is_authenticated:
-            queryset = queryset.filter(is_public=True)
+            # Fallback: treat legacy boolean true as public during migration window
+            queryset = queryset.filter(is_public__in=['public', True, 1])
         elif not (user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher']):
             # 普通使用者：只能看公開的 + 自己建的 + 所屬課程的
             from django.db.models import Q
             from courses.models import Course_members
             user_courses = Course_members.objects.filter(user_id=user).values_list('course_id', flat=True)
             queryset = queryset.filter(
-                Q(is_public=True) | Q(creator_id=user) | Q(course_id__in=user_courses)
+                Q(is_public__in=['public', True, 1]) | Q(creator_id=user) | Q(is_public='course', course_id__in=user_courses)
             )
         
         # 排序
@@ -170,6 +178,50 @@ class ProblemListView(APIView):
         
         serializer = ProblemSerializer(queryset, many=True)
         return Response(serializer.data)
+
+    def post(self, request):
+        # create problem via POST /problem/ (only teacher/admin)
+        serializer = ProblemSerializer(data=request.data, context={"request": request})
+        # check permissions (get_permissions uses IsTeacherOrAdmin for POST)
+        for p in self.get_permissions():
+            if not p.has_permission(request, self):
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("You do not have permission to create problems.")
+
+        if not serializer.is_valid():
+            return Response({"success": False, "errors": serializer.errors}, status=422)
+        
+        # Extract and validate tags before saving
+        tags_data = request.data.get('tags')
+        tag_ids = []
+        if tags_data is not None:
+            if isinstance(tags_data, (list, tuple)):
+                for v in tags_data:
+                    try:
+                        tag_ids.append(int(v))
+                    except (ValueError, TypeError):
+                        return Response({"success": False, "errors": {"tags": f"Invalid tag id: {v}"}}, status=400)
+                
+                # Strict validation: all tag ids must exist
+                from ..models import Tags
+                existing_tags = Tags.objects.filter(id__in=tag_ids)
+                existing_ids = set(existing_tags.values_list('id', flat=True))
+                missing_ids = [tid for tid in tag_ids if tid not in existing_ids]
+                if missing_ids:
+                    return Response({
+                        "success": False, 
+                        "errors": {"tags": f"Tag IDs do not exist: {missing_ids}"}
+                    }, status=400)
+        
+        problem = serializer.save(creator_id=request.user)
+        
+        # Attach validated tags
+        if tag_ids:
+            from ..models import Tags
+            tags_qs = Tags.objects.filter(id__in=tag_ids)
+            problem.tags.set(tags_qs)
+        
+        return Response({"success": True, "problem_id": problem.id}, status=201)
 
 
 class ProblemDetailView(APIView):
@@ -190,18 +242,20 @@ class ProblemDetailView(APIView):
         
         # 權限檢查
         user = request.user
-        if not problem.is_public:
+        visibility = getattr(problem, 'is_public', 'hidden')
+        # Treat legacy boolean True as public, False as hidden
+        legacy_public = visibility in (True, 1)
+        visibility_normalized = 'public' if legacy_public else visibility
+        if visibility_normalized not in ('public'):
+            # not public -> need auth
             if not user.is_authenticated:
                 return Response({"detail": "Authentication required."}, status=401)
-            
-            # admin/staff 可看全部
+            # admin/teacher
             if user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher']:
                 pass
-            # owner 可看
             elif problem.creator_id == user:
                 pass
-            # 課程成員可看
-            elif problem.course_id:
+            elif visibility_normalized == 'course' and problem.course_id:
                 from courses.models import Course_members
                 is_course_member = Course_members.objects.filter(
                     course_id=problem.course_id,
@@ -217,12 +271,18 @@ class ProblemDetailView(APIView):
         data = serializer.data
         
         
+        # A: 簡單實作：若使用者已登入，直接從 Submission 聚合該 user 在此題的次數與最高分
+        # 未登入則回傳 null（前端可解讀為需登入才會看到個人化資訊）
         if user.is_authenticated:
-            data['submit_count'] = 0  # 暫時預設值
-            data['high_score'] = 0
+            stats = Submission.objects.filter(problem_id=problem.id, user=user).aggregate(
+                submit_count=Count('id'),
+                high_score=Max('score'),
+            )
+            data['submit_count'] = stats.get('submit_count') or 0
+            data['high_score'] = stats.get('high_score') or 0
         else:
-            data['submit_count'] = 0
-            data['high_score'] = 0
+            data['submit_count'] = None
+            data['high_score'] = None
         
         return Response(data)
 
@@ -310,7 +370,37 @@ class ProblemManageDetailView(APIView):
         serializer = ProblemSerializer(problem, data=request.data, partial=True, context={"request": request})
         if not serializer.is_valid():
             return Response({"success": False, "errors": serializer.errors}, status=422)
+        
+        # Extract and validate tags before saving
+        tags_data = request.data.get('tags')
+        tag_ids = []
+        if tags_data is not None:
+            if isinstance(tags_data, (list, tuple)):
+                for v in tags_data:
+                    try:
+                        tag_ids.append(int(v))
+                    except (ValueError, TypeError):
+                        return Response({"success": False, "errors": {"tags": f"Invalid tag id: {v}"}}, status=400)
+                
+                # Strict validation: all tag ids must exist
+                from ..models import Tags
+                existing_tags = Tags.objects.filter(id__in=tag_ids)
+                existing_ids = set(existing_tags.values_list('id', flat=True))
+                missing_ids = [tid for tid in tag_ids if tid not in existing_ids]
+                if missing_ids:
+                    return Response({
+                        "success": False, 
+                        "errors": {"tags": f"Tag IDs do not exist: {missing_ids}"}
+                    }, status=400)
+        
         serializer.save(creator_id=problem.creator_id)  # 保留 owner
+        
+        # Update tags if provided
+        if tags_data is not None:
+            from ..models import Tags
+            tags_qs = Tags.objects.filter(id__in=tag_ids)
+            problem.tags.set(tags_qs)
+        
         return Response({"success": True, "problem_id": problem.id}, status=200)
 
     @transaction.atomic

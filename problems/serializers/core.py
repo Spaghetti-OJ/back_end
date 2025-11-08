@@ -63,6 +63,10 @@ class SubtaskStudentSerializer(serializers.ModelSerializer):
 class ProblemSerializer(serializers.ModelSerializer):
     creator_id = serializers.PrimaryKeyRelatedField(read_only=True)
     tags = TagSerializer(many=True, read_only=True)
+    # allow client to submit a list of tag ids when creating/updating a problem
+    tag_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), write_only=True, required=False
+    )
     course_id = serializers.PrimaryKeyRelatedField(
         queryset=__import__('courses.models', fromlist=['Courses']).Courses.objects.all(),
         required=True,
@@ -80,7 +84,7 @@ class ProblemSerializer(serializers.ModelSerializer):
             "subtask_description", "supported_languages",
             "creator_id", "course_id",
             "created_at", "updated_at",
-            "tags",
+            "tags", "tag_ids",
         ]
         read_only_fields = [
             "acceptance_rate", "like_count", "view_count",
@@ -88,11 +92,79 @@ class ProblemSerializer(serializers.ModelSerializer):
             "creator_id", "created_at", "updated_at",
         ]
 
+    def create(self, validated_data):
+        # Extract tag_ids (write-only field)
+        tag_ids = validated_data.pop('tag_ids', None)
+        
+        # If tag_ids not provided, check if 'tags' was sent in initial_data
+        # (since 'tags' is read_only, it won't be in validated_data)
+        if tag_ids is None and hasattr(self, 'initial_data'):
+            raw_tags = self.initial_data.get('tags')
+            print(f"[DEBUG] create() initial_data.tags = {raw_tags}")  # DEBUG
+            if isinstance(raw_tags, (list, tuple)):
+                # Convert to list of ints
+                tag_ids = []
+                for v in raw_tags:
+                    try:
+                        tag_ids.append(int(v))
+                    except (ValueError, TypeError):
+                        pass
+                print(f"[DEBUG] create() extracted tag_ids = {tag_ids}")  # DEBUG
+
+        # Create problem instance
+        problem = super().create(validated_data)
+        
+        # Attach tags if provided
+        if tag_ids:
+            tags_qs = Tags.objects.filter(id__in=tag_ids)
+            print(f"[DEBUG] create() tags_qs count = {tags_qs.count()}")  # DEBUG
+            problem.tags.set(tags_qs)
+        else:
+            print(f"[DEBUG] create() no tag_ids to attach")  # DEBUG
+        
+        return problem
+
+    def update(self, instance, validated_data):
+        # Extract tag_ids (write-only field)
+        tag_ids = validated_data.pop('tag_ids', None)
+        
+        print(f"[DEBUG] update() called, tag_ids from validated_data = {tag_ids}")  # DEBUG
+        
+        # If tag_ids not provided, check if 'tags' was sent in initial_data
+        if tag_ids is None and hasattr(self, 'initial_data'):
+            raw_tags = self.initial_data.get('tags')
+            print(f"[DEBUG] update() initial_data.tags = {raw_tags}")  # DEBUG
+            if isinstance(raw_tags, (list, tuple)):
+                tag_ids = []
+                for v in raw_tags:
+                    try:
+                        tag_ids.append(int(v))
+                    except (ValueError, TypeError):
+                        pass
+                print(f"[DEBUG] update() extracted tag_ids = {tag_ids}")  # DEBUG
+
+        # Update problem instance
+        problem = super().update(instance, validated_data)
+        
+        # Update tags if provided
+        if tag_ids is not None:
+            tags_qs = Tags.objects.filter(id__in=tag_ids)
+            print(f"[DEBUG] update() tags_qs count = {tags_qs.count()}, ids = {list(tags_qs.values_list('id', flat=True))}")  # DEBUG
+            problem.tags.set(tags_qs)
+            print(f"[DEBUG] update() after set, problem.tags.count() = {problem.tags.count()}")  # DEBUG
+        else:
+            print(f"[DEBUG] update() tag_ids is None, not updating tags")  # DEBUG
+        
+        return problem
+
 
 class ProblemDetailSerializer(serializers.ModelSerializer):
     """管理員版題目詳情（包含完整的 subtasks 和 test_cases）"""
     creator_id = serializers.PrimaryKeyRelatedField(read_only=True)
     tags = TagSerializer(many=True, read_only=True)
+    tag_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), write_only=True, required=False
+    )
     subtasks = SubtaskSerializer(many=True, read_only=True)
 
     class Meta:
@@ -106,7 +178,7 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
             "subtask_description", "supported_languages",
             "creator_id", "course_id",
             "created_at", "updated_at",
-            "tags", "subtasks",
+            "tags", "tag_ids", "subtasks",
         ]
         read_only_fields = [
             "acceptance_rate", "like_count", "view_count",
@@ -118,6 +190,10 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
 class ProblemStudentSerializer(serializers.ModelSerializer):
     """學生版題目詳情（隱藏敏感資訊 + 加上個人化資訊）"""
     tags = TagSerializer(many=True, read_only=True)
+    # include tag_ids as write-only for consistency if used in admin flows
+    tag_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), write_only=True, required=False
+    )
     subtasks = SubtaskStudentSerializer(many=True, read_only=True)
     
     # 個人化資訊（需在 view 中動態設定）
@@ -135,7 +211,7 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
             "subtask_description", "supported_languages",
             "course_id",
             "created_at",
-            "tags", "subtasks",
+            "tags", "tag_ids", "subtasks",
             "submit_count", "high_score",
         ]
         read_only_fields = [
@@ -148,3 +224,4 @@ class ProblemTagSerializer(serializers.ModelSerializer):
         model = Problem_tags
         fields = ["problem_id", "tag_id", "added_by"]
         read_only_fields = ["added_by"]
+
