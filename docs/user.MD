@@ -8,7 +8,7 @@
 
 ## 使用者註冊 API
 
-**路徑**：`POST /user/signup/`
+**路徑**：`POST /auth/signup/`
 
 **說明**：建立新使用者帳號。
 
@@ -93,7 +93,7 @@ curl -X POST http://127.0.0.1:8000/auth/signup/ \
 
 ## 使用者登入 API
 
-**路徑**：`POST /user/session/`
+**路徑**：`POST /auth/session/`
 
 **說明**：以帳號密碼登入，取得 JWT。
 
@@ -141,6 +141,198 @@ curl -X POST http://127.0.0.1:8000/auth/session/ \
 >
 > * `access`：短效 token，之後的 API 需帶 `Authorization: Bearer <access>`。
 > * `refresh`：用於在 access 過期時換取新 access。
+
+---
+
+## Refresh Token API
+
+**路徑**：`POST /auth/refresh/`
+
+**說明**：使用現有的 refresh token 取得新的 access token。
+
+### 請求格式（JSON）
+
+| 欄位名       | 型別     |  必填 | 說明                     |
+| --------- | ------ | :-: | ---------------------- |
+| `refresh` | string |  ✅  | 先前登入時取得的 refresh token |
+
+**成功請求範例**：
+
+```json
+{ "refresh": "<refresh.jwt>" }
+```
+
+**成功回應（200, JSON）**
+
+```json
+{ "access": "<new.access.jwt>" }
+```
+
+> 若伺服器設定 `ROTATE_REFRESH_TOKENS = True`，則回應中也可能同時包含新的 refresh token：
+>
+> ```json
+> { "access": "<new.access.jwt>", "refresh": "<new.refresh.jwt>" }
+> ```
+
+**失敗回應**
+
+* refresh token 遺失或無效（401）：
+
+  ```json
+  { "detail": "Token is invalid or expired", "code": "token_not_valid" }
+  ```
+
+* 缺少欄位（400）：
+
+  ```json
+  { "refresh": ["This field is required."] }
+  ```
+
+**cURL 測試**：
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/refresh/ \
+  -H "Content-Type: application/json" \
+  -d '{"refresh":"<refresh.jwt>"}'
+```
+
+> 欄位說明：
+>
+> * `refresh`：登入時發放的長效 token，用於換取新的 access。
+> * `access`：短效 token，用於 API 認證，過期時需重新以 refresh 換取。
+
+---
+
+## Verify Token API
+
+**路徑**：`POST /auth/verify/`
+
+**說明**：驗證指定的 access token 是否有效（未過期、未竄改）。
+
+### 請求格式（JSON）
+
+| 欄位名     | 型別     |  必填 | 說明                |
+| ------- | ------ | :-: | ----------------- |
+| `token` | string |  ✅  | 要驗證的 access token |
+
+**成功請求範例**：
+
+```json
+{ "token": "<access.jwt>" }
+```
+
+**成功回應（200, JSON）**
+
+```json
+{}
+```
+
+> 表示該 access token 有效。
+
+**失敗回應**
+
+* token 無效或過期（401）：
+
+  ```json
+  { "detail": "Token is invalid or expired", "code": "token_not_valid" }
+  ```
+
+* 缺少欄位（400）：
+
+  ```json
+  { "token": ["This field is required."] }
+  ```
+
+**cURL 測試**：
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/verify/ \
+  -H "Content-Type: application/json" \
+  -d '{"token":"<access.jwt>"}'
+```
+
+> 欄位說明：
+>
+> * `token`：欲驗證的 access token。若 token 已過期、被修改或不合法，伺服器會回傳 401 錯誤。
+
+---
+
+## Revoke Refresh Token（登出）
+
+**路徑**：`POST /auth/session/revoke/`
+
+**用途**：註銷（撤銷）一顆 **refresh token**，使其無法再換發新的 access token。
+
+**權限**：`Authorization: Bearer <access>`（`IsAuthenticated`）
+
+### 請求（JSON）
+
+| 欄位名       | 型別     |  必填 | 說明                                                                                                 |
+| --------- | ------ | :-: | -------------------------------------------------------------------------------------------------- |
+| `refresh` | string |  ✅  | 先前登入或 refresh 時取得的 refresh token。 |
+
+**成功請求範例**：
+
+```json
+{ "refresh": "<refresh.jwt>" }
+```
+
+### 成功回應
+
+```
+HTTP/1.1 205 Reset Content
+```
+
+> 代表該 refresh 已加入黑名單。建議前端立即清除本地憑證與狀態。
+
+### 失敗回應
+
+* 缺少欄位（400）：
+
+  ```json
+  { "detail": "refresh field required" }
+  ```
+* refresh 無效或過期（400）：
+
+  ```json
+  { "detail": "Invalid or expired refresh token" }
+  ```
+* 未授權（401）：
+
+  ```json
+  { "detail": "Authentication credentials were not provided." }
+  ```
+
+### cURL 測試
+
+```bash
+ACCESS="<access.jwt>"
+REFRESH="<refresh.jwt>"
+
+curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
+  -H "Authorization: Bearer $ACCESS" \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh\":\"$REFRESH\"}"
+```
+
+---
+
+### 相關端點對照
+
+| 功能         | 路徑                      | 方法       | 說明                                               |
+| ---------- | ----------------------- | -------- | ------------------------------------------------ |
+| 登入         | `/auth/session/`        | POST     | SimpleJWT 取得 `access` + `refresh`                |
+| Refresh    | `/auth/refresh/`        | POST     | 用 `refresh` 換新 `access`；若啟用 rotate，會回新 `refresh` |
+| Verify（可選） | `/auth/verify/`         | POST     | 驗證 `access` 是否有效（有效時回 `{}`）                      |
+| **安全登出**   | `/auth/session/revoke/` | **POST** | 將 `refresh` 加入黑名單（立即失效）                          |
+
+---
+
+### 範例使用情境（用戶按「登出」）
+
+1. 前端呼叫 `POST /auth/session/revoke/`（帶 access；body 帶 refresh 或由 cookie 取）。
+2. 收到 `205` ⇒ 清除本地 `access/refresh`、停止自動 refresh、跳轉登入。
+3. 若用戶返回頁面且 access 過期，攔截器判定 401 → 嘗試 `/auth/refresh/`；若後端回 `token_not_valid / blacklisted` ⇒ 直接跳轉登入。
 
 ---
 
