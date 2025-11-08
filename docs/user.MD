@@ -257,6 +257,177 @@ curl -X POST http://127.0.0.1:8000/auth/verify/ \
 
 ---
 
+## Revoke Refresh Token（登出）
+
+**路徑**：`POST /auth/session/revoke/`
+
+**用途**：註銷（撤銷）一顆 **refresh token**，使其無法再換發新的 access token。
+
+**權限**：`Authorization: Bearer <access>`（`IsAuthenticated`）
+
+### 請求（JSON）
+
+| 欄位名       | 型別     |  必填 | 說明                                                                                                 |
+| --------- | ------ | :-: | -------------------------------------------------------------------------------------------------- |
+| `refresh` | string |  ✅  | 先前登入或 refresh 時取得的 refresh token。 |
+
+**成功請求範例**：
+
+```json
+{ "refresh": "<refresh.jwt>" }
+```
+
+### 成功回應
+
+```
+HTTP/1.1 205 Reset Content
+```
+
+> 代表該 refresh 已加入黑名單。建議前端立即清除本地憑證與狀態。
+
+### 失敗回應
+
+* 缺少欄位（400）：
+
+  ```json
+  { "detail": "refresh field required" }
+  ```
+* refresh 無效或過期（400）：
+
+  ```json
+  { "detail": "Invalid or expired refresh token" }
+  ```
+* 未授權（401）：
+
+  ```json
+  { "detail": "Authentication credentials were not provided." }
+  ```
+
+### cURL 測試
+
+```bash
+ACCESS="<access.jwt>"
+REFRESH="<refresh.jwt>"
+
+curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
+  -H "Authorization: Bearer $ACCESS" \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh\":\"$REFRESH\"}"
+```
+
+---
+
+### 相關端點對照
+
+| 功能         | 路徑                      | 方法       | 說明                                               |
+| ---------- | ----------------------- | -------- | ------------------------------------------------ |
+| 登入         | `/auth/session/`        | POST     | SimpleJWT 取得 `access` + `refresh`                |
+| Refresh    | `/auth/refresh/`        | POST     | 用 `refresh` 換新 `access`；若啟用 rotate，會回新 `refresh` |
+| Verify（可選） | `/auth/verify/`         | POST     | 驗證 `access` 是否有效（有效時回 `{}`）                      |
+| **安全登出**   | `/auth/session/revoke/` | **POST** | 將 `refresh` 加入黑名單（立即失效）                          |
+
+---
+
+### 範例使用情境（用戶按「登出」）
+
+1. 前端呼叫 `POST /auth/session/revoke/`（帶 access；body 帶 refresh 或由 cookie 取）。
+2. 收到 `205` ⇒ 清除本地 `access/refresh`、停止自動 refresh、跳轉登入。
+3. 若用戶返回頁面且 access 過期，攔截器判定 401 → 嘗試 `/auth/refresh/`；若後端回 `token_not_valid / blacklisted` ⇒ 直接跳轉登入。
+
+---
+
+## GET /profile/
+
+**說明**：
+取得目前登入使用者的個人資料。
+
+**權限需求**：
+
+* 需要登入（JWT Access Token）
+
+**Request Header**：
+
+| Header        | Type   | Required | 說明                          |
+| ------------- | ------ | -------- | --------------------------- |
+| Authorization | string | ✅        | 格式為 `Bearer <ACCESS_TOKEN>` |
+| Content-Type  | string | ✅        | `application/json`          |
+
+**Request Body**：
+無
+
+---
+
+## Response
+
+**成功範例 (200 OK)**
+
+```json
+{
+  "real_name": "陳天天",
+  "user_name": "momo",
+  "role": "Student",
+  "email": "412470100S@gapps.ntnu.edu.tw",
+  "user_id": "omuba",
+  "student_id": "41247057S",
+  "introduction": "哈囉我是資工116"
+}
+```
+
+**欄位說明**：
+
+| 欄位           | 型別     | 說明                               |
+| ------------ | ------ | -------------------------------- |
+| real_name    | string | 使用者真實姓名                          |
+| user_name    | string | 使用者帳號（username）                  |
+| role         | string | 使用者身份（Student / Teacher / Admin） |
+| email        | string | 使用者電子郵件                          |
+| user_id      | string | 使用者的 ID             |
+| student_id   | string | 學號（若有）                           |
+| introduction | string | 個人簡介                             |
+
+---
+
+## 錯誤回應
+
+| 狀態碼              | 說明            | 範例                                                                   |
+| ---------------- | ------------- | -------------------------------------------------------------------- |
+| 401 Unauthorized | Token 遺失或無效   | `{ "detail": "Authentication credentials were not provided." }`      |
+| 403 Forbidden    | 使用者權限不足（若未登入） | `{ "detail": "You do not have permission to perform this action." }` |
+
+---
+
+## 測試指令
+
+**1️⃣ 登入取得 Token**
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/session/ \
+  -H "Content-Type: application/json" \
+  -d '{"username":"momo","password":"abc12345"}'
+```
+
+**2️⃣ 使用 Access Token 呼叫 /profile/**
+
+```bash
+curl -X GET http://127.0.0.1:8000/profile/ \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json"
+```
+
+---
+
+## Implementation Summary
+
+* App 名稱：`profiles`
+* View：`MeProfileView (APIView)`
+* Serializer：`MeProfileSerializer`
+* Model：
+
+  * `User` (自訂 AbstractUser)
+  * `UserProfile` (OneToOne 連結 User)
+
+---
+
 ## 附錄：常見錯誤總表
 
 | 錯誤情境                | HTTP 狀態 | 回應訊息                                                                          |

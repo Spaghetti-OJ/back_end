@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "submissions",
     "api_tokens",
     "announcements",
+    "profiles",
 ]
 
 AUTH_USER_MODEL = 'user.User'
@@ -99,6 +100,38 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
         'ATOMIC_REQUESTS': False,
     }
+}
+
+# Redis Cache Configuration
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/1'),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'SOCKET_CONNECT_TIMEOUT': 0.5,  # 500ms 連線超時
+            'SOCKET_TIMEOUT': 0.5,  # 500ms 操作超時
+            'CONNECTION_POOL_KWARGS': {
+                'max_connections': 50,
+                'retry_on_timeout': True,
+            },
+            'REDIS_CLIENT_KWARGS': {
+                'health_check_interval': 30,
+            },
+        },
+        'KEY_PREFIX': 'noj',
+        'TIMEOUT': 300,  # 預設 5 分鐘
+    }
+}
+
+# Cache TTL settings
+CACHE_TIMEOUTS = {
+    'submission_list': 30,        # 30秒
+    'user_stats': 300,            # 5分鐘
+    'submission_detail': 120,     # 2分鐘
+    'high_score': 600,            # 10分鐘
+    'permission': 60,             # 1分鐘
+    'ranking': 300,               # 5分鐘
 }
 
 
