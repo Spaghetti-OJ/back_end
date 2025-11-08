@@ -41,12 +41,15 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'user.apps.UserConfig',
     "rest_framework",
+    "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "courses",
     "auths",
     "problems",
     "assignments",
     "submissions",
+    "api_tokens",
 ]
 
 AUTH_USER_MODEL = 'user.User'
@@ -96,6 +99,38 @@ DATABASES = {
     }
 }
 
+# Redis Cache Configuration
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/1'),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'SOCKET_CONNECT_TIMEOUT': 0.5,  # 500ms 連線超時
+            'SOCKET_TIMEOUT': 0.5,  # 500ms 操作超時
+            'CONNECTION_POOL_KWARGS': {
+                'max_connections': 50,
+                'retry_on_timeout': True,
+            },
+            'REDIS_CLIENT_KWARGS': {
+                'health_check_interval': 30,
+            },
+        },
+        'KEY_PREFIX': 'noj',
+        'TIMEOUT': 300,  # 預設 5 分鐘
+    }
+}
+
+# Cache TTL settings
+CACHE_TIMEOUTS = {
+    'submission_list': 30,        # 30秒
+    'user_stats': 300,            # 5分鐘
+    'submission_detail': 120,     # 2分鐘
+    'high_score': 600,            # 10分鐘
+    'permission': 60,             # 1分鐘
+    'ranking': 300,               # 5分鐘
+}
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -139,3 +174,11 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),     # 你可調整
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),        # 你可調整
+    "ROTATE_REFRESH_TOKENS": True,                      # 旋轉 refresh（建議開）
+    "BLACKLIST_AFTER_ROTATION": True,                   # 舊 refresh 自動黑名單
+    "UPDATE_LAST_LOGIN": True,                          # 可選
+}

@@ -258,7 +258,6 @@ class CodeDraftCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = CodeDraft
         fields = ['problem_id', 'assignment_id', 'language_type', 'source_code', 'title', 'auto_saved']
-        exclude = ['user']
     
     def validate_source_code(self, value):
         """基本資料品質驗證"""
@@ -292,22 +291,19 @@ class EditorialCreateSerializer(serializers.ModelSerializer):
     )
     
     content = serializers.CharField(
-        min_length=10,
+        max_length=10000,
+        min_length=1,
         error_messages={
-            'min_length': '內容至少需要 10 個字元',
-        }
-    )
-    
-    problem_id = serializers.IntegerField(
-        min_value=1,
-        error_messages={
-            'min_value': '題目 ID 必須大於 0'
+            'max_length': '內容不能超過 10000 字元',
+            'min_length': '內容不能為空',
+            'blank': '內容不能為空'
         }
     )
     
     class Meta:
         model = Editorial
-        fields = ['problem_id', 'title', 'content', 'difficulty_rating', 'is_official']
+        fields = ['id', 'title', 'content', 'difficulty_rating', 'is_official']
+        read_only_fields = ['id']
     
     def validate_title(self, value):
         """標題驗證"""

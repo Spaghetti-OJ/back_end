@@ -1,7 +1,14 @@
-from django.urls import path
+from django.urls import include, path
 
-from .views import CourseCreateView
+app_name = "courses"
 
 urlpatterns = [
-    path('', CourseCreateView.as_view(), name='course_create'),
+    path(
+        "",
+        include((f"{__package__}.urls.courses", "courses"), namespace="courses"),
+    ),
+    path(
+        "summary/",
+        include((f"{__package__}.urls.summary", "summary"), namespace="summary"),
+    ),
 ]
