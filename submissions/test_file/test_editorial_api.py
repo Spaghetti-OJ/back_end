@@ -163,7 +163,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
             }),
             st.fixed_dictionaries({
                 'title': st.just('有效標題'),
-                'content': st.just('太短'),  # 內容太短
+                'content': st.just('   '),  # 內容只有空白
                 'difficulty_rating': st.just(3.0),
                 'is_official': st.just(False)
             }),

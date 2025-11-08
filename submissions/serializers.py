@@ -188,6 +188,20 @@ class CustomTestCreateSerializer(serializers.ModelSerializer):
         }
     )
     
+    input_data = serializers.CharField(
+        required=False, 
+        allow_blank=True, 
+        allow_null=True,
+        trim_whitespace=False
+    )
+    
+    expected_output = serializers.CharField(
+        required=False, 
+        allow_blank=True, 
+        allow_null=True,
+        trim_whitespace=False
+    )
+    
     class Meta:
         model = CustomTest
         fields = ['problem_id', 'language_type', 'source_code', 'input_data', 'expected_output']
@@ -196,7 +210,7 @@ class CustomTestCreateSerializer(serializers.ModelSerializer):
         """基本資料品質驗證"""
         if not value.strip():
             raise serializers.ValidationError('程式碼不能只包含空白字元')
-        return value
+        return value.strip()
     
     def validate(self, attrs):
         """整體驗證"""
@@ -309,13 +323,13 @@ class EditorialCreateSerializer(serializers.ModelSerializer):
         """標題驗證"""
         if not value.strip():
             raise serializers.ValidationError('標題不能只包含空白字元')
-        return value.strip()
+        return value
     
     def validate_content(self, value):
         """內容驗證"""
         if not value.strip():
             raise serializers.ValidationError('內容不能只包含空白字元')
-        return value.strip()
+        return value
     
     def create(self, validated_data):
         request = self.context['request']
