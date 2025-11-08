@@ -53,8 +53,8 @@ class CourseDetailAPITestCase(APITestCase):
 
     def test_teacher_can_view_course_detail(self):
         ta_user = User.objects.create_user(
-            username="ta_user",
-            email="ta@example.com",
+            username=f"ta_user_{self.unique}",
+            email=f"ta_{self.unique}@example.com",
             password="pass1234",
             real_name="Assistant One",
             identity="student",
