@@ -213,8 +213,8 @@ class EditorialSerializerHypothesisTests(HypothesisTestCase):
         editorial = serializer.save(problem_id=1)
         
         assert editorial.problem_id == 1
-        assert editorial.title == title.strip()
-        assert editorial.content == content.strip()
+        assert editorial.title == title.strip()  # title 會被 strip
+        assert editorial.content == content      # content 保持原樣
         # 使用 Decimal 比較以避免精度問題
         if difficulty_rating is not None:
             from decimal import Decimal

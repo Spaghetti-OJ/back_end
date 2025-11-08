@@ -13,7 +13,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = [
             'id', 'code_hash', 'status', 'score', 'execution_time',
-            'memory_usage', 'judged_at', 'created_at'
+            'memory_usage', 'judged_at', 'created_at', 'is_custom_test'
         ]
 
 class SubmissionCreateSerializer(serializers.ModelSerializer):
@@ -168,6 +168,7 @@ class CustomTestCreateSerializer(serializers.ModelSerializer):
     source_code = serializers.CharField(
         max_length=65535,
         min_length=1,
+        trim_whitespace=False,  # 保持與 input_data/expected_output 一致
         error_messages={
             'max_length': '程式碼長度不能超過 64KB',
             'min_length': '程式碼不能為空',
@@ -210,7 +211,7 @@ class CustomTestCreateSerializer(serializers.ModelSerializer):
         """基本資料品質驗證"""
         if not value.strip():
             raise serializers.ValidationError('程式碼不能只包含空白字元')
-        return value.strip()
+        return value  # 保持原始空白，與 input_data/expected_output 一致
     
     def validate(self, attrs):
         """整體驗證"""
@@ -323,14 +324,14 @@ class EditorialCreateSerializer(serializers.ModelSerializer):
         """標題驗證"""
         if not value.strip():
             raise serializers.ValidationError('標題不能只包含空白字元')
-        return value
-    
+        return value.strip()  # 統一回傳 stripped 版本
+
     def validate_content(self, value):
         """內容驗證"""
         if not value.strip():
             raise serializers.ValidationError('內容不能只包含空白字元')
-        return value
-    
+        return value  # 保持原始內容，允許格式空白
+
     def create(self, validated_data):
         request = self.context['request']
         validated_data['author'] = request.user

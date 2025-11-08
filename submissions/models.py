@@ -13,16 +13,18 @@ class Submission(models.Model):
         ('javascript', 'JavaScript'),
     ]
     
-    # Status choices - enum
+    # Status choices - enum (使用數字編碼，兼容 NOJ 標準)
     STATUS_CHOICES = [
-        ('pending', 'Pending'), # schema.sql 有一個 judge 重複了，所以我刪掉了
-        ('accepted', 'Accepted'),
-        ('wrong_answer', 'Wrong Answer'),
-        ('time_limit_exceeded', 'Time Limit Exceeded'),
-        ('memory_limit_exceeded', 'Memory Limit Exceeded'),
-        ('runtime_error', 'Runtime Error'),
-        ('compilation_error', 'Compilation Error'),
-        ('system_error', 'System Error'), # 此處我加了一個system_error狀態，原本schema沒有寫，但我覺得需要
+        ('-2', 'Pending before upload'),              # 兼容舊的 NOJ，還沒有 code 的 submission
+        ('-1', 'Pending'),              # 等待判題
+        ('0', 'Accepted'),              # AC - 答案正確
+        ('1', 'Wrong Answer'),          # WA - 答案錯誤
+        ('2', 'Compilation Error'),     # CE - 編譯錯誤
+        ('3', 'Time Limit Exceeded'),   # TLE - 超過時間限制
+        ('4', 'Memory Limit Exceeded'), # MLE - 超過記憶體限制
+        ('5', 'Runtime Error'),         # RE - 執行時錯誤
+        ('6', 'Judge Error'),           # JE - 判題系統錯誤
+        ('7', 'Output Limit Exceeded'), # OLE - 輸出超過限制
     ]
     # Primary key - UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -44,7 +46,7 @@ class Submission(models.Model):
     status = models.CharField(
         max_length=30,
         choices=STATUS_CHOICES,
-        default='pending'
+        default='-1'  # 預設為 Pending 狀態
     )
     score = models.IntegerField(default=0)
     max_score = models.IntegerField(default=100)
@@ -58,6 +60,7 @@ class Submission(models.Model):
 
     # Submission metadata
     is_late = models.BooleanField(default=False)
+    is_custom_test = models.BooleanField(default=False)  # 標記是否為自訂測試
     penalty_applied = models.DecimalField(
         max_digits=5, 
         decimal_places=2, 
@@ -89,7 +92,7 @@ class Submission(models.Model):
     @property # 我的判斷是這不能被隨意更新跟刪除
     def is_judged(self):
         """檢查是否已經判題完成"""
-        return self.status not in ['pending', 'judging']
+        return self.status not in ['-2', '-1']  # No Code 和 Pending 表示尚未判題
     
     @property # 我的判斷是這不能被隨意更新跟刪除
     def execution_time_seconds(self):

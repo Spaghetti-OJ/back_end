@@ -100,7 +100,7 @@ class SubmissionModelHypothesisTests(HypothesisTestCase):
         assert submission.execution_time == -1
 
     @given(
-        status=st.sampled_from(['pending', 'accepted', 'wrong_answer', 'time_limit_exceeded'])
+        status=st.sampled_from(['-2', '-1', '0', '1', '2', '3', '4', '5'])
     )
     @settings(max_examples=5)
     def test_submission_is_judged_property(self, status):
@@ -113,7 +113,8 @@ class SubmissionModelHypothesisTests(HypothesisTestCase):
             status=status,
         )
         
-        expected_is_judged = status not in ['pending']
+        # 根據新的狀態編碼：-2=No Code, -1=Pending 表示尚未判題
+        expected_is_judged = status not in ['-2', '-1']
         assert submission.is_judged == expected_is_judged
 
 
