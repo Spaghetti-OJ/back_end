@@ -152,6 +152,52 @@ curl -X PUT http://127.0.0.1:8000/course/ \
 
 ---
 
+## 課程成績查詢 API
+
+**路徑**：`GET /course/<course_id>/grade/<student>`
+
+**說明**：查看指定學生在指定課程的成績項目。需登入且需為課程成員；學生身分只能查詢自己的成績。
+
+**成功回應 (200 OK)**：
+
+```json
+{
+  "message": "Success.",
+  "grades": [
+    {
+      "title": "Midterm",
+      "content": "Midterm exam",
+      "score": 95,
+      "timestamp": "2025-11-10T08:15:00Z"
+    },
+    {
+      "title": "Quiz 1",
+      "content": "Intro quiz",
+      "score": 80,
+      "timestamp": "2025-10-30T02:00:00Z"
+    }
+  ]
+}
+```
+
+**失敗回應**
+
+| 狀況                         | HTTP | 範例訊息                              |
+| ---------------------------- | ---- | ------------------------------------- |
+| 未登入                       | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 不在課程內                   | 403  | `{ "message": "You are not in this course." }` |
+| 學生嘗試查詢他人成績         | 403  | `{ "message": "You can only view your score." }` |
+| 課程不存在                   | 404  | `{ "message": "Course not found." }` |
+| 學生不存在或不在該課程       | 404  | `{ "message": "The student is not in the course." }` |
+
+**cURL 測試**：
+```bash
+curl http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
+    -H "Authorization: Bearer <access>"
+```
+
+---
+
 ## 課程統計摘要 API
 
 **路徑**：`GET /course/summary`
