@@ -1,3 +1,4 @@
+import uuid
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -11,9 +12,8 @@ from courses.models import Announcements, Courses
 User = get_user_model()
 
 
-class SystemAnnouncementAPITestCase(APITestCase):
+class CourseAnnouncementAPITestCase(APITestCase):
     def setUp(self):
-        self.url = reverse("system_announcements:list")
         self.teacher = User.objects.create_user(
             username="teacher_sys",
             email="teacher@ann.com",
@@ -22,17 +22,26 @@ class SystemAnnouncementAPITestCase(APITestCase):
             identity="teacher",
         )
         self.course = Courses.objects.create(name="SysCourse", teacher_id=self.teacher)
+        self.url = lambda course_id=None: reverse(
+            "system_announcements:course",
+            kwargs={"course_id": course_id or self.course.id},
+        )
 
-    def _create_announcement(self, **overrides):
+    def _create_announcement(self, *, course=None, **overrides):
         defaults = {
             "title": "Announcement",
             "content": "Content",
-            "course_id": self.course,
+            "course_id": course or self.course,
             "creator_id": self.teacher,
             "is_pinned": False,
         }
         defaults.update(overrides)
         return Announcements.objects.create(**defaults)
+
+    def test_requires_authentication(self):
+        response = self.client.get(self.url())
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_lists_pinned_first_then_latest(self):
         now = timezone.now()
@@ -40,12 +49,17 @@ class SystemAnnouncementAPITestCase(APITestCase):
         latest = self._create_announcement(title="Latest")
         oldest = self._create_announcement(title="Old")
 
-        Announcements.objects.filter(pk=latest.pk).update(updated_at=now - timedelta(hours=1))
-        Announcements.objects.filter(pk=oldest.pk).update(updated_at=now - timedelta(days=1))
+        Announcements.objects.filter(pk=latest.pk).update(
+            updated_at=now - timedelta(hours=1)
+        )
+        Announcements.objects.filter(pk=oldest.pk).update(
+            updated_at=now - timedelta(days=1)
+        )
         latest.refresh_from_db()
         oldest.refresh_from_db()
 
-        response = self.client.get(self.url)
+        self.client.force_authenticate(user=self.teacher)
+        response = self.client.get(self.url())
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         titles = [item["title"] for item in response.data["data"]]
@@ -61,9 +75,39 @@ class SystemAnnouncementAPITestCase(APITestCase):
     def test_creator_nullable(self):
         self._create_announcement(title="No Owner", creator_id=None)
 
-        response = self.client.get(self.url)
+        self.client.force_authenticate(user=self.teacher)
+        response = self.client.get(self.url())
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         payload = response.data["data"][0]
         self.assertIsNone(payload["creator"])
         self.assertIsNone(payload["updater"])
+
+    def test_nonexistent_course_returns_404(self):
+        self.client.force_authenticate(user=self.teacher)
+        response = self.client.get(self.url(course_id=uuid.uuid4()))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["message"], "Course not found.")
+
+    def test_public_discussion_course_id_behaves_like_system_announcements(self):
+        public_course = Courses.objects.create(name="公開討論區", teacher_id=self.teacher)
+        pinned = self._create_announcement(
+            course=public_course, title="Public Pinned", is_pinned=True
+        )
+        latest = self._create_announcement(
+            course=public_course, title="Public Latest"
+        )
+
+        Announcements.objects.filter(pk=latest.pk).update(
+            updated_at=timezone.now() - timedelta(hours=1)
+        )
+        latest.refresh_from_db()
+
+        self.client.force_authenticate(user=self.teacher)
+        response = self.client.get(self.url(course_id=public_course.id))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        titles = [item["title"] for item in response.data["data"]]
+        self.assertEqual(titles, ["Public Pinned", "Public Latest"])
+        self.assertEqual(response.data["data"][0]["markdown"], pinned.content)

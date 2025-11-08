@@ -1,9 +1,9 @@
 from django.urls import path
 
-from .views import SystemAnnouncementListView
+from .views import CourseAnnouncementListView
 
 app_name = "announcements"
 
 urlpatterns = [
-    path("", SystemAnnouncementListView.as_view(), name="list"),
+    path("<uuid:course_id>/ann", CourseAnnouncementListView.as_view(), name="course"),
 ]
