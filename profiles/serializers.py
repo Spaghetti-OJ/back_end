@@ -10,7 +10,7 @@ class MeProfileSerializer(serializers.ModelSerializer):
     real_name = serializers.CharField(source="user.real_name")
     user_name = serializers.CharField(source="user.username")
     email = serializers.EmailField(source="user.email")
-    user_id = serializers.CharField(source="user.username")  # 截圖看起來是學號字串；若要改成 UUID：source="user.id"
+    user_id = serializers.CharField(source="user.id") 
 
     # 來自 UserProfile
     student_id = serializers.CharField(allow_blank=True, allow_null=True)

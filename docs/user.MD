@@ -336,6 +336,98 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 
 ---
 
+## GET /profile/
+
+**說明**：
+取得目前登入使用者的個人資料。
+
+**權限需求**：
+
+* 需要登入（JWT Access Token）
+
+**Request Header**：
+
+| Header        | Type   | Required | 說明                          |
+| ------------- | ------ | -------- | --------------------------- |
+| Authorization | string | ✅        | 格式為 `Bearer <ACCESS_TOKEN>` |
+| Content-Type  | string | ✅        | `application/json`          |
+
+**Request Body**：
+無
+
+---
+
+## Response
+
+**成功範例 (200 OK)**
+
+```json
+{
+  "real_name": "陳天天",
+  "user_name": "momo",
+  "role": "Student",
+  "email": "412470100S@gapps.ntnu.edu.tw",
+  "user_id": "omuba",
+  "student_id": "41247057S",
+  "introduction": "哈囉我是資工116"
+}
+```
+
+**欄位說明**：
+
+| 欄位           | 型別     | 說明                               |
+| ------------ | ------ | -------------------------------- |
+| real_name    | string | 使用者真實姓名                          |
+| user_name    | string | 使用者帳號（username）                  |
+| role         | string | 使用者身份（Student / Teacher / Admin） |
+| email        | string | 使用者電子郵件                          |
+| user_id      | string | 使用者的 ID             |
+| student_id   | string | 學號（若有）                           |
+| introduction | string | 個人簡介                             |
+
+---
+
+## 錯誤回應
+
+| 狀態碼              | 說明            | 範例                                                                   |
+| ---------------- | ------------- | -------------------------------------------------------------------- |
+| 401 Unauthorized | Token 遺失或無效   | `{ "detail": "Authentication credentials were not provided." }`      |
+| 403 Forbidden    | 使用者權限不足（若未登入） | `{ "detail": "You do not have permission to perform this action." }` |
+
+---
+
+## 測試指令
+
+**1️⃣ 登入取得 Token**
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/session/ \
+  -H "Content-Type: application/json" \
+  -d '{"username":"momo","password":"abc12345"}'
+```
+
+**2️⃣ 使用 Access Token 呼叫 /profile/**
+
+```bash
+curl -X GET http://127.0.0.1:8000/profile/ \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json"
+```
+
+---
+
+## Implementation Summary
+
+* App 名稱：`profiles`
+* View：`MeProfileView (APIView)`
+* Serializer：`MeProfileSerializer`
+* Model：
+
+  * `User` (自訂 AbstractUser)
+  * `UserProfile` (OneToOne 連結 User)
+
+---
+
 ## 附錄：常見錯誤總表
 
 | 錯誤情境                | HTTP 狀態 | 回應訊息                                                                          |
