@@ -301,54 +301,19 @@ curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
 - 權限：教師或管理員（或題目擁有者）
 - 成功回應：`204 No Content`
 
----
-
-## 範例 cURL
-
-> 取得列表
-```bash
-curl http://127.0.0.1:8000/problem/
-```
-
-> 取得詳情
-```bash
-curl http://127.0.0.1:8000/problem/1
-```
-
-> 建立題目（需 Bearer Token）
-```bash
-curl -X POST http://127.0.0.1:8000/problem/manage \
-  -H "Authorization: Bearer <access>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Two Sum",
-    "description": "...",
-    "difficulty": "easy",
-    "is_public": "public",
-    "course_id": "<uuid>",
-    "tags": [1,2]
-  }'
-```
-
-> 編輯題目
-```bash
-curl -X PUT http://127.0.0.1:8000/problem/manage/1 \
-  -H "Authorization: Bearer <access>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "is_public": "course",
-    "tags": [2,3]
-  }'
-```
-
-> 刪除題目
-```bash
-curl -X DELETE http://127.0.0.1:8000/problem/manage/1 \
-  -H "Authorization: Bearer <access>"
-```
-
-> 刪除題目（變數版）
+> 範例curl
 ```bash
 curl -X DELETE http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
   -H "Authorization: Bearer $TOKEN"
 ```
+
+---
+
+
+
+
+
+
+
+
+
