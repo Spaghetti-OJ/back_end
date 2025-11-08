@@ -1,3 +1,3 @@
-from . import courses, summary
+from . import courses, grade, summary
 
-__all__ = ["courses", "summary"]
+__all__ = ["courses", "grade", "summary"]
