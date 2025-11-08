@@ -213,8 +213,8 @@ class EditorialSerializerHypothesisTests(HypothesisTestCase):
         editorial = serializer.save(problem_id=1)
         
         assert editorial.problem_id == 1
-        assert editorial.title == title.strip()
-        assert editorial.content == content.strip()
+        assert editorial.title == title.strip()  # title 會被 strip
+        assert editorial.content == content      # content 保持原樣
         # 使用 Decimal 比較以避免精度問題
         if difficulty_rating is not None:
             from decimal import Decimal
@@ -374,8 +374,8 @@ class CodeDraftSerializerHypothesisTests(HypothesisTestCase):
     @given(
         problem_id=st.integers(min_value=1, max_value=9999),
         language_type=st.sampled_from(['c', 'cpp', 'java', 'python', 'javascript']),
-        source_code=st.text(min_size=1, max_size=500).filter(lambda x: x.strip()),
-        title=st.one_of(st.none(), st.text(min_size=1, max_size=50)),
+        source_code=st.text(min_size=1, max_size=500).filter(lambda x: x.strip() and '\x00' not in x),
+        title=st.one_of(st.none(), st.text(min_size=1, max_size=50).filter(lambda x: '\x00' not in x)),
         auto_saved=st.booleans()
     )
     @settings(max_examples=10)

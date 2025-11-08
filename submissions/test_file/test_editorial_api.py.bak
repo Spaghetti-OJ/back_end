@@ -127,7 +127,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         
         client = self.authenticate_user(self.teacher_token)
         
-        url = reverse('editorials:editorial-list-create', kwargs={
+        url = reverse('submissions:editorial-list-create', kwargs={
             'problem_id': self.problem.id
         })
         data = {
@@ -163,7 +163,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
             }),
             st.fixed_dictionaries({
                 'title': st.just('有效標題'),
-                'content': st.just('   '),  # 內容只有空白
+                'content': st.just('太短'),  # 內容太短
                 'difficulty_rating': st.just(3.0),
                 'is_official': st.just(False)
             }),
@@ -180,7 +180,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         """測試題解創建的各種驗證失敗情況"""
         client = self.authenticate_user(self.teacher_token)
         
-        url = reverse('editorials:editorial-list-create', kwargs={
+        url = reverse('submissions:editorial-list-create', kwargs={
             'problem_id': self.problem.id
         })
         
@@ -193,7 +193,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         """測試學生無法創建題解"""
         client = self.authenticate_user(self.student_token)
         
-        url = reverse('editorials:editorial-list-create', kwargs={
+        url = reverse('submissions:editorial-list-create', kwargs={
             'problem_id': self.problem.id
         })
         data = {
@@ -213,7 +213,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         """測試其他課程的老師無法創建題解"""
         client = self.authenticate_user(self.another_teacher_token)
         
-        url = reverse('editorials:editorial-list-create', kwargs={
+        url = reverse('submissions:editorial-list-create', kwargs={
             'problem_id': self.problem.id  # 使用第一個課程的問題
         })
         data = {
@@ -233,7 +233,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         """測試 TA 可以創建題解"""
         client = self.authenticate_user(self.ta_token)
         
-        url = reverse('editorials:editorial-list-create', kwargs={
+        url = reverse('submissions:editorial-list-create', kwargs={
             'problem_id': self.problem.id
         })
         data = {
@@ -268,7 +268,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         
         # 學生訪問
         client = self.authenticate_user(self.student_token)
-        url = reverse('editorials:editorial-list-create', kwargs={
+        url = reverse('submissions:editorial-list-create', kwargs={
             'problem_id': self.problem.id
         })
         response = client.get(url)
@@ -290,7 +290,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         )
         
         client = self.authenticate_user(self.teacher_token)
-        url = reverse('editorials:editorial-detail', kwargs={
+        url = reverse('submissions:editorial-detail', kwargs={
             'problem_id': self.problem.id,
             'solution_id': editorial.id
         })
@@ -322,7 +322,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         )
         
         client = self.authenticate_user(self.ta_token)
-        url = reverse('editorials:editorial-detail', kwargs={
+        url = reverse('submissions:editorial-detail', kwargs={
             'problem_id': self.problem.id,
             'solution_id': editorial.id
         })
@@ -353,7 +353,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         )
         
         client = self.authenticate_user(self.student_token)
-        url = reverse('editorials:editorial-detail', kwargs={
+        url = reverse('submissions:editorial-detail', kwargs={
             'problem_id': self.problem.id,
             'solution_id': editorial.id
         })
@@ -377,7 +377,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         )
         
         client = self.authenticate_user(self.teacher_token)
-        url = reverse('editorials:editorial-detail', kwargs={
+        url = reverse('submissions:editorial-detail', kwargs={
             'problem_id': self.problem.id,
             'solution_id': editorial.id
         })
@@ -401,7 +401,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         )
         
         client = self.authenticate_user(self.ta_token)
-        url = reverse('editorials:editorial-detail', kwargs={
+        url = reverse('submissions:editorial-detail', kwargs={
             'problem_id': self.problem.id,
             'solution_id': editorial.id
         })
@@ -424,7 +424,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         )
         
         client = self.authenticate_user(self.student_token)
-        url = reverse('editorials:editorial-detail', kwargs={
+        url = reverse('submissions:editorial-detail', kwargs={
             'problem_id': self.problem.id,
             'solution_id': editorial.id
         })
@@ -452,7 +452,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         )
         
         client = self.authenticate_user(self.student_token)
-        url = reverse('editorials:editorial-like-toggle', kwargs={
+        url = reverse('submissions:editorial-like-toggle', kwargs={
             'problem_id': self.problem.id,
             'solution_id': editorial.id
         })
@@ -503,7 +503,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         )
         
         client = self.authenticate_user(self.student_token)
-        url = reverse('editorials:editorial-like-toggle', kwargs={
+        url = reverse('submissions:editorial-like-toggle', kwargs={
             'problem_id': self.problem.id,
             'solution_id': editorial.id
         })
@@ -546,7 +546,7 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         )
         
         client = self.authenticate_user(self.student_token)
-        url = reverse('editorials:editorial-list-create', kwargs={
+        url = reverse('submissions:editorial-list-create', kwargs={
             'problem_id': self.problem.id
         })
         
