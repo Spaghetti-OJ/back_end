@@ -30,47 +30,28 @@ class HomeworkCreateSerializer(serializers.Serializer):
     markdown = serializers.CharField(required=False, allow_blank=True, default="")
     start = serializers.IntegerField(required=False, allow_null=True)
     end = serializers.IntegerField(required=False, allow_null=True)
-    problem_ids = serializers.ListField(
-        child=serializers.IntegerField(), required=False, default=list
-    )
+    problem_ids = serializers.ListField(child=serializers.IntegerField(),
+                                        required=False, default=list)
     scoreboard_status = serializers.IntegerField(required=False, allow_null=True)
     penalty = serializers.CharField(required=False, allow_blank=True, default="")
 
-    # 內部解析後使用
-    course_obj: Optional[Courses] = None
-
     def validate(self, attrs):
-        course_id = attrs.get("course_id")
+        # 解析課程
         try:
-            course = Courses.objects.get(id=course_id)
+            course = Courses.objects.get(pk=attrs["course_id"])
         except Courses.DoesNotExist:
-            # 依測試規格：課程不存在 → 400，且錯誤 key 應是 course_id
-            raise serializers.ValidationError({"course_id": "course not exists"})
+            raise serializers.ValidationError("course not exists")
+        attrs["_course"] = course
 
-        # 時間檢查
-        start_epoch = attrs.get("start")
-        end_epoch = attrs.get("end")
-        start_dt = to_dt_from_epoch(start_epoch) if start_epoch is not None else None
-        end_dt = to_dt_from_epoch(end_epoch) if end_epoch is not None else None
-        if start_dt and end_dt and end_dt < start_dt:
-            # 依規格：「end < start」→ 400，且要能看出是 end 的錯
-            raise serializers.ValidationError({"end": "end earlier than start"})
-
-        # 同課程、同名不可重複
-        if Assignments.objects.filter(course=self.course_obj, title=attrs["name"]).exists():
+        # 名稱唯一（同課程）
+        if Assignments.objects.filter(course=course, title=attrs["name"]).exists():
             raise serializers.ValidationError("homework exists in this course")
-            # 問題 id 基本檢查
-            pids = attrs.get("problem_ids", [])
-            not_found = []
-            for pid in pids:
-                if not Problems.objects.filter(pk=pid).exists():
-                    not_found.append(pid)
-            if not_found:
-                raise serializers.ValidationError({"problem_ids": f"problems not found: {not_found}"})
 
-            attrs["_course"] = self.course
-            attrs["_start_dt"] = start_dt
-            attrs["_end_dt"] = end_dt
+        # 時間轉換
+        start = attrs.get("start")
+        end = attrs.get("end")
+        attrs["_start_dt"] = datetime.fromtimestamp(start, tz=timezone.utc) if start is not None else None
+        attrs["_end_dt"]   = datetime.fromtimestamp(end,   tz=timezone.utc) if end   is not None else None
         return attrs
 
 # ---------- 詳情輸出 ----------

@@ -32,6 +32,7 @@ urlpatterns = [
     path('submissions/', include('submissions.urls')),
     path('api-tokens/', include('api_tokens.urls')),
     path('profile/', include('profiles.urls')),
+    path('homework/',include('assignments.urls')),
 ]
 
 if settings.DEBUG:
