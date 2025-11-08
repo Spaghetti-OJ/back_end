@@ -41,12 +41,15 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'user.apps.UserConfig',
     "rest_framework",
+    "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "courses",
     "auths",
     "problems",
     "assignments",
     "submissions",
+    "api_tokens",
 ]
 
 AUTH_USER_MODEL = 'user.User'
@@ -171,3 +174,11 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),     # 你可調整
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),        # 你可調整
+    "ROTATE_REFRESH_TOKENS": True,                      # 旋轉 refresh（建議開）
+    "BLACKLIST_AFTER_ROTATION": True,                   # 舊 refresh 自動黑名單
+    "UPDATE_LAST_LOGIN": True,                          # 可選
+}

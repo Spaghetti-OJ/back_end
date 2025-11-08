@@ -8,7 +8,7 @@
 
 ## 使用者註冊 API
 
-**路徑**：`POST /user/signup/`
+**路徑**：`POST /auth/signup/`
 
 **說明**：建立新使用者帳號。
 
@@ -93,7 +93,7 @@ curl -X POST http://127.0.0.1:8000/auth/signup/ \
 
 ## 使用者登入 API
 
-**路徑**：`POST /user/session/`
+**路徑**：`POST /auth/session/`
 
 **說明**：以帳號密碼登入，取得 JWT。
 
@@ -141,6 +141,119 @@ curl -X POST http://127.0.0.1:8000/auth/session/ \
 >
 > * `access`：短效 token，之後的 API 需帶 `Authorization: Bearer <access>`。
 > * `refresh`：用於在 access 過期時換取新 access。
+
+---
+
+## Refresh Token API
+
+**路徑**：`POST /auth/refresh/`
+
+**說明**：使用現有的 refresh token 取得新的 access token。
+
+### 請求格式（JSON）
+
+| 欄位名       | 型別     |  必填 | 說明                     |
+| --------- | ------ | :-: | ---------------------- |
+| `refresh` | string |  ✅  | 先前登入時取得的 refresh token |
+
+**成功請求範例**：
+
+```json
+{ "refresh": "<refresh.jwt>" }
+```
+
+**成功回應（200, JSON）**
+
+```json
+{ "access": "<new.access.jwt>" }
+```
+
+> 若伺服器設定 `ROTATE_REFRESH_TOKENS = True`，則回應中也可能同時包含新的 refresh token：
+>
+> ```json
+> { "access": "<new.access.jwt>", "refresh": "<new.refresh.jwt>" }
+> ```
+
+**失敗回應**
+
+* refresh token 遺失或無效（401）：
+
+  ```json
+  { "detail": "Token is invalid or expired", "code": "token_not_valid" }
+  ```
+
+* 缺少欄位（400）：
+
+  ```json
+  { "refresh": ["This field is required."] }
+  ```
+
+**cURL 測試**：
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/refresh/ \
+  -H "Content-Type: application/json" \
+  -d '{"refresh":"<refresh.jwt>"}'
+```
+
+> 欄位說明：
+>
+> * `refresh`：登入時發放的長效 token，用於換取新的 access。
+> * `access`：短效 token，用於 API 認證，過期時需重新以 refresh 換取。
+
+---
+
+## Verify Token API
+
+**路徑**：`POST /auth/verify/`
+
+**說明**：驗證指定的 access token 是否有效（未過期、未竄改）。
+
+### 請求格式（JSON）
+
+| 欄位名     | 型別     |  必填 | 說明                |
+| ------- | ------ | :-: | ----------------- |
+| `token` | string |  ✅  | 要驗證的 access token |
+
+**成功請求範例**：
+
+```json
+{ "token": "<access.jwt>" }
+```
+
+**成功回應（200, JSON）**
+
+```json
+{}
+```
+
+> 表示該 access token 有效。
+
+**失敗回應**
+
+* token 無效或過期（401）：
+
+  ```json
+  { "detail": "Token is invalid or expired", "code": "token_not_valid" }
+  ```
+
+* 缺少欄位（400）：
+
+  ```json
+  { "token": ["This field is required."] }
+  ```
+
+**cURL 測試**：
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/verify/ \
+  -H "Content-Type: application/json" \
+  -d '{"token":"<access.jwt>"}'
+```
+
+> 欄位說明：
+>
+> * `token`：欲驗證的 access token。若 token 已過期、被修改或不合法，伺服器會回傳 401 錯誤。
 
 ---
 
