@@ -30,6 +30,7 @@ urlpatterns = [
     path('auth/', include('auths.urls')),
     path('submissions/', include('submissions.urls')),
     path('api-tokens/', include('api_tokens.urls')),
+    path('profile/', include('profiles.urls')),
 ]
 
 if settings.DEBUG:
