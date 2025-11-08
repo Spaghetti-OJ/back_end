@@ -40,7 +40,7 @@ curl http://127.0.0.1:8000/course/ \
 
 ## 課程詳情 API
 
-**路徑**：`GET /course/<course_name>`
+**路徑**：`GET /course/<course_id>/`
 
 **說明**：查看課程基本資訊與成員。需登入並且為該課程的教師、助教或學生（課程名稱大小寫不敏感）。
 
@@ -48,7 +48,7 @@ curl http://127.0.0.1:8000/course/ \
 
 | 參數名        | 型別   | 必填 | 說明            |
 | ------------- | ------ | ---- | --------------- |
-| `course_name` | string | ✅   | URL 上的課程名稱 |
+| `course_id`   | UUID   | ✅   | 課程的 UUID |
 
 **成功回應 (200 OK)**：
 
@@ -103,7 +103,7 @@ curl http://127.0.0.1:8000/course/ \
 
 **cURL 測試**：
 ```bash
-curl http://127.0.0.1:8000/course/Algorithms_2025/ \
+curl http://127.0.0.1:8000/course/4b1c2a3d-8e1f-45c3-9c62-ff33b4aa6f12/ \
     -H "Authorization: Bearer <access>"
 ```
 

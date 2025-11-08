@@ -4,7 +4,7 @@ from .courses import (
     CourseListSerializer,
     CourseUpdateSerializer,
 )
-from .course_coursename import CourseInfoSerializer, CourseDetailSerializer
+from .course_courseid import CourseInfoSerializer, CourseDetailSerializer
 from .summary import CourseSummarySerializer
 from .grade import CourseGradeListSerializer, CourseGradeItemSerializer
 

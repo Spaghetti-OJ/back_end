@@ -18,8 +18,8 @@ urlpatterns = [
     path(
         "",
         include(
-            (f"{__package__}.urls.course_coursename", "course_coursename"),
-            namespace="course_coursename",
+            (f"{__package__}.urls.course_courseid", "course_courseid"),
+            namespace="course_courseid",
         ),
     ),
 ]

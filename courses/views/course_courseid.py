@@ -8,29 +8,16 @@ from ..serializers import CourseDetailSerializer
 class CourseDetailView(generics.GenericAPIView):
     """
     課程詳情端點：
-     - GET /course/<course_name> 取得課程資訊與成員（需為課程成員）
+     - GET /course/<course_id>/ 取得課程資訊與成員（需為課程成員）
     """
 
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = CourseDetailSerializer
 
-    def get(self, request, course_name: str, *args, **kwargs):
-        normalized_name = (course_name or "").strip()
-        if not normalized_name:
-            return Response(
-                {"message": "Course not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        try:
-            course = Courses.objects.select_related("teacher_id").get(
-                name__iexact=normalized_name
-            )
-        except Courses.DoesNotExist:
-            return Response(
-                {"message": "Course not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+    def get(self, request, course_id, *args, **kwargs):
+        course = self._get_course_or_response(course_id)
+        if isinstance(course, Response):
+            return course
 
         user = request.user
         is_teacher = course.teacher_id_id == getattr(user, "id", None)
@@ -70,3 +57,19 @@ class CourseDetailView(generics.GenericAPIView):
             }
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @staticmethod
+    def _get_course_or_response(course_id):
+        if not course_id:
+            return Response(
+                {"message": "Course not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            return Courses.objects.select_related("teacher_id").get(id=course_id)
+        except Courses.DoesNotExist:
+            return Response(
+                {"message": "Course not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )

@@ -1,3 +1,5 @@
+import uuid
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
@@ -9,18 +11,17 @@ User = get_user_model()
 
 
 class CourseDetailAPITestCase(APITestCase):
-    detail_url_name = "courses:course_coursename:detail"
+    detail_url_name = "courses:course_courseid:detail"
 
     def setUp(self):
         super().setUp()
         self.client.defaults["HTTP_HOST"] = "127.0.0.1"
-        import uuid
 
         self.unique = uuid.uuid4().hex[:6]
         self.detail_course_name = f"DetailCourse_{self.unique}"
         self.member_course_name = f"MemberCourse_{self.unique}"
         self.closed_course_name = f"ClosedCourse_{self.unique}"
-        self.unknown_course_name = f"UnknownCourse_{self.unique}"
+        self.unknown_course_id = uuid.uuid4()
 
         self.teacher = User.objects.create_user(
             username=f"teacher_one_{self.unique}",
@@ -48,8 +49,8 @@ class CourseDetailAPITestCase(APITestCase):
         course_name = name or f"SampleCourse_{self.unique}"
         return Courses.objects.create(name=course_name, teacher_id=teacher or self.teacher)
 
-    def _detail_url(self, course_name: str):
-        return reverse(self.detail_url_name, kwargs={"course_name": course_name})
+    def _detail_url(self, course_id):
+        return reverse(self.detail_url_name, kwargs={"course_id": course_id})
 
     def test_teacher_can_view_course_detail(self):
         ta_user = User.objects.create_user(
@@ -77,7 +78,7 @@ class CourseDetailAPITestCase(APITestCase):
         )
 
         self.client.force_authenticate(user=self.teacher)
-        response = self.client.get(self._detail_url(self.detail_course_name))
+        response = self.client.get(self._detail_url(str(course.id)))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["message"], "Success.")
@@ -98,7 +99,7 @@ class CourseDetailAPITestCase(APITestCase):
         )
         self.client.force_authenticate(user=self.student)
 
-        response = self.client.get(self._detail_url(self.member_course_name))
+        response = self.client.get(self._detail_url(str(course.id)))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["message"], "Success.")
@@ -107,7 +108,7 @@ class CourseDetailAPITestCase(APITestCase):
         course = self._create_course(name=self.closed_course_name, teacher=self.teacher)
         self.client.force_authenticate(user=self.student)
 
-        response = self.client.get(self._detail_url(course.name))
+        response = self.client.get(self._detail_url(str(course.id)))
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(response.data["message"], "You are not in this course.")
@@ -115,7 +116,7 @@ class CourseDetailAPITestCase(APITestCase):
     def test_course_detail_not_found(self):
         self.client.force_authenticate(user=self.teacher)
 
-        response = self.client.get(self._detail_url(self.unknown_course_name))
+        response = self.client.get(self._detail_url(str(self.unknown_course_id)))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.data["message"], "Course not found.")
