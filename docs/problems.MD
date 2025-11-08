@@ -45,6 +45,12 @@
 ]
 ```
 
+**cURL 測試**：
+```bash
+curl "http://127.0.0.1:8000/problem/" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
 ---
 
 ## 查看題目詳情（學生視角）
@@ -67,6 +73,12 @@
 ```
 未登入時 `submit_count`/`high_score` 會為 `null`。
 
+**cURL 測試**：
+```bash
+curl "http://127.0.0.1:8000/problem/$PROBLEM_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
 可能錯誤：
 - 401 未登入（針對非公開題目）
 - 403 非課程成員/非擁有者/非教師管理員（當題目為 `course` 或 `hidden`）
@@ -77,7 +89,7 @@
 ## 建立題目（管理）
 
 - 路徑：`POST /problem/manage`
-- 權限：教師或管理員
+- 權限：教師 / 管理員 / 該課程的 TA（課程成員角色為 `ta`）
 - 說明：建立一個新題目；必須指定 `course_id`。可附上 `tags`（id 陣列）。
 
 ### 欄位規格一覽（建立 / 更新通用）
@@ -155,7 +167,7 @@
 錯誤情況：
 - 422 驗證錯誤（必填欄位缺失等）
 - 400 `tags` 含有不存在的 id（嚴格驗證）
-- 403 權限不足
+- 403 權限不足（非 admin/teacher 且不是該課程 TA）
 
 ### cURL 測試
 
@@ -223,7 +235,7 @@ curl -X POST http://127.0.0.1:8000/problem/manage \
 ## 編輯題目（管理）
 
 - 路徑：`PUT /problem/manage/<problem_id>`
-- 權限：教師或管理員（或題目擁有者）
+- 權限：教師 / 管理員 / 題目擁有者 / 該課程 TA（課程成員角色為 `ta`）
 - 說明：可更新標題、描述、可見性、課程、標籤等。若提供 `tags`，將以提供的 id 陣列覆蓋既有關聯，且會做嚴格驗證。
 
 請求（JSON）：
