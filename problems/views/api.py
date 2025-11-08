@@ -179,49 +179,10 @@ class ProblemListView(APIView):
         serializer = ProblemSerializer(queryset, many=True)
         return Response(serializer.data)
 
+    # 重要：不允許在 /problem/ 進行建立，統一走 /problem/manage
+    # 若誤用 POST /problem/，回傳 405，請改用 /problem/manage
     def post(self, request):
-        # create problem via POST /problem/ (only teacher/admin)
-        serializer = ProblemSerializer(data=request.data, context={"request": request})
-        # check permissions (get_permissions uses IsTeacherOrAdmin for POST)
-        for p in self.get_permissions():
-            if not p.has_permission(request, self):
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied("You do not have permission to create problems.")
-
-        if not serializer.is_valid():
-            return Response({"success": False, "errors": serializer.errors}, status=422)
-        
-        # Extract and validate tags before saving
-        tags_data = request.data.get('tags')
-        tag_ids = []
-        if tags_data is not None:
-            if isinstance(tags_data, (list, tuple)):
-                for v in tags_data:
-                    try:
-                        tag_ids.append(int(v))
-                    except (ValueError, TypeError):
-                        return Response({"success": False, "errors": {"tags": f"Invalid tag id: {v}"}}, status=400)
-                
-                # Strict validation: all tag ids must exist
-                from ..models import Tags
-                existing_tags = Tags.objects.filter(id__in=tag_ids)
-                existing_ids = set(existing_tags.values_list('id', flat=True))
-                missing_ids = [tid for tid in tag_ids if tid not in existing_ids]
-                if missing_ids:
-                    return Response({
-                        "success": False, 
-                        "errors": {"tags": f"Tag IDs do not exist: {missing_ids}"}
-                    }, status=400)
-        
-        problem = serializer.save(creator_id=request.user)
-        
-        # Attach validated tags
-        if tag_ids:
-            from ..models import Tags
-            tags_qs = Tags.objects.filter(id__in=tag_ids)
-            problem.tags.set(tags_qs)
-        
-        return Response({"success": True, "problem_id": problem.id}, status=201)
+        return Response({"detail": "Method Not Allowed. Use POST /problem/manage to create."}, status=405)
 
 
 class ProblemDetailView(APIView):
@@ -291,13 +252,60 @@ class ProblemManageView(APIView):
     """
     POST /api/problem/manage — 建立題目（僅 admin/teacher）
     """
-    permission_classes = [IsTeacherOrAdmin]
+    # 允許已登入；實際權限在 post() 內判斷：
+    # admin/teacher 直接允許；否則需為該 course 的 TA
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         serializer = ProblemSerializer(data=request.data, context={"request": request})
         if not serializer.is_valid():
             return Response({"success": False, "errors": serializer.errors}, status=422)
+
+        # 權限檢查：
+        user = request.user
+        is_admin_teacher = bool(
+            getattr(user, "is_superuser", False)
+            or getattr(user, "is_staff", False)
+            or getattr(user, "identity", None) in ["admin", "teacher"]
+        )
+
+        course_obj = serializer.validated_data.get("course_id")
+        if not is_admin_teacher:
+            # 必須是該課程 TA 才能出題
+            from courses.models import Course_members
+            is_course_ta = Course_members.objects.filter(
+                course_id=course_obj,
+                user_id=user,
+                role='ta',
+            ).exists()
+            if not is_course_ta:
+                return Response({"detail": "Not enough permission: need admin/teacher or TA of the course."}, status=403)
+
+        # 嚴格驗證 tags（若提供）
+        tags_data = request.data.get('tags')
+        tag_ids = []
+        if tags_data is not None:
+            if isinstance(tags_data, (list, tuple)):
+                for v in tags_data:
+                    try:
+                        tag_ids.append(int(v))
+                    except (ValueError, TypeError):
+                        return Response({"success": False, "errors": {"tags": f"Invalid tag id: {v}"}}, status=400)
+
+                from ..models import Tags
+                existing_ids = set(Tags.objects.filter(id__in=tag_ids).values_list('id', flat=True))
+                missing_ids = [tid for tid in tag_ids if tid not in existing_ids]
+                if missing_ids:
+                    return Response({"success": False, "errors": {"tags": f"Tag IDs do not exist: {missing_ids}"}}, status=400)
+
         problem = serializer.save(creator_id=request.user)
+
+        # 綁定已驗證之 tags
+        if tags_data is not None:
+            from ..models import Tags
+            tags_qs = Tags.objects.filter(id__in=tag_ids)
+            problem.tags.set(tags_qs)
+
         return Response({"success": True, "problem_id": problem.id}, status=201)
 
 
