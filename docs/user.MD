@@ -257,6 +257,85 @@ curl -X POST http://127.0.0.1:8000/auth/verify/ \
 
 ---
 
+## Revoke Refresh Token（登出）
+
+**路徑**：`POST /auth/session/revoke/`
+
+**用途**：註銷（撤銷）一顆 **refresh token**，使其無法再換發新的 access token。
+
+**權限**：`Authorization: Bearer <access>`（`IsAuthenticated`）
+
+### 請求（JSON）
+
+| 欄位名       | 型別     |  必填 | 說明                                                                                                 |
+| --------- | ------ | :-: | -------------------------------------------------------------------------------------------------- |
+| `refresh` | string |  ✅  | 先前登入或 refresh 時取得的 refresh token。 |
+
+**成功請求範例**：
+
+```json
+{ "refresh": "<refresh.jwt>" }
+```
+
+### 成功回應
+
+```
+HTTP/1.1 205 Reset Content
+```
+
+> 代表該 refresh 已加入黑名單。建議前端立即清除本地憑證與狀態。
+
+### 失敗回應
+
+* 缺少欄位（400）：
+
+  ```json
+  { "detail": "refresh field required" }
+  ```
+* refresh 無效或過期（400）：
+
+  ```json
+  { "detail": "Invalid or expired refresh token" }
+  ```
+* 未授權（401）：
+
+  ```json
+  { "detail": "Authentication credentials were not provided." }
+  ```
+
+### cURL 測試
+
+```bash
+ACCESS="<access.jwt>"
+REFRESH="<refresh.jwt>"
+
+curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
+  -H "Authorization: Bearer $ACCESS" \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh\":\"$REFRESH\"}"
+```
+
+---
+
+### 相關端點對照
+
+| 功能         | 路徑                      | 方法       | 說明                                               |
+| ---------- | ----------------------- | -------- | ------------------------------------------------ |
+| 登入         | `/auth/session/`        | POST     | SimpleJWT 取得 `access` + `refresh`                |
+| Refresh    | `/auth/refresh/`        | POST     | 用 `refresh` 換新 `access`；若啟用 rotate，會回新 `refresh` |
+| Verify（可選） | `/auth/verify/`         | POST     | 驗證 `access` 是否有效（有效時回 `{}`）                      |
+| **安全登出**   | `/auth/session/revoke/` | **POST** | 將 `refresh` 加入黑名單（立即失效）                          |
+
+---
+
+### 範例使用情境（用戶按「登出」）
+
+1. 前端呼叫 `POST /auth/session/revoke/`（帶 access；body 帶 refresh 或由 cookie 取）。
+2. 收到 `205` ⇒ 清除本地 `access/refresh`、停止自動 refresh、跳轉登入。
+3. 若用戶返回頁面且 access 過期，攔截器判定 401 → 嘗試 `/auth/refresh/`；若後端回 `token_not_valid / blacklisted` ⇒ 直接跳轉登入。
+
+---
+
 ## 附錄：常見錯誤總表
 
 | 錯誤情境                | HTTP 狀態 | 回應訊息                                                                          |
