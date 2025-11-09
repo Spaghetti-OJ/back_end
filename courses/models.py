@@ -114,6 +114,35 @@ class Course_members(models.Model):
 
     def __str__(self):
         return f"{self.user_id} in {self.course_id} ({self.role})"
+
+
+class CourseGrade(models.Model):
+    course = models.ForeignKey(
+        Courses,
+        on_delete=models.CASCADE,
+        related_name="grades",
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="course_grades",
+    )
+
+    title = models.CharField(max_length=200)
+    content = models.TextField(blank=True)
+    score = models.IntegerField(validators=[MinValueValidator(0)])
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "course_grades"
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["course", "student"]),
+        ]
+
+    def __str__(self):
+        return f"{self.student} - {self.title} ({self.score})"
     
 class Announcements(models.Model):
     id = models.BigAutoField(primary_key=True)
