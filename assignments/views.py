@@ -220,9 +220,9 @@ class AddProblemsToHomeworkView(APIView):
         # 4) 取出實際存在的 Problems
         ids = [it["id"] for it in items]
         found = {p.id: p for p in Problems.objects.filter(id__in=ids)}
-        not_found = [pid for pid in ids if pid not in found]
         if len(found) == 0:
             # 全部都不存在
+            not_found = [pid for pid in ids if pid not in found]
             return Response(
                 {"message": "no valid problems", "not_found": not_found},
                 status=status.HTTP_400_BAD_REQUEST,
