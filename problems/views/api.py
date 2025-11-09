@@ -248,6 +248,102 @@ class ProblemDetailView(APIView):
         return Response(data)
 
 
+import math
+
+class ProblemStatsView(APIView):
+    """
+    GET /problem/<id>/stats — 題目統計資訊
+    權限：需要登入
+    回傳：AC 用戶、嘗試用戶、平均分數、標準差、分數分布、狀態統計、top10執行時間/記憶體
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        from courses.models import Course_members
+        from submissions.models import Submission
+
+        # 1. 題目存在性
+        try:
+            problem = Problems.objects.get(pk=pk)
+        except Problems.DoesNotExist:
+            return Response({"detail": "Problem not found."}, status=404)
+
+        # 2. 總學生數（該課程所有學生）
+        course_id = getattr(problem, 'course_id', None)
+        total_students = 0
+        if course_id:
+            total_students = Course_members.objects.filter(course_id=course_id, role='student').count()
+
+        # 3. 所有提交
+        submissions = Submission.objects.filter(problem_id=pk)
+
+        # 4. 嘗試過的用戶數
+        tried_user_ids = submissions.values_list('user', flat=True).distinct()
+        tried_user_count = len(tried_user_ids)
+
+        # 5. AC 用戶數
+        ac_user_ids = submissions.filter(status='accepted').values_list('user', flat=True).distinct()
+        ac_user_count = len(ac_user_ids)
+
+        # 6. 分數統計
+        scores = list(submissions.values_list('score', flat=True))
+        average = sum(scores) / len(scores) if scores else 0
+        std = math.sqrt(sum((s - average) ** 2 for s in scores) / len(scores)) if scores else 0
+
+        # 7. 分數分布
+        score_distribution = {}
+        for s in scores:
+            score_distribution[s] = score_distribution.get(s, 0) + 1
+        score_distribution = [ {'score': k, 'count': v} for k, v in sorted(score_distribution.items()) ]
+
+        # 8. 狀態統計
+        status_count = {}
+        for status, cnt in submissions.values('status').annotate(cnt=Count('id')):
+            status_count[status] = cnt
+
+        # 9. top10執行時間
+        top10_runtime = list(submissions.filter(execution_time__gt=0).order_by('execution_time')[:10].values('id', 'user', 'execution_time', 'score', 'status'))
+
+        # 10. top10記憶體
+        top10_memory = list(submissions.filter(memory_usage__gt=0).order_by('memory_usage')[:10].values('id', 'user', 'memory_usage', 'score', 'status'))
+
+        return Response({
+            "acUserRatio": [ac_user_count, total_students],
+            "triedUserCount": tried_user_count,
+            "average": average,
+            "std": std,
+            "scoreDistribution": score_distribution,
+            "statusCount": status_count,
+            "top10RunTime": top10_runtime,
+            "top10MemoryUsage": top10_memory,
+        }, status=200)
+
+class ProblemHighScoreView(APIView):
+    """
+    GET /api/problem/<id>/high-score — 取得使用者在該題目的最高分數
+    需要登入；回傳該使用者在此題的最高分
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            problem = Problems.objects.get(pk=pk)
+        except Problems.DoesNotExist:
+            return Response({"detail": "Problem not found."}, status=404)
+        
+        user = request.user
+        high_score = Submission.objects.filter(
+            problem_id=problem.id,
+            user=user
+        ).aggregate(high_score=Max('score')).get('high_score')
+        
+        # 若從未提交過，回傳 0
+        if high_score is None:
+            high_score = 0
+        
+        return Response({"score": high_score}, status=200)
+
+
 class ProblemManageView(APIView):
     """
     POST /api/problem/manage — 建立題目（僅 admin/teacher）

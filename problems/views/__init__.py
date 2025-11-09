@@ -1,3 +1,4 @@
+
 from .api import (
 	ProblemsViewSet,
 	SubtasksViewSet,
@@ -7,6 +8,8 @@ from .api import (
 	ProblemDetailView,
 	ProblemManageView,
 	ProblemManageDetailView,
+	ProblemHighScoreView,
+	ProblemStatsView,
 )
 
 __all__ = [
@@ -18,4 +21,6 @@ __all__ = [
 	'ProblemDetailView',
 	'ProblemManageView',
 	'ProblemManageDetailView',
+	'ProblemHighScoreView',
+	'ProblemStatsView',
 ]
