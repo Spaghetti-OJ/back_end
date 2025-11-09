@@ -419,7 +419,7 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
             
             # NOJ 格式響應
             return Response(
-                f"submission recieved.{submission.id}",
+                f"submission received.{submission.id}",
                 status=status.HTTP_201_CREATED
             )
         
