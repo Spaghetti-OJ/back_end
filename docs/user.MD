@@ -357,7 +357,7 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 
 ---
 
-## Response
+### Response
 
 **成功範例 (200 OK)**
 
@@ -387,7 +387,7 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 
 ---
 
-## 錯誤回應
+### 錯誤回應
 
 | 狀態碼              | 說明            | 範例                                                                   |
 | ---------------- | ------------- | -------------------------------------------------------------------- |
@@ -396,7 +396,7 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 
 ---
 
-## 測試指令
+### 測試指令
 
 **1️⃣ 登入取得 Token**
 
@@ -416,15 +416,105 @@ curl -X GET http://127.0.0.1:8000/profile/ \
 
 ---
 
-## Implementation Summary
+## GET /profile/{username}/
 
-* App 名稱：`profiles`
-* View：`MeProfileView (APIView)`
-* Serializer：`MeProfileSerializer`
-* Model：
+**說明**
+查看**其他使用者**的公開個人資料。
 
-  * `User` (自訂 AbstractUser)
-  * `UserProfile` (OneToOne 連結 User)
+> 與 `GET /profile/`（查看自己的完整資料）不同，本端點**不會**回傳 `real_name`、`student_id` 等私密欄位。
+
+---
+
+### 權限需求
+
+* 需要登入（JWT Access Token）
+
+---
+
+### Request
+
+#### Method & URL
+
+```
+GET /profile/{username}/
+```
+
+#### Path Parameters
+
+| 參數名      | 類型     | 必填 | 說明              |
+| -------- | ------ | -- | --------------- |
+| username | string | ✅  | 目標使用者帳號（大小寫不敏感） |
+
+#### Headers
+
+| Header        | 類型     | 必填 | 說明                      |
+| ------------- | ------ | -- | ----------------------- |
+| Authorization | string | ✅  | `Bearer <ACCESS_TOKEN>` |
+| Content-Type  | string | ✅  | `application/json`      |
+
+#### Request Body
+
+* 無
+
+---
+
+#### 成功回應（200 OK）
+
+```json
+{
+  "user_name": "momo",
+  "role": "Student",
+  "email": "momo@example.com",
+  "user_id": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
+  "introduction": "哈囉我是資工116"
+}
+```
+
+#### 欄位說明
+
+| 欄位           | 類型     | 說明                                        |
+| ------------ | ------ | ----------------------------------------- |
+| user_name    | string | 使用者帳號（username）                           |
+| role         | string | 使用者身份（例如：`Student` / `Teacher` / `Admin`） |
+| email        | string | 使用者電子郵件（依隱私策略可能顯示或遮蔽）                     |
+| user_id      | string | 使用者的公開 ID（預設為使用者主鍵；若系統有自訂公開 ID 則為該值）      |
+| introduction | string | 個人簡介（來源：UserProfile.bio；若未設定可能為空字串）       |
+
+> 注意：**不包含** `real_name`、`student_id`。
+
+---
+
+### 失敗回應
+
+#### 401 Unauthorized（未登入或 Token 失效）
+
+```json
+{
+  "detail": "Authentication credentials were not provided or are invalid."
+}
+```
+
+#### 404 Not Found（找不到使用者）
+
+```json
+{
+  "detail": "User not found."
+}
+```
+
+> 其他錯誤（5xx）多半為伺服器端異常，請檢查日誌。
+
+---
+
+### 範例
+
+#### cURL
+
+```bash
+curl -i -X GET "http://127.0.0.1:8000/profile/momo/" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json"
+```
 
 ---
 
