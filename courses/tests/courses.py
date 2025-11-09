@@ -12,30 +12,36 @@ User = get_user_model()
 
 class CourseAPITestCase(APITestCase):
     def setUp(self):
+        from uuid import uuid4
+
+        unique = uuid4().hex[:6]
+        self.client.defaults["HTTP_HOST"] = "127.0.0.1"
+        Course_members.objects.all().delete()
+        Courses.objects.all().delete()
         self.teacher = User.objects.create_user(
-            username="teacher_one",
-            email="teacher@example.com",
+            username=f"teacher_one_{unique}",
+            email=f"teacher_{unique}@example.com",
             password="pass1234",
             real_name="Teacher One",
             identity="teacher",
         )
         self.another_teacher = User.objects.create_user(
-            username="teacher_two",
-            email="teacher2@example.com",
+            username=f"teacher_two_{unique}",
+            email=f"teacher2_{unique}@example.com",
             password="pass1234",
             real_name="Teacher Two",
             identity="teacher",
         )
         self.admin = User.objects.create_user(
-            username="admin_user",
-            email="admin@example.com",
+            username=f"admin_user_{unique}",
+            email=f"admin_{unique}@example.com",
             password="pass1234",
             real_name="Admin",
             identity="admin",
         )
         self.student = User.objects.create_user(
-            username="student_one",
-            email="student@example.com",
+            username=f"student_one_{unique}",
+            email=f"student_{unique}@example.com",
             password="pass1234",
             real_name="Student One",
             identity="student",
