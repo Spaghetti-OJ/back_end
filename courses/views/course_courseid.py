@@ -21,21 +21,17 @@ class CourseDetailView(generics.GenericAPIView):
 
         user = request.user
         is_teacher = course.teacher_id_id == getattr(user, "id", None)
-        is_member = is_teacher or Course_members.objects.filter(
-            course_id=course, user_id=user
-        ).exists()
-
-        if not is_member:
-            return Response(
-                {"message": "You are not in this course."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         members = (
             Course_members.objects.filter(course_id=course)
             .select_related("user_id")
             .order_by("joined_at")
         )
+        is_member = is_teacher or any(m.user_id.id == user.id for m in members)
+        if not is_member:
+            return Response(
+                {"message": "You are not in this course."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         tas = [
             membership.user_id
             for membership in members
