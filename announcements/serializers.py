@@ -58,5 +58,5 @@ class SystemAnnouncementSerializer(serializers.ModelSerializer):
         return self._user_payload(obj.creator_id)
 
     def get_updater(self, obj: Announcements):
-        # Announcements model沒有獨立的 updater 欄位，因此暫不提供更新者資訊
-        return None
+        # Announcements model沒有獨立的 updater 欄位，因此回傳 creator 作為 updater
+        return self._user_payload(obj.creator_id)
