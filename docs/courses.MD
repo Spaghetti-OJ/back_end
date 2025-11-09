@@ -38,6 +38,77 @@ curl http://127.0.0.1:8000/course/ \
 
 ---
 
+## 課程詳情 API
+
+**路徑**：`GET /course/<course_id>/`
+
+**說明**：查看課程基本資訊與成員。需登入並且為該課程的教師、助教或學生。
+
+**路徑參數**
+
+| 參數名        | 型別   | 必填 | 說明            |
+| ------------- | ------ | ---- | --------------- |
+| `course_id`   | UUID   | ✅   | 課程的 UUID |
+
+**成功回應 (200 OK)**：
+
+```json
+{
+  "message": "Success.",
+  "course": {
+    "id": "4b1c2a3d-8e1f-45c3-9c62-ff33b4aa6f12",
+    "course": "人工智慧導論",
+    "description": "課程介紹…",
+    "joinCode": "XYZ12AB",
+    "studentLimit": 60,
+    "semester": "Spring",
+    "academicYear": "2025",
+    "studentCount": 35,
+    "isActive": true,
+    "createdAt": "2025-01-01T08:00:00Z",
+    "updatedAt": "2025-01-05T08:00:00Z"
+  },
+  "teacher": {
+    "id": "c1234f56-789a-4bde-b123-456789abcd12",
+    "username": "teacher01",
+    "real_name": "王小明",
+    "identity": "teacher"
+  },
+  "TAs": [
+    {
+      "id": "24242424-aaaa-bbbb-cccc-123456789000",
+      "username": "ta_user",
+      "real_name": "助教 A",
+      "identity": "student"
+    }
+  ],
+  "students": [
+    {
+      "id": "65656565-aaaa-bbbb-cccc-123456789000",
+      "username": "student01",
+      "real_name": "學生 A",
+      "identity": "student"
+    }
+  ]
+}
+```
+
+**失敗回應**
+
+| 狀況       | HTTP | 範例訊息                                                 |
+| ---------- | ---- | -------------------------------------------------------- |
+| 未登入     | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 非課程成員 | 403  | `{ "message": "You are not in this course." }`           |
+| 課程不存在 | 404  | `{ "message": "Course not found." }`                     |
+
+**cURL 測試**：
+```bash
+curl http://127.0.0.1:8000/course/4b1c2a3d-8e1f-45c3-9c62-ff33b4aa6f12/ \
+    -H "Authorization: Bearer <access>"
+```
+
+---
+
 ## 課程建立 API
 
 **路徑**：`POST /course/`
@@ -194,6 +265,102 @@ curl -X PUT http://127.0.0.1:8000/course/ \
 ```bash
 curl http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
     -H "Authorization: Bearer <access>"
+## 課程刪除 API
+
+**路徑**：`DELETE /course/`
+
+**說明**：刪除指定課程。需具管理員身分或為該課程的現任教師。
+
+### 請求格式 (JSON)
+
+| 欄位名   | 型別   | 必填 | 說明                         |
+| -------- | ------ | ---- | ---------------------------- |
+| `course_id` | string | ✅   | 需要刪除的課程 ID（UUID） |
+
+---
+
+**請求範例**
+
+```json
+{
+  "course_id": "4b1c2a3d-8e1f-45c3-9c62-ff33b4aa6f12"
+}
+```
+
+---
+
+**成功回應 (200 OK)**
+
+```json
+{ "message": "Success." }
+```
+
+**失敗回應**
+
+| 狀況           | HTTP | 範例訊息                          |
+| -------------- | ---- | --------------------------------- |
+| 未登入         | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 權限不足       | 403  | `{ "message": "Forbidden." }`     |
+| 課程不存在     | 404  | `{ "message": "Course not found." }` |
+
+**cURL 測試**：
+```bash
+curl -X DELETE http://127.0.0.1:8000/course/ \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer <access>" \
+    -d '{
+    "course_id": "4b1c2a3d-8e1f-45c3-9c62-ff33b4aa6f12"
+    }'
+```
+
+## 課程刪除 API
+
+**路徑**：`DELETE /course/`
+
+**說明**：刪除指定課程。需具管理員身分或為該課程的現任教師。
+
+### 請求格式 (JSON)
+
+| 欄位名   | 型別   | 必填 | 說明                         |
+| -------- | ------ | ---- | ---------------------------- |
+| `course_id` | string | ✅   | 需要刪除的課程 ID（UUID） |
+
+---
+
+**請求範例**
+
+```json
+{
+  "course_id": "4b1c2a3d-8e1f-45c3-9c62-ff33b4aa6f12"
+}
+```
+
+---
+
+**成功回應 (200 OK)**
+
+```json
+{ "message": "Success." }
+```
+
+**失敗回應**
+
+| 狀況           | HTTP | 範例訊息                          |
+| -------------- | ---- | --------------------------------- |
+| 未登入         | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 權限不足       | 403  | `{ "message": "Forbidden." }`     |
+| 課程不存在     | 404  | `{ "message": "Course not found." }` |
+
+**cURL 測試**：
+```bash
+curl -X DELETE http://127.0.0.1:8000/course/ \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer <access>" \
+    -d '{
+    "course_id": "4b1c2a3d-8e1f-45c3-9c62-ff33b4aa6f12"
+    }'
+```
+
 ## 課程刪除 API
 
 **路徑**：`DELETE /course/`
