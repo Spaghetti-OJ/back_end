@@ -24,7 +24,7 @@ class MeProfileSerializer(serializers.ModelSerializer):
         fields = [
             "real_name",
             "user_name",
-            "identity",
+            "role",
             "email",
             "user_id",
             "student_id",
@@ -36,15 +36,20 @@ class MeProfileSerializer(serializers.ModelSerializer):
         return obj.user.get_identity_display()
     
 class PublicProfileSerializer(serializers.ModelSerializer):
-    """查看他人公開資料（隱藏 real_name, student_id）"""
-    user_name = serializers.CharField(source="username")
+    user_name = serializers.CharField(source="username", read_only=True)
+    role = serializers.SerializerMethodField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+    user_id = serializers.CharField(source="id", read_only=True)
+    introduction = serializers.CharField(source="userprofile.bio", read_only=True, allow_blank=True)
 
     class Meta:
         model = User
-        fields = (
-            "user_name",
-            "identity",
-            "email",         
-            "user_id",
-            "introduction",
-        )
+        fields = ("user_name", "role", "email", "user_id", "introduction")
+
+    def get_role(self, obj):
+        if hasattr(obj, "get_identity_display"):
+            return obj.get_identity_display()
+        for attr in ("identity", "role"):
+            if hasattr(obj, attr):
+                return getattr(obj, attr)
+        return None

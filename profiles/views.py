@@ -30,13 +30,14 @@ class PublicProfileView(RetrieveAPIView):
     """
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = PublicProfileSerializer
-    lookup_field = "user_name"
-    queryset = User.objects.all()
+    lookup_field = "username"
+
+    def get_queryset(self):
+        return User._default_manager.select_related("userprofile")
 
     def get_object(self):
-        username = self.kwargs.get(self.lookup_field)
+        key = (self.kwargs.get(self.lookup_field) or "").strip()
         try:
-            # 若你的系統 username 不分大小寫，可改成 username__iexact
-            return self.get_queryset().get(username=username)
+            return self.get_queryset().get(username__iexact=key)
         except User.DoesNotExist:
-            raise NotFound(detail="User not found.")
+            raise NotFound("User not found.")
