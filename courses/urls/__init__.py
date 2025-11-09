@@ -1,5 +1,6 @@
 from django.urls import include, path
 
+from . import course_courseid as detail_urls
 from . import courses as course_urls
 from . import summary as summary_urls
 from . import grade as grade_urls
@@ -18,5 +19,11 @@ urlpatterns = [
     path(
         "summary/",
         include((summary_urls.urlpatterns, "summary"), namespace="summary"),
+        "",
+        include(
+            (detail_urls.urlpatterns, "course_courseid"),
+            namespace="course_courseid",
+        ),
     ),
+    path('', include('courses.urls.homework')),
 ]
