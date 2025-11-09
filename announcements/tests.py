@@ -23,7 +23,7 @@ class CourseAnnouncementAPITestCase(APITestCase):
         )
         self.course = Courses.objects.create(name="SysCourse", teacher_id=self.teacher)
         self.url = lambda course_id=None: reverse(
-            "system_announcements:course",
+            "announcements:course",
             kwargs={"course_id": course_id or self.course.id},
         )
 
@@ -124,7 +124,7 @@ class CourseAnnouncementDetailAPITestCase(APITestCase):
         )
         self.course = Courses.objects.create(name="DetailCourse", teacher_id=self.teacher)
         self.url = lambda course_id=None, ann_id=None: reverse(
-            "system_announcements:announcement",
+            "announcements:announcement",
             kwargs={
                 "course_id": course_id or self.course.id,
                 "ann_id": ann_id,

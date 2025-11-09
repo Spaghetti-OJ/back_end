@@ -22,11 +22,8 @@ from submissions import views as submission_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path(
-        'course/',
-        include(('courses.urls', 'courses'), namespace='courses'),
-    ),
-    path('ann/', include(('announcements.urls', 'announcements'), namespace='system_announcements')),
+    path('course/', include(('courses.urls', 'courses'), namespace='courses')),
+    path('ann/', include(('announcements.urls'), namespace='announcements')),
     path('user/', include('user.urls')), 
     path('auth/', include('auths.urls')),
     path('editorials/', include('submissions.editorial_urls')),

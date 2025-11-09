@@ -22,5 +22,5 @@ urlpatterns = [
             namespace="course_courseid",
         ),
     ),
-    path('', include('courses.urls.homework')),
+    path("", include("courses.urls.homework")),
 ]
