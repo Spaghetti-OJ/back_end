@@ -34,3 +34,17 @@ class MeProfileSerializer(serializers.ModelSerializer):
     def get_role(self, obj):
         # 取 TextChoices 的 display：Student/Teacher/Admin
         return obj.user.get_identity_display()
+    
+class PublicProfileSerializer(serializers.ModelSerializer):
+    """查看他人公開資料（隱藏 real_name, student_id）"""
+    user_name = serializers.CharField(source="username")
+
+    class Meta:
+        model = User
+        fields = (
+            "user_name",
+            "role",
+            "email",         
+            "user_id",
+            "introduction",
+        )
