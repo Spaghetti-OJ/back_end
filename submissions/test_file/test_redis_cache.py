@@ -37,7 +37,7 @@ class CacheKeysTests(HypothesisTestCase):
     @given(
         user_id=st.text(min_size=1, max_size=50),
         problem_id=st.integers(min_value=1, max_value=99999),
-        status=st.sampled_from(['pending', 'judging', 'accepted', 'wrong_answer', None]),
+        status=st.sampled_from(['-2', '-1', '0', '1', '2', '3', None]),
         language=st.sampled_from(['c', 'cpp', 'python', 'java', None]),
         offset=st.integers(min_value=0, max_value=1000),
         limit=st.integers(min_value=1, max_value=100)
