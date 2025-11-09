@@ -26,7 +26,6 @@ urlpatterns = [
         include(('courses.urls', 'courses'), namespace='courses'),
     ),
     path('user/', include('user.urls')), 
-    path('course/', include('courses.urls')),
     path('auth/', include('auths.urls')),
     path('editorials/', include('submissions.editorial_urls')),
     path('submissions/', include('submissions.urls')),

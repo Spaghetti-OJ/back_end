@@ -11,4 +11,5 @@ urlpatterns = [
         "summary/",
         include((f"{__package__}.urls.summary", "summary"), namespace="summary"),
     ),
+    path("", include("courses.urls.homework")),
 ]
