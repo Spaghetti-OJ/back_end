@@ -42,10 +42,9 @@ class HomeworkListItemSerializer(serializers.ModelSerializer):
 
         # 學生：取該作業下的所有 problem 狀態
         stats = UserProblemStats.objects.filter(user=user, assignment_id=obj.id)
-        if not stats.exists():
-            return "unsolved"
-
         statuses = list(stats.values_list("solve_status", flat=True))
+        if not statuses:
+            return "unsolved"
         if all(s == "solved" for s in statuses):
             return "solved"
         elif any(s == "partial" for s in statuses):
