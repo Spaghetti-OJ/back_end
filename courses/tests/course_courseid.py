@@ -120,3 +120,132 @@ class CourseDetailAPITestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.data["message"], "Course not found.")
+
+    def test_teacher_can_update_tas_list(self):
+        course = self._create_course(teacher=self.teacher)
+        existing_ta = User.objects.create_user(
+            username=f"ta_existing_{self.unique}",
+            email=f"ta_existing_{self.unique}@example.com",
+            password="pass1234",
+            real_name="Existing TA",
+            identity="student",
+        )
+        new_ta = User.objects.create_user(
+            username=f"ta_new_{self.unique}",
+            email=f"ta_new_{self.unique}@example.com",
+            password="pass1234",
+            real_name="New TA",
+            identity="student",
+        )
+        Course_members.objects.create(
+            course_id=course, user_id=existing_ta, role=Course_members.Role.TA
+        )
+
+        self.client.force_authenticate(user=self.teacher)
+        response = self.client.put(
+            self._detail_url(str(course.id)),
+            {"TAs": [new_ta.username]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["message"], "Success.")
+        tas = Course_members.objects.filter(course_id=course, role=Course_members.Role.TA)
+        self.assertEqual(tas.count(), 1)
+        self.assertEqual(tas.first().user_id, new_ta)
+
+    def test_put_returns_not_found_when_ta_missing(self):
+        course = self._create_course(teacher=self.teacher)
+        self.client.force_authenticate(user=self.teacher)
+
+        response = self.client.put(
+            self._detail_url(str(course.id)),
+            {"TAs": ["unknown_ta_user"]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["message"], "User: unknown_ta_user not found.")
+
+    def test_teacher_cannot_update_other_course(self):
+        course = self._create_course(teacher=self.another_teacher)
+        self.client.force_authenticate(user=self.teacher)
+
+        response = self.client.put(
+            self._detail_url(str(course.id)),
+            {"TAs": []},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "You are not in this course.")
+
+    def test_student_cannot_update_course_members(self):
+        course = self._create_course(teacher=self.teacher)
+        self.client.force_authenticate(user=self.student)
+
+        response = self.client.put(
+            self._detail_url(str(course.id)),
+            {"TAs": []},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "Forbidden.")
+
+    def test_teacher_can_remove_student_with_query_param(self):
+        course = self._create_course(teacher=self.teacher)
+        Course_members.objects.create(
+            course_id=course,
+            user_id=self.student,
+            role=Course_members.Role.STUDENT,
+        )
+        self.client.force_authenticate(user=self.teacher)
+
+        response = self.client.put(
+            f"{self._detail_url(str(course.id))}?student={self.student.id}",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(
+            Course_members.objects.filter(
+                course_id=course,
+                user_id=self.student,
+                role=Course_members.Role.STUDENT,
+            ).exists()
+        )
+
+    def test_put_returns_not_found_when_student_missing(self):
+        course = self._create_course(teacher=self.teacher)
+        self.client.force_authenticate(user=self.teacher)
+
+        response = self.client.put(
+            f"{self._detail_url(str(course.id))}?student={uuid.uuid4()}",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["message"], "Student not found.")
+
+    def test_put_returns_not_found_when_student_not_in_course(self):
+        course = self._create_course(teacher=self.teacher)
+        outsider = User.objects.create_user(
+            username=f"outsider_{self.unique}",
+            email=f"outsider_{self.unique}@example.com",
+            password="pass1234",
+            real_name="Outsider",
+            identity="student",
+        )
+        self.client.force_authenticate(user=self.teacher)
+
+        response = self.client.put(
+            f"{self._detail_url(str(course.id))}?student={outsider.id}",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["message"], "Student not found.")
