@@ -93,7 +93,7 @@ class EditorialPermissionTests(TestCase):
     
     def test_course_main_teacher_has_permission(self):
         """測試課程主要老師有權限"""
-        from ..views import EditorialPermissionMixin
+        from ..views import BasePermissionMixin as EditorialPermissionMixin
         
         mixin = EditorialPermissionMixin()
         
@@ -103,7 +103,7 @@ class EditorialPermissionTests(TestCase):
     
     def test_course_member_teacher_has_permission(self):
         """測試課程成員老師有權限"""
-        from ..views import EditorialPermissionMixin
+        from ..views import BasePermissionMixin as EditorialPermissionMixin
         
         mixin = EditorialPermissionMixin()
         
@@ -113,7 +113,7 @@ class EditorialPermissionTests(TestCase):
     
     def test_ta_has_permission(self):
         """測試 TA 有權限"""
-        from ..views import EditorialPermissionMixin
+        from ..views import BasePermissionMixin as EditorialPermissionMixin
         
         mixin = EditorialPermissionMixin()
         
@@ -123,7 +123,7 @@ class EditorialPermissionTests(TestCase):
     
     def test_student_has_no_permission(self):
         """測試學生沒有權限"""
-        from ..views import EditorialPermissionMixin
+        from ..views import BasePermissionMixin as EditorialPermissionMixin
         from rest_framework.exceptions import PermissionDenied
         
         mixin = EditorialPermissionMixin()
@@ -134,7 +134,7 @@ class EditorialPermissionTests(TestCase):
     
     def test_outsider_has_no_permission(self):
         """測試外部用戶沒有權限"""
-        from ..views import EditorialPermissionMixin
+        from ..views import BasePermissionMixin as EditorialPermissionMixin
         from rest_framework.exceptions import PermissionDenied
         
         mixin = EditorialPermissionMixin()
@@ -145,7 +145,7 @@ class EditorialPermissionTests(TestCase):
     
     def test_nonexistent_problem_permission(self):
         """測試不存在問題的權限檢查"""
-        from ..views import EditorialPermissionMixin
+        from ..views import BasePermissionMixin as EditorialPermissionMixin
         from rest_framework.exceptions import NotFound
         
         mixin = EditorialPermissionMixin()
@@ -156,7 +156,7 @@ class EditorialPermissionTests(TestCase):
     
     def test_problem_without_course_permission(self):
         """測試沒有關聯課程的問題權限檢查"""
-        from ..views import EditorialPermissionMixin
+        from ..views import BasePermissionMixin as EditorialPermissionMixin
         from rest_framework.exceptions import PermissionDenied
         
         mixin = EditorialPermissionMixin()
@@ -223,7 +223,7 @@ class CoursePermissionHypothesisTests(HypothesisTestCase):
             course_id=self.course
         )
         
-        from ..views import EditorialPermissionMixin
+        from ..views import BasePermissionMixin as EditorialPermissionMixin
         from rest_framework.exceptions import PermissionDenied
         
         mixin = EditorialPermissionMixin()
@@ -255,7 +255,7 @@ class CoursePermissionHypothesisTests(HypothesisTestCase):
             course_id=self.course
         )
         
-        from ..views import EditorialPermissionMixin
+        from ..views import BasePermissionMixin as EditorialPermissionMixin
         from rest_framework.exceptions import PermissionDenied
         
         mixin = EditorialPermissionMixin()
