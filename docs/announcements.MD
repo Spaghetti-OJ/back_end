@@ -58,3 +58,55 @@ curl http://127.0.0.1:8000/ann/<course_id>/ann \
 ---
 
 - 若 `course_id` 對應的課程名稱為「公開討論區」，回傳結果即為原系統公告列表（前端僅需提供該課程的 ID 即可）。
+
+---
+
+## 課程公告建立 API
+
+**路徑**：`POST /ann/`
+
+**說明**：建立指定課程的公告。需要登入，且必須具備「GRADE 權限」——也就是課程的主要老師、課程成員老師 / TA，或系統管理員。
+
+**需要登入**
+
+**Body 參數**
+
+| 欄位        | 型別   | 必填 | 說明                     |
+| ----------- | ------ | ---- | ------------------------ |
+| `title`     | string | ✅   | 公告標題，最長 200 字    |
+| `content`   | string | ✅   | 公告內容（Markdown）     |
+| `course_id` | UUID   | ✅   | 目標課程 ID              |
+| `is_pinned` | bool   | ❌   | 是否置頂，預設為 `false` |
+
+**成功回應 (201 Created)**
+
+```json
+{
+  "data": {
+    "id": "新公告ID",
+    "created_at": 1732099200
+  }
+}
+```
+
+**錯誤回應**
+
+| 狀況                 | HTTP | 範例訊息                                |
+| -------------------- | ---- | --------------------------------------- |
+| 未登入               | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 權限不足             | 403  | `{ "message": "Permission denied." }` |
+| 驗證錯誤 / 缺少欄位 | 400  | `{ "message": "Validation error.", "errors": { ... } }` |
+
+**cURL 測試**
+
+```bash
+curl -X POST http://127.0.0.1:8000/ann/ \
+    -H "Authorization: Bearer <access>" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "title": "標題",
+      "content": "內容",
+      "course_id": "課程UUID",
+      "is_pinned": true
+    }'
+```
