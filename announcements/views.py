@@ -65,8 +65,6 @@ class AnnouncementCreateView(generics.GenericAPIView):
 
     @staticmethod
     def _has_grade_permission(user, course: Courses) -> bool:
-        if not getattr(user, "is_authenticated", False):
-            return False
 
         if getattr(user, "identity", None) == "admin":
             return True
