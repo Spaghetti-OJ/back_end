@@ -47,9 +47,4 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         fields = ("user_name", "role", "email", "user_id", "introduction")
 
     def get_role(self, obj):
-        if hasattr(obj, "get_identity_display"):
-            return obj.get_identity_display()
-        for attr in ("identity", "role"):
-            if hasattr(obj, attr):
-                return getattr(obj, attr)
-        return None
+        return obj.get_identity_display()
