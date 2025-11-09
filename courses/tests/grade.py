@@ -19,6 +19,13 @@ class CourseGradeViewTests(APITestCase):
             real_name="Teacher One",
             identity="teacher",
         )
+        self.admin = User.objects.create_user(
+            username="admin01",
+            email="admin01@example.com",
+            password="pass1234",
+            real_name="Admin One",
+            identity="admin",
+        )
         self.student = User.objects.create_user(
             username="student01",
             email="student01@example.com",
@@ -40,6 +47,13 @@ class CourseGradeViewTests(APITestCase):
             real_name="Student Three",
             identity="student",
         )
+        self.ta_user = User.objects.create_user(
+            username="assistant01",
+            email="assistant01@example.com",
+            password="pass1234",
+            real_name="Assistant One",
+            identity="student",
+        )
 
         self.course = Courses.objects.create(name="Algorithms101", teacher_id=self.teacher)
         Course_members.objects.create(
@@ -51,6 +65,16 @@ class CourseGradeViewTests(APITestCase):
             course_id=self.course,
             user_id=self.another_student,
             role=Course_members.Role.STUDENT,
+        )
+        Course_members.objects.create(
+            course_id=self.course,
+            user_id=self.ta_user,
+            role=Course_members.Role.TA,
+        )
+        Course_members.objects.create(
+            course_id=self.course,
+            user_id=self.admin,
+            role=Course_members.Role.TEACHER,
         )
 
         CourseGrade.objects.create(
@@ -129,6 +153,111 @@ class CourseGradeViewTests(APITestCase):
         response = self.client.get(self._url(self.course, self.student))
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_teacher_can_create_grade(self):
+        self.client.force_authenticate(self.teacher)
+
+        payload = {"title": "Final", "content": "Final exam", "score": 88}
+        response = self.client.post(
+            self._url(self.course, self.student),
+            data=payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["message"], "Success.")
+        self.assertTrue(
+            CourseGrade.objects.filter(
+                course=self.course, student=self.student, title="Final"
+            ).exists()
+        )
+
+    def test_ta_can_create_grade_with_letter_score(self):
+        self.client.force_authenticate(self.ta_user)
+
+        payload = {"title": "Lab 1", "content": "Lab grading", "score": "A+"}
+        response = self.client.post(
+            self._url(self.course, self.student),
+            data=payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        grade = CourseGrade.objects.get(
+            course=self.course,
+            student=self.student,
+            title="Lab 1",
+        )
+        self.assertEqual(grade.score, "A+")
+
+    def test_admin_member_can_create_grade(self):
+        self.client.force_authenticate(self.admin)
+
+        payload = {"title": "Project", "content": "Project score", "score": 100}
+        response = self.client.post(
+            self._url(self.course, self.student),
+            data=payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            CourseGrade.objects.filter(
+                course=self.course, student=self.student, title="Project"
+            ).exists()
+        )
+
+    def test_student_cannot_create_grade(self):
+        self.client.force_authenticate(self.student)
+
+        payload = {"title": "Quiz 3", "content": "", "score": 70}
+        response = self.client.post(
+            self._url(self.course, self.student),
+            data=payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "You can only view your score.")
+
+    def test_non_member_cannot_create_grade(self):
+        self.client.force_authenticate(self.outsider)
+
+        payload = {"title": "Quiz 3", "content": "", "score": 70}
+        response = self.client.post(
+            self._url(self.course, self.student),
+            data=payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "You are not in this course.")
+
+    def test_duplicate_title_returns_bad_request(self):
+        self.client.force_authenticate(self.teacher)
+
+        payload = {"title": "Midterm", "content": "", "score": 96}
+        response = self.client.post(
+            self._url(self.course, self.student),
+            data=payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["message"], "This title is taken.")
+
+    def test_post_student_not_in_course_returns_not_found(self):
+        self.client.force_authenticate(self.teacher)
+
+        payload = {"title": "Pop Quiz", "content": "", "score": 50}
+        response = self.client.post(
+            self._url(self.course, self.outsider),
+            data=payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["message"], "The student is not in the course.")
 
     @staticmethod
     def _url(course, student):
