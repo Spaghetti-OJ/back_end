@@ -60,12 +60,6 @@ class CourseDetailView(generics.GenericAPIView):
 
     @staticmethod
     def _get_course_or_response(course_id):
-        if not course_id:
-            return Response(
-                {"message": "Course not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
         try:
             return Courses.objects.select_related("teacher_id").get(id=course_id)
         except Courses.DoesNotExist:
