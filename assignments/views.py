@@ -109,9 +109,9 @@ class HomeworkDetailView(APIView):
             hw.title = new_name
         if "markdown" in ser.validated_data:
             hw.description = ser.validated_data.get("markdown") or ""
-        if ser.validated_data.get("_start_dt") is not None:
+        if "_start_dt" in ser.validated_data:
             hw.start_time = ser.validated_data["_start_dt"]
-        if ser.validated_data.get("_end_dt") is not None:
+        if "_end_dt" in ser.validated_data:
             hw.due_time = ser.validated_data["_end_dt"]
         hw.save()
 
