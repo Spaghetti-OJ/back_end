@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from submissions import views as submission_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -27,12 +28,13 @@ urlpatterns = [
     ),
     path('ann/', include(('announcements.urls', 'announcements'), namespace='system_announcements')),
     path('user/', include('user.urls')), 
-    path('course/', include('courses.urls')),
     path('auth/', include('auths.urls')),
     path('editorials/', include('submissions.editorial_urls')),
-    path('submissions/', include('submissions.urls')),
+    path('submission/', include('submissions.urls')),
+    path('ranking/', submission_views.ranking_view, name='ranking'),
     path('api-tokens/', include('api_tokens.urls')),
     path('profile/', include('profiles.urls')),
+    path('homework/',include('assignments.urls')),
 ]
 
 if settings.DEBUG:

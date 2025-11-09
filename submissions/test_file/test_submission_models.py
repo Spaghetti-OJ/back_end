@@ -31,7 +31,7 @@ class SubmissionModelHypothesisTests(HypothesisTestCase):
     
     @given(
         problem_id=st.integers(min_value=1, max_value=99999),
-        language_type=st.sampled_from(['c', 'cpp', 'java', 'python', 'javascript']),
+        language_type=st.sampled_from([0, 1, 2, 3, 4]),
         source_code=st.text(min_size=1, max_size=1000),
         score=st.integers(min_value=0, max_value=100),
         execution_time=st.integers(min_value=-1, max_value=60000),  # -1 或 0-60秒
@@ -78,7 +78,7 @@ class SubmissionModelHypothesisTests(HypothesisTestCase):
         submission = Submission.objects.create(
             problem_id=1,
             user=self.user,
-            language_type='python',
+            language_type=2,
             source_code='print("test")',
             execution_time=execution_time,
         )
@@ -91,7 +91,7 @@ class SubmissionModelHypothesisTests(HypothesisTestCase):
         submission = Submission.objects.create(
             problem_id=1,
             user=self.user,
-            language_type='python',
+            language_type=2,
             source_code='print("test")',
             execution_time=-1,  # 無效時間
         )
@@ -108,7 +108,7 @@ class SubmissionModelHypothesisTests(HypothesisTestCase):
         submission = Submission.objects.create(
             problem_id=1,
             user=self.user,
-            language_type='python',
+            language_type=2,
             source_code='print("test")',
             status=status,
         )
@@ -131,7 +131,7 @@ class CustomTestModelHypothesisTests(HypothesisTestCase):
     
     @given(
         problem_id=st.integers(min_value=1, max_value=99999),
-        language_type=st.sampled_from(['c', 'cpp', 'java', 'python', 'javascript']),
+        language_type=st.sampled_from([0, 1, 2, 3, 4]),
         source_code=st.text(min_size=1, max_size=500),
         status=st.sampled_from(['pending', 'running', 'completed', 'error'])
     )
@@ -165,7 +165,7 @@ class CustomTestModelHypothesisTests(HypothesisTestCase):
         custom_test = CustomTest.objects.create(
             user=self.user,
             problem_id=1,
-            language_type='python',
+            language_type=2,
             source_code='print("test")',
             input_data=input_data,
             expected_output=expected_output,
@@ -238,7 +238,7 @@ class CodeDraftHypothesisTests(HypothesisTestCase):
     
     @given(
         problem_id=st.integers(min_value=1, max_value=9999),
-        language_type=st.sampled_from(['c', 'cpp', 'java', 'python', 'javascript']),
+        language_type=st.sampled_from([0, 1, 2, 3, 4]),
         source_code=st.text(min_size=1, max_size=1000),
         title=st.one_of(
             st.none(), 
@@ -290,7 +290,7 @@ class SubmissionResultHypothesisTests(HypothesisTestCase):
         self.submission = Submission.objects.create(
             problem_id=1,
             user=self.user,
-            language_type='python',
+            language_type=2,
             source_code='print("test")'
         )
     

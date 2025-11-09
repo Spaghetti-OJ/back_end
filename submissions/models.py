@@ -4,13 +4,14 @@ import uuid
 from decimal import Decimal
 
 class Submission(models.Model):
-    # Language choices - enum
+    # Language choices - enum (NOJ 兼容：0=C, 1=C++, 2=Python, 跳過 PDF, 3=Java, 4=JavaScript)
     LANGUAGE_CHOICES = [
-        ('c', 'C'),
-        ('cpp', 'C++'),
-        ('java', 'Java'),
-        ('python', 'Python'),
-        ('javascript', 'JavaScript'),
+        (0, 'C'),
+        (1, 'C++'), 
+        (2, 'Python'),
+        # PDF (原本是 3) 跳過，因為我們不支援手寫題
+        (3, 'Java'),
+        (4, 'JavaScript'),
     ]
     
     # Status choices - enum (使用數字編碼，兼容 NOJ 標準)
@@ -33,8 +34,7 @@ class Submission(models.Model):
     problem_id = models.IntegerField()  # 直接關聯題目 ID
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)  # 使用 Django 內建 User
     # Core fields
-    language_type = models.CharField(
-        max_length=20,
+    language_type = models.IntegerField(
         choices=LANGUAGE_CHOICES,
         null=False,
         blank=False
@@ -330,11 +330,11 @@ class CustomTest(models.Model):
     """自定義測試"""
     
     LANGUAGE_CHOICES = [
-        ('c', 'C'),
-        ('cpp', 'C++'),
-        ('java', 'Java'),
-        ('python', 'Python'),
-        ('javascript', 'JavaScript'),
+        (0, 'C'),
+        (1, 'C++'),
+        (2, 'Python'),
+        (3, 'Java'),
+        (4, 'JavaScript'),
     ]
     
     STATUS_CHOICES = [
@@ -352,7 +352,7 @@ class CustomTest(models.Model):
     problem_id = models.IntegerField()
     
     # Core fields
-    language_type = models.CharField(max_length=15, choices=LANGUAGE_CHOICES)
+    language_type = models.IntegerField(choices=LANGUAGE_CHOICES)
     source_code = models.TextField()
     input_data = models.TextField(null=True, blank=True)
     expected_output = models.TextField(null=True, blank=True)
@@ -384,11 +384,11 @@ class CodeDraft(models.Model):
     """程式碼草稿"""
     
     LANGUAGE_CHOICES = [
-        ('c', 'C'),
-        ('cpp', 'C++'),
-        ('java', 'Java'),
-        ('python', 'Python'),
-        ('javascript', 'JavaScript'),
+        (0, 'C'),
+        (1, 'C++'),
+        (2, 'Python'),
+        (3, 'Java'),
+        (4, 'JavaScript'),
     ]
     
     # Primary key - UUID
@@ -400,7 +400,7 @@ class CodeDraft(models.Model):
     assignment_id = models.IntegerField(null=True, blank=True)  # 可選的作業關聯
     
     # Core fields
-    language_type = models.CharField(max_length=15, choices=LANGUAGE_CHOICES)
+    language_type = models.IntegerField(choices=LANGUAGE_CHOICES)
     source_code = models.TextField()
     title = models.CharField(max_length=255, null=True, blank=True)
     auto_saved = models.BooleanField(default=False)
