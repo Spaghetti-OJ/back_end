@@ -14,3 +14,7 @@ class CourseGradeItemSerializer(serializers.ModelSerializer):
 class CourseGradeListSerializer(serializers.Serializer):
     message = serializers.CharField(default="Success.")
     grades = CourseGradeItemSerializer(many=True)
+
+
+class CourseGradeDeleteSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=CourseGrade._meta.get_field("title").max_length)

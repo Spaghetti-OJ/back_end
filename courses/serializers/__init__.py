@@ -6,7 +6,11 @@ from .courses import (
 )
 from .course_courseid import CourseInfoSerializer, CourseDetailSerializer
 from .summary import CourseSummarySerializer
-from .grade import CourseGradeListSerializer, CourseGradeItemSerializer
+from .grade import (
+    CourseGradeListSerializer,
+    CourseGradeItemSerializer,
+    CourseGradeDeleteSerializer,
+)
 
 __all__ = [
     "TeacherSerializer",
@@ -18,4 +22,5 @@ __all__ = [
     "CourseSummarySerializer",
     "CourseGradeListSerializer",
     "CourseGradeItemSerializer",
+    "CourseGradeDeleteSerializer",
 ]

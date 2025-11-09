@@ -130,6 +130,75 @@ class CourseGradeViewTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_teacher_can_delete_student_grade(self):
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.delete(
+            self._url(self.course, self.student),
+            data={"title": "Quiz 1"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["message"], "Success.")
+        self.assertFalse(
+            CourseGrade.objects.filter(
+                course=self.course,
+                student=self.student,
+                title="Quiz 1",
+            ).exists()
+        )
+
+    def test_student_cannot_delete_grade(self):
+        self.client.force_authenticate(self.student)
+
+        response = self.client.delete(
+            self._url(self.course, self.student),
+            data={"title": "Quiz 1"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "You can only view your score.")
+        self.assertTrue(
+            CourseGrade.objects.filter(
+                course=self.course,
+                student=self.student,
+                title="Quiz 1",
+            ).exists()
+        )
+
+    def test_non_member_cannot_delete_grade(self):
+        self.client.force_authenticate(self.outsider)
+
+        response = self.client.delete(
+            self._url(self.course, self.student),
+            data={"title": "Quiz 1"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "You are not in this course.")
+        self.assertTrue(
+            CourseGrade.objects.filter(
+                course=self.course,
+                student=self.student,
+                title="Quiz 1",
+            ).exists()
+        )
+
+    def test_delete_returns_not_found_when_grade_missing(self):
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.delete(
+            self._url(self.course, self.student),
+            data={"title": "Final"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["message"], "Score not found.")
+
     @staticmethod
     def _url(course, student):
         course_id = course.id if hasattr(course, "id") else course
