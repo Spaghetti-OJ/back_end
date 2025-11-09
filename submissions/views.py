@@ -18,8 +18,8 @@ from problems.models import Problems
 from courses.models import Courses, Course_members
 
 
-class EditorialPermissionMixin:
-    """題解權限檢查 Mixin"""
+class BasePermissionMixin:
+    """基礎權限檢查 Mixin - 提供通用權限檢查方法"""
     
     def check_teacher_permission(self, user, problem_id):
         """檢查用戶是否為該問題所屬課程的老師或 TA"""
@@ -45,12 +45,94 @@ class EditorialPermissionMixin:
         ).exists()
         
         if not is_course_staff:
-            raise PermissionDenied("您沒有權限管理此問題的題解")
+            raise PermissionDenied("您沒有權限管理此問題")
         
         return True
+    
+    def check_submission_view_permission(self, user, submission):
+        """檢查是否有查看提交的權限"""
+        # 1. 如果是提交者本人，可以查看
+        if submission.user == user:
+            return True
+        
+        # 2. 檢查是否為該問題所屬課程的老師或 TA
+        try:
+            problem = Problems.objects.select_related('course_id').get(id=submission.problem_id)
+            
+            # 如果題目沒有關聯課程，暫時允許查看
+            if not problem.course_id:
+                return True
+            
+            course = problem.course_id
+            
+            # 檢查是否為課程主要老師
+            if course.teacher_id == user:
+                return True
+            
+            # 檢查是否為課程成員中的老師或 TA 角色
+            is_course_staff = Course_members.objects.filter(
+                course_id=course,
+                user_id=user,
+                role__in=[Course_members.Role.TEACHER, Course_members.Role.TA]
+            ).exists()
+            
+            return is_course_staff
+            
+        except Exception:
+            return False
+    
+    def get_viewable_submissions(self, user, queryset):
+        """獲取該用戶可以查看的提交"""
+        if user.is_staff or user.is_superuser:
+            return queryset
+        
+        # 實作完整權限檢查
+        from django.db.models import Q
+        from problems.models import Problems
+        from courses.models import Course_members
+        
+        # 構建複合查詢條件
+        viewable_conditions = Q()
+        
+        # 1. 用戶自己的提交永遠可見
+        viewable_conditions |= Q(user=user)
+        
+        # 2. 獲取用戶作為老師/TA的所有課程ID
+        teaching_courses = Course_members.objects.filter(
+            user_id=user,
+            role__in=[Course_members.Role.TEACHER, Course_members.Role.TA]
+        ).values_list('course_id', flat=True)
+        
+        # 3. 獲取用戶作為主要老師的課程ID
+        from courses.models import Courses
+        primary_teaching_courses = Courses.objects.filter(
+            teacher_id=user
+        ).values_list('id', flat=True)
+        
+        # 4. 合併所有有教學權限的課程
+        all_teaching_courses = list(teaching_courses) + list(primary_teaching_courses)
+        
+        if all_teaching_courses:
+            # 5. 獲取這些課程下所有題目的ID
+            course_problems = Problems.objects.filter(
+                course_id__in=all_teaching_courses
+            ).values_list('id', flat=True)
+            
+            if course_problems:
+                # 6. 可以查看這些題目的所有提交
+                viewable_conditions |= Q(problem_id__in=course_problems)
+        
+        # 7. 對於沒有關聯課程的題目，根據系統策略決定
+        # 這裡採用保守策略：只有管理員可以查看無課程題目的提交
+        # 如果要允許所有人查看，可以加上：
+        # orphan_problems = Problems.objects.filter(course_id__isnull=True).values_list('id', flat=True)
+        # if orphan_problems:
+        #     viewable_conditions |= Q(problem_id__in=orphan_problems)
+        
+        return queryset.filter(viewable_conditions).distinct()
 
 
-class EditorialListCreateView(EditorialPermissionMixin, generics.ListCreateAPIView):
+class EditorialListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
     """題解列表和創建 API"""
     permission_classes = [permissions.IsAuthenticated]
     
@@ -109,7 +191,7 @@ class EditorialListCreateView(EditorialPermissionMixin, generics.ListCreateAPIVi
         )
 
 
-class EditorialDetailView(EditorialPermissionMixin, generics.RetrieveUpdateDestroyAPIView):
+class EditorialDetailView(BasePermissionMixin, generics.RetrieveUpdateDestroyAPIView):
     """題解詳情、更新和刪除 API"""
     permission_classes = [permissions.IsAuthenticated]
     
@@ -266,3 +348,447 @@ def editorial_like_toggle(request, problem_id, solution_id):
             {'detail': '操作失敗，請稍後再試'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+# ===== 新增：Submission API Views =====
+
+from .models import Submission, SubmissionResult
+from .serializers import (
+    SubmissionBaseCreateSerializer,
+    SubmissionCodeUploadSerializer,
+    SubmissionListSerializer,
+    SubmissionDetailSerializer,
+    SubmissionCodeSerializer,
+    SubmissionStdoutSerializer
+)
+
+
+class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
+    """
+    GET /submission/ - 獲取提交列表
+    POST /submission/ - 創建新提交
+    """
+    
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return SubmissionBaseCreateSerializer
+        return SubmissionListSerializer
+    
+    def get_queryset(self):
+        queryset = Submission.objects.select_related('user').order_by('-created_at')
+        return self.get_viewable_submissions(self.request.user, queryset)
+    
+    def post(self, request, *args, **kwargs):
+        """創建新提交 (NOJ 兼容版本)"""
+        
+        try:
+            serializer = self.get_serializer(data=request.data)
+            if not serializer.is_valid():
+                # 處理驗證錯誤，返回 NOJ 格式的錯誤信息
+                errors = serializer.errors
+                
+                if 'problem_id' in errors:
+                    if 'required' in str(errors['problem_id']):
+                        return Response("problemId is required!", status=status.HTTP_400_BAD_REQUEST)
+                    elif 'min_value' in str(errors['problem_id']):
+                        return Response("problemId is required!", status=status.HTTP_400_BAD_REQUEST)
+                    else:
+                        return Response("Unexisted problem id.", status=status.HTTP_404_NOT_FOUND)
+                
+                if 'language_type' in errors:
+                    if 'required' in str(errors['language_type']):
+                        return Response("post data missing!", status=status.HTTP_400_BAD_REQUEST)
+                    elif 'not allowed language' in str(errors['language_type']):
+                        return Response("not allowed language", status=status.HTTP_403_FORBIDDEN)
+                    else:
+                        return Response("invalid data!", status=status.HTTP_400_BAD_REQUEST)
+                
+                # 其他驗證錯誤
+                return Response("invalid data!", status=status.HTTP_400_BAD_REQUEST)
+            
+            # TODO: 添加其他 NOJ 檢查
+            # - problem permission denied
+            # - homework hasn't start
+            # - Invalid IP address
+            # - quota check: "you have used all your quotas"
+            # - rate limiting: "Submit too fast!" + waitFor
+            
+            submission = serializer.save()
+            
+            # NOJ 格式響應
+            return Response(
+                f"submission recieved.{submission.id}",
+                status=status.HTTP_201_CREATED
+            )
+        
+        except ValidationError as e:
+            # 序列化器拋出的驗證錯誤
+            error_message = str(e.detail[0]) if hasattr(e, 'detail') and e.detail else str(e)
+            if 'problem' in error_message.lower():
+                return Response("Unexisted problem id.", status=status.HTTP_404_NOT_FOUND)
+            return Response("invalid data!", status=status.HTTP_400_BAD_REQUEST)
+        
+        except Exception as e:
+            # 其他系統錯誤
+            return Response("invalid data!", status=status.HTTP_400_BAD_REQUEST)
+    
+    def list(self, request, *args, **kwargs):
+        """獲取提交列表 (NOJ 兼容版本)"""
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # 支援分頁參數
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            # NOJ 格式響應（分頁版本）
+            return Response({
+                'message': 'here you are, bro',
+                'results': serializer.data,
+                'count': queryset.count()
+            })
+        
+        serializer = self.get_serializer(queryset, many=True)
+        # NOJ 格式響應
+        return Response({
+            'message': 'here you are, bro',
+            'results': serializer.data,
+            'count': queryset.count()
+        })
+
+
+class SubmissionRetrieveUpdateView(BasePermissionMixin, generics.RetrieveUpdateAPIView):
+    """
+    GET /submission/{id} - 獲取提交詳情
+    PUT /submission/{id} - 上傳程式碼
+    """
+    
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'id'
+    
+    def get_serializer_class(self):
+        if self.request.method == 'PUT':
+            return SubmissionCodeUploadSerializer
+        return SubmissionDetailSerializer
+    
+    def get_queryset(self):
+        if self.request.method == 'PUT':
+            # PUT 只能操作自己的提交
+            return Submission.objects.filter(user=self.request.user)
+        else:
+            # GET 可以查看有權限的提交
+            queryset = Submission.objects.select_related('user')
+            return self.get_viewable_submissions(self.request.user, queryset)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """獲取提交詳情 (NOJ 兼容版本)"""
+        try:
+            # 先嘗試找到提交對象（不考慮權限過濾）
+            submission_id = kwargs.get('id')
+            try:
+                submission = Submission.objects.select_related('user').get(id=submission_id)
+            except Submission.DoesNotExist:
+                return Response("can not find submission", status=status.HTTP_404_NOT_FOUND)
+            
+            # 再檢查查看權限
+            if not self.check_submission_view_permission(request.user, submission):
+                return Response("no permission", status=status.HTTP_403_FORBIDDEN)
+            
+            serializer = self.get_serializer(submission)
+            
+            # NOJ 格式響應：添加 message 字段
+            response_data = serializer.data.copy()
+            response_data['message'] = 'here you are, bro'
+            
+            return Response(response_data)
+        
+        except Exception as e:
+            return Response("can not find submission", status=status.HTTP_404_NOT_FOUND)
+    
+    def put(self, request, *args, **kwargs):
+        """上傳程式碼 (NOJ 兼容版本)"""
+        try:
+            # 先嘗試找到提交對象（不考慮用戶過濾）
+            submission_id = kwargs.get('id')
+            try:
+                submission = Submission.objects.get(id=submission_id)
+            except Submission.DoesNotExist:
+                return Response("can not find the source file", status=status.HTTP_400_BAD_REQUEST)
+            
+            # NOJ 權限檢查
+            if submission.user != request.user:
+                return Response("user not equal!", status=status.HTTP_403_FORBIDDEN)
+            
+            # 檢查是否已經判題完成
+            if submission.is_judged:
+                return Response(f"{submission.id} has finished judgement.", status=status.HTTP_403_FORBIDDEN)
+            
+            # 檢查是否已經上傳過程式碼
+            if submission.source_code and submission.source_code.strip():
+                return Response(f"{submission.id} has been uploaded source file!", status=status.HTTP_403_FORBIDDEN)
+            
+            # 檢查是否有程式碼內容
+            source_code = request.data.get('source_code', '') if hasattr(request.data, 'get') else ''
+            if isinstance(request.data, dict):
+                source_code = request.data.get('source_code', '')
+            elif hasattr(request, 'FILES') and 'code' in request.FILES:
+                # 支援檔案上傳 (NOJ 原格式)
+                code_file = request.FILES['code']
+                try:
+                    source_code = code_file.read().decode('utf-8')
+                except UnicodeDecodeError:
+                    return Response("can not find the source file", status=status.HTTP_400_BAD_REQUEST)
+            
+            if not source_code or not source_code.strip():
+                return Response("empty file", status=status.HTTP_400_BAD_REQUEST)
+            
+            # 使用序列化器處理數據
+            serializer = self.get_serializer(submission, data={'source_code': source_code})
+            if not serializer.is_valid():
+                return Response("can not find the source file", status=status.HTTP_400_BAD_REQUEST)
+            
+            updated_submission = serializer.save()
+            
+            # NOJ 格式響應 - 對程式題回應判題開始
+            return Response(
+                f"{updated_submission.id} send to judgement.",
+                status=status.HTTP_200_OK
+            )
+        
+        except Submission.DoesNotExist:
+            return Response("can not find the source file", status=status.HTTP_400_BAD_REQUEST)
+        
+        except PermissionDenied:
+            return Response("user not equal!", status=status.HTTP_403_FORBIDDEN)
+        
+        except Exception as e:
+            return Response("can not find the source file", status=status.HTTP_400_BAD_REQUEST)
+
+
+# 保留原來的個別 view 類以便需要時使用
+class SubmissionListView(BasePermissionMixin, generics.ListAPIView):
+    """GET /submission/ - 獲取提交列表"""
+    
+    serializer_class = SubmissionListSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = Submission.objects.select_related('user').order_by('-created_at')
+        return self.get_viewable_submissions(self.request.user, queryset)
+    
+    def list(self, request, *args, **kwargs):
+        """獲取提交列表 (NOJ 兼容版本)"""
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # 支援分頁參數
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            paginated_response = self.get_paginated_response(serializer.data)
+            # NOJ 格式：添加標準消息
+            paginated_response.data['message'] = "here you are, bro"
+            return paginated_response
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'message': 'here you are, bro',
+            'results': serializer.data,
+            'count': queryset.count()
+        })
+
+
+class SubmissionDetailView(BasePermissionMixin, generics.RetrieveAPIView):
+    """GET /submission/{id} - 獲取提交詳情"""
+    
+    serializer_class = SubmissionDetailSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'id'
+    
+    def get_queryset(self):
+        queryset = Submission.objects.select_related('user')
+        return self.get_viewable_submissions(self.request.user, queryset)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """獲取提交詳情 (NOJ 兼容版本)"""
+        try:
+            submission = self.get_object()
+            
+            # 檢查查看權限
+            if not self.check_submission_view_permission(request.user, submission):
+                return Response("no permission", status=status.HTTP_403_FORBIDDEN)
+            
+            serializer = self.get_serializer(submission)
+            response_data = serializer.data
+            response_data['message'] = 'here you are, bro'
+            return Response(response_data)
+        
+        except Submission.DoesNotExist:
+            return Response("can not find submission", status=status.HTTP_404_NOT_FOUND)
+
+
+class SubmissionCodeView(BasePermissionMixin, generics.RetrieveAPIView):
+    """GET /submission/{id}/code - 獲取提交程式碼"""
+    
+    serializer_class = SubmissionCodeSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'id'
+    
+    def get_queryset(self):
+        queryset = Submission.objects.select_related('user')
+        return self.get_viewable_submissions(self.request.user, queryset)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """獲取提交程式碼 (NOJ 兼容版本)"""
+        try:
+            submission = self.get_object()
+            
+            # 檢查查看權限
+            if not self.check_submission_view_permission(request.user, submission):
+                return Response("no permission", status=status.HTTP_403_FORBIDDEN)
+            
+            # 檢查是否有程式碼
+            if not submission.source_code:
+                return Response("can not find the source file", status=status.HTTP_404_NOT_FOUND)
+            
+            serializer = self.get_serializer(submission)
+            response_data = serializer.data
+            response_data['message'] = 'here you are, bro'
+            return Response(response_data)
+        
+        except Submission.DoesNotExist:
+            return Response("can not find submission", status=status.HTTP_404_NOT_FOUND)
+
+
+class SubmissionStdoutView(BasePermissionMixin, generics.RetrieveAPIView):
+    """GET /submission/{id}/stdout - 獲取提交標準輸出"""
+    
+    serializer_class = SubmissionStdoutSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'id'
+    
+    def get_queryset(self):
+        queryset = Submission.objects.select_related('user').prefetch_related('results')
+        return self.get_viewable_submissions(self.request.user, queryset)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """獲取提交標準輸出 (NOJ 兼容版本)"""
+        try:
+            submission = self.get_object()
+            
+            # 檢查查看權限
+            if not self.check_submission_view_permission(request.user, submission):
+                return Response("no permission", status=status.HTTP_403_FORBIDDEN)
+            
+            serializer = self.get_serializer(submission)
+            response_data = serializer.data
+            response_data['message'] = 'here you are, bro'
+            return Response(response_data)
+        
+        except Submission.DoesNotExist:
+            return Response("can not find submission", status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def submission_rejudge(request, id):
+    """GET /submission/{id}/rejudge - 重新判題"""
+    
+    try:
+        try:
+            submission = Submission.objects.get(id=id)
+        except Submission.DoesNotExist:
+            return Response("can not find submission", status=status.HTTP_404_NOT_FOUND)
+        
+        # NOJ 權限檢查：只有老師和 TA 可以重新判題
+        mixin = BasePermissionMixin()
+        
+        try:
+            # 檢查是否為該問題所屬課程的老師或 TA
+            mixin.check_teacher_permission(request.user, submission.problem_id)
+        except (PermissionDenied, NotFound):
+            # 如果不是老師/TA，檢查是否為 staff
+            if not request.user.is_staff:
+                return Response("no permission", status=status.HTTP_403_FORBIDDEN)
+        
+        # 檢查提交狀態 - NOJ 格式
+        if submission.status == '-2':
+            return Response("can not find the source file", status=status.HTTP_400_BAD_REQUEST)
+        
+        # 重設判題狀態
+        submission.status = '-1'  # Pending
+        submission.score = 0
+        submission.execution_time = -1
+        submission.memory_usage = -1
+        submission.judged_at = None
+        submission.save()
+        
+        # 清除舊的判題結果
+        SubmissionResult.objects.filter(submission=submission).delete()
+        
+        # TODO: 發送到 SandBox 重新判題
+        # send_to_sandbox(submission)
+        
+        # NOJ 格式響應
+        return Response(f"{submission.id} rejudge successfully.", status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response("Some error occurred, please contact the admin", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def ranking_view(request):
+    """GET /ranking - 獲取排行榜"""
+    
+    try:
+        # 實作排行榜邏輯 - 參照 NOJ 舊有格式
+        # 遍歷系統中所有用戶並返回統計資料，不進行排序（由前端處理）
+        
+        from django.db.models import Count, Q
+        from user.models import User  # 使用自定義的 User 模型
+        
+        # 獲取所有用戶的提交統計
+        users = User.objects.all()
+        ranking_data = []
+        
+        for user in users:
+            # 計算該用戶的統計資料
+            user_submissions = Submission.objects.filter(user=user)
+            
+            # AC 的提交數量 (status='0' 表示 Accepted)
+            ac_submissions = user_submissions.filter(status='0')
+            ac_submission_count = ac_submissions.count()
+            
+            # AC 的題目數量 (去重複的 problem_id)
+            ac_problems = ac_submissions.values('problem_id').distinct()
+            ac_problem_count = ac_problems.count()
+            
+            # 總提交數量
+            total_submission_count = user_submissions.count()
+            
+            # 組裝用戶資料（參照 NOJ 格式）
+            user_data = {
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'real_name': getattr(user, 'real_name', user.username),
+                    'email': user.email,
+                    'is_active': user.is_active,
+                    'date_joined': user.date_joined.isoformat() if user.date_joined else None
+                },
+                'ACProblem': ac_problem_count,      # AC 的題目數量
+                'ACSubmission': ac_submission_count, # AC 的提交數量  
+                'Submission': total_submission_count # 總提交數量
+            }
+            
+            ranking_data.append(user_data)
+        
+        # NOJ 格式：返回所有用戶資料，不進行排序（由前端處理）
+        return Response({
+            'message': 'here you are, bro',
+            'ranking': ranking_data
+        })
+    
+    except Exception as e:
+        return Response("Some error occurred, please contact the admin", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
