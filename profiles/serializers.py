@@ -24,7 +24,7 @@ class MeProfileSerializer(serializers.ModelSerializer):
         fields = [
             "real_name",
             "user_name",
-            "role",
+            "identity",
             "email",
             "user_id",
             "student_id",
@@ -43,7 +43,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = (
             "user_name",
-            "role",
+            "identity",
             "email",         
             "user_id",
             "introduction",

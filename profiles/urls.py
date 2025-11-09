@@ -4,5 +4,5 @@ from .views import MeProfileView, PublicProfileView
 
 urlpatterns = [
     path("", MeProfileView.as_view(), name="profile-me"),
-    path("profile/<str:username>/", PublicProfileView.as_view(), name="profile-public"),
+    path("<str:username>/", PublicProfileView.as_view(), name="profile-public"),
 ]

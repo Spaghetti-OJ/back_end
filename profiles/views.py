@@ -30,7 +30,7 @@ class PublicProfileView(RetrieveAPIView):
     """
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = PublicProfileSerializer
-    lookup_field = "username"
+    lookup_field = "user_name"
     queryset = User.objects.all()
 
     def get_object(self):
