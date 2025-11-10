@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from courses.models import Announcements, Courses
+from courses.models import Announcements, Courses, Course_members
 
 User = get_user_model()
 
@@ -113,6 +113,119 @@ class CourseAnnouncementAPITestCase(APITestCase):
         self.assertEqual(response.data["data"][0]["markdown"], pinned.content)
 
 
+class AnnouncementCreateAPITestCase(APITestCase):
+    def setUp(self):
+        self.teacher = User.objects.create_user(
+            username="create_teacher",
+            email="create_teacher@example.com",
+            password="pass1234",
+            real_name="Create Teacher",
+            identity="teacher",
+        )
+        self.admin = User.objects.create_user(
+            username="create_admin",
+            email="create_admin@example.com",
+            password="pass1234",
+            real_name="Create Admin",
+            identity="admin",
+        )
+        self.ta = User.objects.create_user(
+            username="create_ta",
+            email="create_ta@example.com",
+            password="pass1234",
+            real_name="Create TA",
+            identity="teacher",
+        )
+        self.student = User.objects.create_user(
+            username="create_student",
+            email="create_student@example.com",
+            password="pass1234",
+            real_name="Create Student",
+            identity="student",
+        )
+
+        self.course = Courses.objects.create(name="CreateCourse", teacher_id=self.teacher)
+        Course_members.objects.create(
+            course_id=self.course,
+            user_id=self.ta,
+            role=Course_members.Role.TA,
+        )
+        Course_members.objects.create(
+            course_id=self.course,
+            user_id=self.student,
+            role=Course_members.Role.STUDENT,
+        )
+        self.url = reverse("system_announcements:create")
+
+    def test_requires_authentication(self):
+        response = self.client.post(self.url, {})
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_teacher_can_create_announcement(self):
+        self.client.force_authenticate(self.teacher)
+
+        payload = {
+            "title": "New Announcement",
+            "content": "Important update",
+            "course_id": str(self.course.id),
+            "is_pinned": True,
+        }
+        response = self.client.post(self.url, payload)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("data", response.data)
+        self.assertTrue(
+            Announcements.objects.filter(title="New Announcement", course_id=self.course).exists()
+        )
+
+    def test_ta_can_create_announcement(self):
+        self.client.force_authenticate(self.ta)
+
+        payload = {
+            "title": "TA Update",
+            "content": "TA note",
+            "course_id": str(self.course.id),
+        }
+        response = self.client.post(self.url, payload)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        ta_announcement = Announcements.objects.get(title="TA Update")
+        self.assertEqual(response.data["data"]["id"], str(ta_announcement.id))
+
+    def test_student_cannot_create_announcement(self):
+        self.client.force_authenticate(self.student)
+
+        payload = {
+            "title": "Student Update",
+            "content": "Student note",
+            "course_id": str(self.course.id),
+        }
+        response = self.client.post(self.url, payload)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "Permission denied.")
+
+    def test_admin_can_create_even_without_membership(self):
+        self.client.force_authenticate(self.admin)
+
+        payload = {
+            "title": "Admin Announcement",
+            "content": "Admin note",
+            "course_id": str(self.course.id),
+        }
+        response = self.client.post(self.url, payload)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_invalid_payload_returns_400(self):
+        self.client.force_authenticate(self.teacher)
+
+        payload = {"course_id": str(self.course.id)}
+        response = self.client.post(self.url, payload)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["message"], "Validation error.")
 class CourseAnnouncementDetailAPITestCase(APITestCase):
     def setUp(self):
         self.teacher = User.objects.create_user(

@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from courses.models import Announcements
+from courses.models import Announcements, Courses
 
 User = get_user_model()
 
@@ -60,3 +60,12 @@ class SystemAnnouncementSerializer(serializers.ModelSerializer):
     def get_updater(self, obj: Announcements):
         # Announcements model沒有獨立的 updater 欄位，因此回傳 creator 作為 updater
         return self._user_payload(obj.creator_id)
+
+
+class AnnouncementCreateSerializer(serializers.ModelSerializer):
+    course_id = serializers.PrimaryKeyRelatedField(queryset=Courses.objects.all())
+
+    class Meta:
+        model = Announcements
+        fields = ("title", "content", "course_id", "is_pinned")
+        extra_kwargs = {"is_pinned": {"required": False}}
