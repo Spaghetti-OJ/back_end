@@ -1,3 +1,5 @@
+import uuid
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
@@ -10,30 +12,36 @@ User = get_user_model()
 
 class CourseAPITestCase(APITestCase):
     def setUp(self):
+        from uuid import uuid4
+
+        unique = uuid4().hex[:6]
+        self.client.defaults["HTTP_HOST"] = "127.0.0.1"
+        Course_members.objects.all().delete()
+        Courses.objects.all().delete()
         self.teacher = User.objects.create_user(
-            username="teacher_one",
-            email="teacher@example.com",
+            username=f"teacher_one_{unique}",
+            email=f"teacher_{unique}@example.com",
             password="pass1234",
             real_name="Teacher One",
             identity="teacher",
         )
         self.another_teacher = User.objects.create_user(
-            username="teacher_two",
-            email="teacher2@example.com",
+            username=f"teacher_two_{unique}",
+            email=f"teacher2_{unique}@example.com",
             password="pass1234",
             real_name="Teacher Two",
             identity="teacher",
         )
         self.admin = User.objects.create_user(
-            username="admin_user",
-            email="admin@example.com",
+            username=f"admin_user_{unique}",
+            email=f"admin_{unique}@example.com",
             password="pass1234",
             real_name="Admin",
             identity="admin",
         )
         self.student = User.objects.create_user(
-            username="student_one",
-            email="student@example.com",
+            username=f"student_one_{unique}",
+            email=f"student_{unique}@example.com",
             password="pass1234",
             real_name="Student One",
             identity="student",
@@ -155,7 +163,7 @@ class CourseAPITestCase(APITestCase):
         course = self._create_course(name="Algorithms2024", teacher=self.teacher)
         self.client.force_authenticate(user=self.teacher)
         payload = {
-            "course": "Algorithms2024",
+            "course_id": str(course.id),
             "new_course": "Algorithms2025",
             "teacher": self.another_teacher.username,
         }
@@ -172,7 +180,7 @@ class CourseAPITestCase(APITestCase):
         course = self._create_course(name="DataStructures", teacher=self.teacher)
         self.client.force_authenticate(user=self.admin)
         payload = {
-            "course": "DataStructures",
+            "course_id": str(course.id),
             "new_course": "AdvancedDS",
             "teacher": self.another_teacher.username,
         }
@@ -185,10 +193,10 @@ class CourseAPITestCase(APITestCase):
         self.assertEqual(course.teacher_id, self.another_teacher)
 
     def test_teacher_cannot_update_course_they_do_not_own(self):
-        self._create_course(name="Physics101", teacher=self.another_teacher)
+        course = self._create_course(name="Physics101", teacher=self.another_teacher)
         self.client.force_authenticate(user=self.teacher)
         payload = {
-            "course": "Physics101",
+            "course_id": str(course.id),
             "new_course": "Physics102",
             "teacher": self.teacher.username,
         }
@@ -199,10 +207,10 @@ class CourseAPITestCase(APITestCase):
         self.assertEqual(response.data["message"], "Forbidden.")
 
     def test_student_cannot_update_course(self):
-        self._create_course(name="Chemistry101", teacher=self.teacher)
+        course = self._create_course(name="Chemistry101", teacher=self.teacher)
         self.client.force_authenticate(user=self.student)
         payload = {
-            "course": "Chemistry101",
+            "course_id": str(course.id),
             "new_course": "Chemistry102",
             "teacher": self.teacher.username,
         }
@@ -213,10 +221,10 @@ class CourseAPITestCase(APITestCase):
         self.assertEqual(response.data["message"], "Forbidden.")
 
     def test_update_invalid_new_name_returns_error(self):
-        self._create_course(name="Math101", teacher=self.teacher)
+        course = self._create_course(name="Math101", teacher=self.teacher)
         self.client.force_authenticate(user=self.teacher)
         payload = {
-            "course": "Math101",
+            "course_id": str(course.id),
             "new_course": "Invalid Name!",
             "teacher": self.teacher.username,
         }
@@ -231,7 +239,7 @@ class CourseAPITestCase(APITestCase):
         course = self._create_course(name="OriginalCourse", teacher=self.teacher)
         self.client.force_authenticate(user=self.teacher)
         payload = {
-            "course": "OriginalCourse",
+            "course_id": str(course.id),
             "new_course": "existingcourse",
             "teacher": self.teacher.username,
         }
@@ -244,10 +252,10 @@ class CourseAPITestCase(APITestCase):
         self.assertEqual(course.name, "OriginalCourse")
 
     def test_update_with_nonexistent_teacher_returns_not_found(self):
-        self._create_course(name="History101", teacher=self.teacher)
+        course = self._create_course(name="History101", teacher=self.teacher)
         self.client.force_authenticate(user=self.teacher)
         payload = {
-            "course": "History101",
+            "course_id": str(course.id),
             "new_course": "History102",
             "teacher": "unknown_teacher",
         }
@@ -260,12 +268,70 @@ class CourseAPITestCase(APITestCase):
     def test_update_with_missing_course_returns_not_found(self):
         self.client.force_authenticate(user=self.teacher)
         payload = {
-            "course": "NonExistingCourse",
+            "course_id": str(uuid.uuid4()),
             "new_course": "AnyCourse",
             "teacher": self.teacher.username,
         }
 
         response = self.client.put(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["message"], "Course not found.")
+
+    def test_teacher_can_delete_own_course(self):
+        course = self._create_course(name="DeleteMe", teacher=self.teacher)
+        self.client.force_authenticate(user=self.teacher)
+
+        response = self.client.delete(
+            self.url, {"course_id": str(course.id)}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["message"], "Success.")
+        self.assertFalse(Courses.objects.filter(pk=course.pk).exists())
+
+    def test_admin_can_delete_course(self):
+        course = self._create_course(name="AdminDelete", teacher=self.teacher)
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.delete(
+            self.url, {"course_id": str(course.id)}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["message"], "Success.")
+        self.assertFalse(Courses.objects.filter(pk=course.pk).exists())
+
+    def test_teacher_cannot_delete_other_course(self):
+        course = self._create_course(name="NotYours", teacher=self.another_teacher)
+        self.client.force_authenticate(user=self.teacher)
+
+        response = self.client.delete(
+            self.url, {"course_id": str(course.id)}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "Forbidden.")
+        self.assertTrue(Courses.objects.filter(pk=course.pk).exists())
+
+    def test_student_cannot_delete_course(self):
+        course = self._create_course(name="StudentNope", teacher=self.teacher)
+        self.client.force_authenticate(user=self.student)
+
+        response = self.client.delete(
+            self.url, {"course_id": str(course.id)}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "Forbidden.")
+        self.assertTrue(Courses.objects.filter(pk=course.pk).exists())
+
+    def test_delete_missing_course_returns_not_found(self):
+        self.client.force_authenticate(user=self.teacher)
+
+        response = self.client.delete(
+            self.url, {"course_id": str(uuid.uuid4())}, format="json"
+        )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.data["message"], "Course not found.")

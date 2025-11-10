@@ -336,6 +336,188 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 
 ---
 
+## GET /profile/
+
+**說明**：
+取得目前登入使用者的個人資料。
+
+**權限需求**：
+
+* 需要登入（JWT Access Token）
+
+**Request Header**：
+
+| Header        | Type   | Required | 說明                          |
+| ------------- | ------ | -------- | --------------------------- |
+| Authorization | string | ✅        | 格式為 `Bearer <ACCESS_TOKEN>` |
+| Content-Type  | string | ✅        | `application/json`          |
+
+**Request Body**：
+無
+
+---
+
+### Response
+
+**成功範例 (200 OK)**
+
+```json
+{
+  "real_name": "陳天天",
+  "user_name": "momo",
+  "role": "Student",
+  "email": "412470100S@gapps.ntnu.edu.tw",
+  "user_id": "omuba",
+  "student_id": "41247057S",
+  "introduction": "哈囉我是資工116"
+}
+```
+
+**欄位說明**：
+
+| 欄位           | 型別     | 說明                               |
+| ------------ | ------ | -------------------------------- |
+| real_name    | string | 使用者真實姓名                          |
+| user_name    | string | 使用者帳號（username）                  |
+| role         | string | 使用者身份（Student / Teacher / Admin） |
+| email        | string | 使用者電子郵件                          |
+| user_id      | string | 使用者的 ID             |
+| student_id   | string | 學號（若有）                           |
+| introduction | string | 個人簡介                             |
+
+---
+
+### 錯誤回應
+
+| 狀態碼              | 說明            | 範例                                                                   |
+| ---------------- | ------------- | -------------------------------------------------------------------- |
+| 401 Unauthorized | Token 遺失或無效   | `{ "detail": "Authentication credentials were not provided." }`      |
+| 403 Forbidden    | 使用者權限不足（若未登入） | `{ "detail": "You do not have permission to perform this action." }` |
+
+---
+
+### 測試指令
+
+**1️⃣ 登入取得 Token**
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/session/ \
+  -H "Content-Type: application/json" \
+  -d '{"username":"momo","password":"abc12345"}'
+```
+
+**2️⃣ 使用 Access Token 呼叫 /profile/**
+
+```bash
+curl -X GET http://127.0.0.1:8000/profile/ \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json"
+```
+
+---
+
+## GET /profile/{username}/
+
+**說明**
+查看**其他使用者**的公開個人資料。
+
+> 與 `GET /profile/`（查看自己的完整資料）不同，本端點**不會**回傳 `real_name`、`student_id` 等私密欄位。
+
+---
+
+### 權限需求
+
+* 需要登入（JWT Access Token）
+
+---
+
+### Request
+
+#### Method & URL
+
+```
+GET /profile/{username}/
+```
+
+#### Path Parameters
+
+| 參數名      | 類型     | 必填 | 說明              |
+| -------- | ------ | -- | --------------- |
+| username | string | ✅  | 目標使用者帳號（大小寫不敏感） |
+
+#### Headers
+
+| Header        | 類型     | 必填 | 說明                      |
+| ------------- | ------ | -- | ----------------------- |
+| Authorization | string | ✅  | `Bearer <ACCESS_TOKEN>` |
+| Content-Type  | string | ✅  | `application/json`      |
+
+#### Request Body
+
+* 無
+
+---
+
+#### 成功回應（200 OK）
+
+```json
+{
+  "user_name": "momo",
+  "role": "Student",
+  "email": "momo@example.com",
+  "user_id": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
+  "introduction": "哈囉我是資工116"
+}
+```
+
+#### 欄位說明
+
+| 欄位           | 類型     | 說明                                        |
+| ------------ | ------ | ----------------------------------------- |
+| user_name    | string | 使用者帳號（username）                           |
+| role         | string | 使用者身份（例如：`Student` / `Teacher` / `Admin`） |
+| email        | string | 使用者電子郵件（依隱私策略可能顯示或遮蔽）                     |
+| user_id      | string | 使用者的公開 ID（預設為使用者主鍵；若系統有自訂公開 ID 則為該值）      |
+| introduction | string | 個人簡介（來源：UserProfile.bio；若未設定可能為空字串）       |
+
+> 注意：**不包含** `real_name`、`student_id`。
+
+---
+
+### 失敗回應
+
+#### 401 Unauthorized（未登入或 Token 失效）
+
+```json
+{
+  "detail": "Authentication credentials were not provided or are invalid."
+}
+```
+
+#### 404 Not Found（找不到使用者）
+
+```json
+{
+  "detail": "User not found."
+}
+```
+
+> 其他錯誤（5xx）多半為伺服器端異常，請檢查日誌。
+
+---
+
+### 範例
+
+#### cURL
+
+```bash
+curl -i -X GET "http://127.0.0.1:8000/profile/momo/" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json"
+```
+
+---
+
 ## 附錄：常見錯誤總表
 
 | 錯誤情境                | HTTP 狀態 | 回應訊息                                                                          |

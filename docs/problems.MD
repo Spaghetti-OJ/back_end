@@ -45,6 +45,12 @@
 ]
 ```
 
+**cURL 測試**：
+```bash
+curl "http://127.0.0.1:8000/problem/" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
 ---
 
 ## 查看題目詳情（學生視角）
@@ -66,6 +72,12 @@
 }
 ```
 未登入時 `submit_count`/`high_score` 會為 `null`。
+
+**cURL 測試**：
+```bash
+curl "http://127.0.0.1:8000/problem/$PROBLEM_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
 
 可能錯誤：
 - 401 未登入（針對非公開題目）
@@ -156,10 +168,65 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/stats" \
 ## 建立題目（管理）
 
 - 路徑：`POST /problem/manage`
-- 權限：教師或管理員
+- 權限：教師 / 管理員 / 該課程的 TA（課程成員角色為 `ta`）
 - 說明：建立一個新題目；必須指定 `course_id`。可附上 `tags`（id 陣列）。
 
-請求（JSON）：
+### 欄位規格一覽（建立 / 更新通用）
+
+| 欄位 | 型別 | 必填 | 預設值 | 說明 |
+| ---- | ---- | ---- | ------ | ---- |
+| title | string | ✅ | (無) | 題目標題，長度 ≤ 200 |
+| description | string | ✅ | (無) | 題目敘述主體內容 |
+| course_id | UUID | ✅ | (無) | 所屬課程，必須為存在的課程 UUID |
+| difficulty | string | ❌ | `medium` | `easy|medium|hard` |
+| is_public | string | ❌ | `hidden` | 可見性：`public|course|hidden` |
+| max_score | int | ❌ | `100` | 滿分（評測相關，可保留預設） |
+| total_quota | int | ❌ | `-1` | 提交上限；`-1` 代表不限次數 |
+| input_description | string/null | ❌ | null | 輸入格式說明 |
+| output_description | string/null | ❌ | null | 輸出格式說明 |
+| sample_input | string/null | ❌ | null | 樣例輸入 |
+| sample_output | string/null | ❌ | null | 樣例輸出 |
+| hint | string/null | ❌ | null | 提示文字 |
+| subtask_description | string/null | ❌ | null | 子任務敘述（若有 subtasks） |
+| supported_languages | array | ❌ | `["c","cpp","java","python"]` | 可提交語言（陣列字串） |
+| tags | int[] | ❌ | (無) | 標籤 id 陣列；嚴格驗證全部必須存在 |
+
+備註：
+1. 未提供可選欄位則使用預設或留空（null）。
+2. `tags` 為寫入用；回傳時使用 `tags` 物件陣列（含 id/name/usage_count）。
+3. 不支援在建立時直接寫 `like_count`、`view_count` 等統計欄位。
+
+### 最小可建立 Payload（僅必填）
+```json
+{
+  "title": "Two Sum",
+  "description": "Find two numbers.",
+  "course_id": "<uuid>"
+}
+```
+
+### 完整範例 Payload（含全部常用欄位）
+```json
+{
+  "title": "Two Sum",
+  "description": "Find two numbers that add to target.",
+  "course_id": "<uuid>",
+  "difficulty": "easy",
+  "is_public": "public",
+  "max_score": 100,
+  "total_quota": -1,
+  "input_description": "n followed by array and target",
+  "output_description": "indices i j",
+  "sample_input": "5\n2 7 11 15 9\n9",
+  "sample_output": "0 1",
+  "hint": "使用雜湊表",
+  "subtask_description": "Subtask1: n<=1000; Subtask2: n<=1e5",
+  "supported_languages": ["c","cpp","python"],
+  "tags": [1,2]
+}
+```
+
+請求（JSON）（一般常見簡化版）：
 ```json
 {
   "title": "Two Sum",
@@ -179,7 +246,58 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/stats" \
 錯誤情況：
 - 422 驗證錯誤（必填欄位缺失等）
 - 400 `tags` 含有不存在的 id（嚴格驗證）
-- 403 權限不足
+- 403 權限不足（非 admin/teacher 且不是該課程 TA）
+
+### cURL 測試
+
+> 最小建立（僅必填）
+```bash
+curl -X POST http://127.0.0.1:8000/problem/manage \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Two Sum",
+    "description": "Find two numbers.",
+    "course_id": "'$COURSE_ID'"
+  }'
+```
+
+> 完整建立（含 tags 與所有可選欄位）
+```bash
+curl -X POST http://127.0.0.1:8000/problem/manage \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Two Sum",
+    "description": "Find two numbers that add to target.",
+    "course_id": "'$COURSE_ID'",
+    "difficulty": "easy",
+    "is_public": "public",
+    "max_score": 100,
+    "total_quota": -1,
+    "input_description": "n followed by array and target",
+    "output_description": "indices i j",
+    "sample_input": "5\n2 7 11 15 9\n9",
+    "sample_output": "0 1",
+    "hint": "使用雜湊表",
+    "subtask_description": "Subtasks explained here",
+    "supported_languages": ["c","cpp","python"],
+    "tags": [1,2]
+  }'
+```
+
+> 建立（無效 tag，預期 400）
+```bash
+curl -X POST http://127.0.0.1:8000/problem/manage \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Bad Tags",
+    "description": "Test invalid tags.",
+    "course_id": "'$COURSE_ID'",
+    "tags": [99999]
+  }'
+```
 
 ---
 
@@ -196,7 +314,7 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/stats" \
 ## 編輯題目（管理）
 
 - 路徑：`PUT /problem/manage/<problem_id>`
-- 權限：教師或管理員（或題目擁有者）
+- 權限：教師 / 管理員 / 題目擁有者 / 該課程 TA（課程成員角色為 `ta`）
 - 說明：可更新標題、描述、可見性、課程、標籤等。若提供 `tags`，將以提供的 id 陣列覆蓋既有關聯，且會做嚴格驗證。
 
 請求（JSON）：
@@ -219,6 +337,41 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/stats" \
 - 403 權限不足
 - 404 題目不存在
 
+### cURL 測試
+
+> 更新部分欄位（改可見性 + 覆蓋 tags）
+```bash
+curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "is_public": "course",
+    "tags": [2,3]
+  }'
+```
+
+> 更新補充描述欄位
+```bash
+curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "hint": "嘗試使用雙指針",
+    "sample_input": "4\n1 2 3 4\n5",
+    "sample_output": "1 3"
+  }'
+```
+
+> 無效 tag 更新（預期 400）
+```bash
+curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tags": [2,99999]
+  }'
+```
+
 ---
 
 ## 刪除題目（管理）
@@ -227,48 +380,19 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/stats" \
 - 權限：教師或管理員（或題目擁有者）
 - 成功回應：`204 No Content`
 
+> 範例curl
+```bash
+curl -X DELETE http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
+  -H "Authorization: Bearer $TOKEN"
+```
+
 ---
 
-## 範例 cURL
 
-> 取得列表
-```bash
-curl http://127.0.0.1:8000/problem/
-```
 
-> 取得詳情
-```bash
-curl http://127.0.0.1:8000/problem/1
-```
 
-> 建立題目（需 Bearer Token）
-```bash
-curl -X POST http://127.0.0.1:8000/problem/manage \
-  -H "Authorization: Bearer <access>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Two Sum",
-    "description": "...",
-    "difficulty": "easy",
-    "is_public": "public",
-    "course_id": "<uuid>",
-    "tags": [1,2]
-  }'
-```
 
-> 編輯題目
-```bash
-curl -X PUT http://127.0.0.1:8000/problem/manage/1 \
-  -H "Authorization: Bearer <access>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "is_public": "course",
-    "tags": [2,3]
-  }'
-```
 
-> 刪除題目
-```bash
-curl -X DELETE http://127.0.0.1:8000/problem/manage/1 \
-  -H "Authorization: Bearer <access>"
-```
+
+
+
