@@ -69,3 +69,22 @@ class AnnouncementCreateSerializer(serializers.ModelSerializer):
         model = Announcements
         fields = ("title", "content", "course_id", "is_pinned")
         extra_kwargs = {"is_pinned": {"required": False}}
+
+
+class AnnouncementUpdateSerializer(serializers.Serializer):
+    annId = serializers.IntegerField()
+    title = serializers.CharField(max_length=200)
+    context = serializers.CharField(required=False, write_only=True)
+    content = serializers.CharField(required=False, write_only=True)
+    is_pinned = serializers.BooleanField(required=False)
+
+    def validate(self, attrs):
+        text = attrs.get("context") or attrs.get("content")
+        if text is None:
+            raise serializers.ValidationError(
+                {"context": ["This field is required."]}
+            )
+
+        attrs["content"] = text
+        attrs.pop("context", None)
+        return attrs
