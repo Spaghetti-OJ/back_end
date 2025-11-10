@@ -18,6 +18,8 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
 from submissions import views as submission_views
 
 urlpatterns = [
@@ -25,6 +27,7 @@ urlpatterns = [
     path('course/', include(('courses.urls', 'courses'), namespace='courses')),
     path('ann/', include(('announcements.urls'), namespace='announcements')),
     path('user/', include('user.urls')), 
+    path('problem/', include('problems.urls')),
     path('auth/', include('auths.urls')),
     path('editorials/', include('submissions.editorial_urls')),
     path('submission/', include('submissions.urls')),
