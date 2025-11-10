@@ -109,6 +109,57 @@ curl http://127.0.0.1:8000/course/4b1c2a3d-8e1f-45c3-9c62-ff33b4aa6f12/ \
 
 ---
 
+## 課程成員調整 API
+
+**路徑**：`PUT /course/<course_id>/`
+
+**說明**：同步指定課程的助教名單，並可移除特定學生。僅課程教師本人或系統管理員可執行；教師只能操作自己的課程。
+
+**路徑/查詢參數**
+
+| 參數名      | 來源 | 型別 | 必填 | 說明                     |
+| ----------- | ---- | ---- | ---- | ------------------------ |
+| `course_id` | URL  | UUID | ✅   | 課程 ID                  |
+| `student`   | URL  | UUID | ⭕   | 要移除的學生 ID（可選） |
+
+**請求格式 (JSON)**
+
+| 欄位名 | 型別 | 必填 | 說明                                 |
+| ------ | ---- | ---- | ------------------------------------ |
+| `TAs`  | list | ⭕   | 要保留的助教帳號列表；缺省表示不異動 |
+
+> 備註：`TAs` 給空陣列 `[]` 代表移除所有助教；若提供 `student` 查詢參數，會刪除該學生在課程中的成員紀錄。
+
+**成功回應 (200 OK)**
+
+```json
+{ "message": "Success." }
+```
+
+**失敗回應**
+
+| 狀況                           | HTTP | 範例訊息                                 |
+| ------------------------------ | ---- | ---------------------------------------- |
+| 未登入                         | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 權限不足（非教師/管理員）      | 403  | `{ "message": "Forbidden." }`            |
+| 非授課教師操作他人課程         | 403  | `{ "message": "You are not in this course." }` |
+| 課程不存在                     | 404  | `{ "message": "Course not found." }`     |
+| 指定助教帳號不存在             | 404  | `{ "message": "User: <username> not found." }` |
+| 指定學生不存在或不在該課程內   | 404  | `{ "message": "Student not found." }`    |
+
+**cURL 測試**
+
+```bash
+curl -X PUT "http://127.0.0.1:8000/course/<course_id>/?student=<student_id>" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer <access>" \
+    -d '{
+    "TAs": ["ta_user_1", "ta_user_2"]
+    }'
+```
+
+---
+
 ## 課程建立 API
 
 **路徑**：`POST /course/`
