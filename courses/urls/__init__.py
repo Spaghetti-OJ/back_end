@@ -8,22 +8,18 @@ from . import grade as grade_urls
 app_name = "courses"
 
 urlpatterns = [
-    path(
-        "",
-        include((course_urls.urlpatterns, "courses"), namespace="courses"),
-    ),
-    path(
-        "<course_id>/grade/",
-        include((grade_urls.urlpatterns, "grade"), namespace="grade"),
-    ),
-    path(
-        "summary/",
-        include((summary_urls.urlpatterns, "summary"), namespace="summary"),
-        "",
-        include(
-            (detail_urls.urlpatterns, "course_courseid"),
-            namespace="course_courseid",
-        ),
-    ),
-    path("", include("courses.urls.homework")),
+    # /course/...
+    path("", include(course_urls)),
+
+    # /course/summary/...
+    path("summary/", include(summary_urls)),
+
+    # /course/<course_id>/grade/...
+    path("<course_id>/grade/", include(grade_urls)),
+
+    # /course/<course_id>/...（
+    path("<course_id>/", include(detail_urls)),
+
+    # /course/<course_id>/homework/...
+    path("<course_id>/homework/", include("courses.urls.homework")),
 ]
