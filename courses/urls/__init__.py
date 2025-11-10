@@ -19,6 +19,8 @@ urlpatterns = [
     path(
         "summary/",
         include((summary_urls.urlpatterns, "summary"), namespace="summary"),
+    ),
+    path(
         "",
         include(
             (detail_urls.urlpatterns, "course_courseid"),
