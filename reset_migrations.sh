@@ -110,9 +110,12 @@ find . \( -path "./.venv" -o -path "./venv" -o -path "./.git" \) -prune -o -type
   done
 
 CLEAR_DB=false
-if [ "${1-}" = "--clear-db" ] || [ "${CLEAR_DB-}" = "true" ]; then
-  CLEAR_DB=true
-fi
+for a in "${@-}"; do
+  if [ "$a" = "--clear-db" ]; then
+    CLEAR_DB=true
+    break
+  fi
+done
 
 if [ "$CLEAR_DB" = true ]; then
   echo "--clear-db 參數已啟用：將嘗試清空資料庫內的 django_migrations 記錄（僅支援 sqlite3 by default）"
