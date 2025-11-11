@@ -19,11 +19,10 @@ urlpatterns = [
     path(
         "summary/",
         include((summary_urls.urlpatterns, "summary"), namespace="summary"),
-        "",
-        include(
-            (detail_urls.urlpatterns, "course_courseid"),
-            namespace="course_courseid",
-        ),
+    ),
+    path(
+        "<course_id>/",
+        include((detail_urls.urlpatterns, "course_courseid"), namespace="course_courseid"),
     ),
     path("", include("courses.urls.homework")),
 ]
