@@ -119,7 +119,7 @@ class AnnouncementCreateView(generics.GenericAPIView):
             announcement.is_pinned = serializer.validated_data["is_pinned"]
         announcement.save()
 
-        return Response({"message": "Updated"})
+        return Response({"message": "Updated"}, status=status.HTTP_200_OK)
 class CourseAnnouncementRetrieveView(CourseAnnouncementBaseView):
     """
     GET /ann/<course_id>/<ann_id> - 取得單一公告內容。
