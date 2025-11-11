@@ -16,6 +16,8 @@ class CourseListCreateView(generics.GenericAPIView):
     管理課程列表的讀寫端點：
      - GET /course/ 取得授課或加入的課程列表
      - POST /course/ 建立課程（教師/管理員）
+     - PUT /course/ 編輯課程（擁有者/管理員）
+     - DELETE /course/ 刪除課程（擁有者/管理員）
     """
 
     permission_classes = [permissions.IsAuthenticated]
@@ -70,14 +72,14 @@ class CourseListCreateView(generics.GenericAPIView):
         if getattr(user, "identity", None) not in ("teacher", "admin"):
             return Response({"message": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
 
-        course_name = request.data.get("course", "")
-        course_name = course_name.strip() if isinstance(course_name, str) else ""
-        if not course_name:
+        course_id = request.data.get("course_id", "")
+        course_id = course_id.strip() if isinstance(course_id, str) else ""
+        if not course_id:
             return Response({"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            course_obj = Courses.objects.get(name__iexact=course_name)
-        except Courses.DoesNotExist:
+            course_obj = Courses.objects.get(pk=course_id)
+        except (Courses.DoesNotExist, ValueError):
             return Response({"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND)
 
         if user.identity != "admin" and course_obj.teacher_id != user:
@@ -100,6 +102,27 @@ class CourseListCreateView(generics.GenericAPIView):
             return Response({"message": message}, status=status_code)
 
         serializer.save()
+        return Response({"message": "Success."}, status=status.HTTP_200_OK)
+
+    def delete(self, request, *args, **kwargs):
+        user = request.user
+        if getattr(user, "identity", None) not in ("teacher", "admin"):
+            return Response({"message": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+
+        course_id = request.data.get("course_id", "")
+        course_id = course_id.strip() if isinstance(course_id, str) else ""
+        if not course_id:
+            return Response({"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            course_obj = Courses.objects.get(pk=course_id)
+        except (Courses.DoesNotExist, ValueError):
+            return Response({"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.identity != "admin" and course_obj.teacher_id != user:
+            return Response({"message": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+
+        course_obj.delete()
         return Response({"message": "Success."}, status=status.HTTP_200_OK)
 
     @classmethod

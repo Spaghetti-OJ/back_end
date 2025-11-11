@@ -35,7 +35,19 @@ class Problems(models.Model):
     title = models.CharField(max_length=200)
     difficulty = models.CharField(max_length=10, choices=Difficulty.choices, default=Difficulty.MEDIUM)
     max_score = models.IntegerField(default=100)
-    is_public = models.BooleanField(default=False)
+    class Visibility(models.TextChoices):
+        HIDDEN = 'hidden', 'Hidden'
+        COURSE = 'course', 'Course only'
+        PUBLIC = 'public', 'Public'
+
+    # Visibility of problem: hidden (only owner/admin), course (course members), public (everyone)
+    # Keep field name `is_public` for backward compatibility, but store tri-state choice value.
+    is_public = models.CharField(
+        max_length=10,
+        choices=Visibility.choices,
+        default=Visibility.HIDDEN,
+        db_index=True,
+    )
     total_submissions = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     accepted_submissions = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     acceptance_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0), MaxValueValidator(100)])
@@ -55,7 +67,7 @@ class Problems(models.Model):
     subtask_description = models.TextField(blank=True, null=True)
     supported_languages = models.JSONField(default=default_supported_langs)
     creator_id = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_problems')
-    course_id = models.ForeignKey('courses.Courses', on_delete=models.SET_NULL, null=True, blank=True, related_name='courses')
+    course_id = models.ForeignKey('courses.Courses', on_delete=models.PROTECT, null=False, blank=False, related_name='courses')
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     tags = models.ManyToManyField('Tags', through='Problem_tags', related_name='problems')
