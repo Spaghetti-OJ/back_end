@@ -86,6 +86,85 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID" \
 
 ---
 
+## 取得題目最高分數
+
+- 路徑：`GET /problem/<problem_id>/high-score`
+- 權限：需要登入
+- 說明：回傳當前使用者在該題目的最高分數。若從未提交過則回傳 0。
+
+成功回應（200 OK）：
+```json
+{
+  "score": 85
+}
+```
+
+可能錯誤：
+- 401 未登入
+- 404 題目不存在
+
+**cURL 測試**：
+```bash
+curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/high-score" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## 取得題目統計資訊
+
+- 路徑：`GET /problem/<problem_id>/stats`
+- 權限：需要登入
+- 說明：回傳該題目的統計資料，包含 AC 用戶數、嘗試用戶數、平均分數、標準差、分數分布、狀態統計、top10 執行時間/記憶體使用。
+
+成功回應範例（200 OK）：
+```json
+{
+  "acUserRatio": [5, 20],
+  "triedUserCount": 12,
+  "average": 67.5,
+  "std": 15.2,
+  "scoreDistribution": [
+    {"score": 0, "count": 2},
+    {"score": 50, "count": 3},
+    {"score": 100, "count": 7}
+  ],
+  "statusCount": {
+    "accepted": 7,
+    "wrong_answer": 3,
+    "runtime_error": 2
+  },
+  "top10RunTime": [
+    {"id": "...", "user": "...", "execution_time": 120, "score": 100, "status": "accepted"}
+  ],
+  "top10MemoryUsage": [
+    {"id": "...", "user": "...", "memory_usage": 1024, "score": 100, "status": "accepted"}
+  ]
+}
+```
+
+**欄位說明**：
+- `acUserRatio`: `[AC 用戶數, 總學生數]`，總學生數為該題目所屬課程的學生成員數
+- `triedUserCount`: 曾提交過該題目的不重複用戶數
+- `average`: 所有提交的平均分數
+- `std`: 所有提交分數的標準差
+- `scoreDistribution`: 分數分布陣列，每個元素包含 `score` 和 `count`
+- `statusCount`: 各提交狀態的統計數量（如 accepted, wrong_answer 等）
+- `top10RunTime`: 執行時間最短的前 10 筆提交（只包含 execution_time > 0）
+- `top10MemoryUsage`: 記憶體使用最少的前 10 筆提交（只包含 memory_usage > 0）
+
+可能錯誤：
+- 401 未登入
+- 404 題目不存在
+
+**cURL 測試**：
+```bash
+curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/stats" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
 ## 建立題目（管理）
 
 - 路徑：`POST /problem/manage`
@@ -236,7 +315,7 @@ curl -X POST http://127.0.0.1:8000/problem/manage \
 
 - 路徑：`PUT /problem/manage/<problem_id>`
 - 權限：教師 / 管理員 / 題目擁有者 / 該課程 TA（課程成員角色為 `ta`）
-- 說明：可更新標題、描述、可見性、課程、標籤等。若提供 `tags`，將以提供的 id 陣列覆蓋既有關聯，且會做嚴格驗證。
+- 說明：可更新標題、描述、可見性、課程、標籤等(理論上所有欄位都可以透過這個編輯，欄位可參考上面的建立題目)。若提供 `tags`，將以提供的 id 陣列覆蓋既有關聯，且會做嚴格驗證。
 
 請求（JSON）：
 ```json
