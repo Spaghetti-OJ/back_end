@@ -358,6 +358,44 @@ curl -X POST http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
         "score": 95
     }'
 ```
+
+**路徑**：`DELETE /course/<course_id>/grade/<student>`
+
+**說明**：刪除指定學生的單一成績項目。需登入且必須為該課程的教師、助教或管理員（並為課程成員）。
+
+**請求格式 (JSON)**
+
+| 欄位名 | 型別 | 必填 | 說明 |
+| --- | --- | --- | --- |
+| `title` | string | ✅ | 要刪除的成績項目標題 |
+
+**成功回應 (200 OK)**：
+
+```json
+{ "message": "Success." }
+```
+
+**失敗回應**：
+
+| 狀況 | HTTP | 訊息 |
+| --- | --- | --- |
+| 不在課程內 | 403 | `{ "message": "You are not in this course." }` |
+| 無評分權限 | 403 | `{ "message": "You can only view your score." }` |
+| 課程不存在 | 404 | `{ "message": "Course not found." }` |
+| 學生不在課程 | 404 | `{ "message": "The student is not in the course." }` |
+| 成績不存在 | 404 | `{ "message": "Score not found." }` |
+| 缺少 `title` | 400 | `{ "message": "This field is required." }` |
+
+**cURL 測試**：
+
+```bash
+curl -X DELETE http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
+    -H "Authorization: Bearer <access>" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "title": "Quiz 1"
+    }'
+```
 ## 課程刪除 API
 
 **路徑**：`DELETE /course/`

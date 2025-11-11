@@ -45,3 +45,7 @@ class CourseGradeCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Score cannot be blank.")
             return value
         raise serializers.ValidationError("Score must be a number or letter.")
+
+
+class CourseGradeDeleteSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=200, required=True, allow_blank=False)

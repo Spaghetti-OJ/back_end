@@ -259,6 +259,58 @@ class CourseGradeViewTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.data["message"], "The student is not in the course.")
 
+    def test_teacher_can_delete_grade(self):
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.delete(
+            self._url(self.course, self.student),
+            data={"title": "Quiz 1"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(
+            CourseGrade.objects.filter(
+                course=self.course, student=self.student, title="Quiz 1"
+            ).exists()
+        )
+
+    def test_delete_requires_grading_permission(self):
+        self.client.force_authenticate(self.student)
+
+        response = self.client.delete(
+            self._url(self.course, self.student),
+            data={"title": "Quiz 1"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "You can only view your score.")
+
+    def test_delete_returns_not_found_for_missing_grade(self):
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.delete(
+            self._url(self.course, self.student),
+            data={"title": "Nonexistent"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["message"], "Score not found.")
+
+    def test_delete_missing_title_returns_bad_request(self):
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.delete(
+            self._url(self.course, self.student),
+            data={},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["message"], "This field is required.")
+
     @staticmethod
     def _url(course, student):
         course_id = course.id if hasattr(course, "id") else course
