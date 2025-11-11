@@ -48,4 +48,4 @@ class CourseGradeCreateSerializer(serializers.ModelSerializer):
 
 
 class CourseGradeDeleteSerializer(serializers.Serializer):
-    title = serializers.CharField(max_length=200)
+    title = serializers.CharField(max_length=200, required=True, allow_blank=False)
