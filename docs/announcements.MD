@@ -144,6 +144,47 @@ curl -X PUT http://127.0.0.1:8000/ann/ \
     }'
 ```
 
+## 課程公告刪除 API
+
+**路徑**：`DELETE /ann/`
+
+**說明**：刪除指定公告。需要登入並具備 GRADE 權限（課程老師、課程成員老師 / TA、系統管理員）。
+
+**需要登入**
+
+**Body 參數**
+
+| 欄位    | 型別 | 必填 | 說明         |
+| ------- | ---- | ---- | ------------ |
+| `annId` | int  | ✅   | 要刪除的公告 ID |
+
+**成功回應 (200 OK)**
+
+```json
+{
+  "message": "Deleted"
+}
+```
+
+**錯誤回應**
+
+| 狀況         | HTTP | 範例訊息                              |
+| ------------ | ---- | ------------------------------------- |
+| 公告不存在   | 404  | `{ "message": "Announcement not found." }` |
+| 權限不足     | 403  | `{ "message": "Permission denied." }` |
+| 驗證錯誤     | 400  | `{ "message": "Validation error.", "errors": { ... } }` |
+
+**cURL 測試**
+
+```bash
+curl -X DELETE http://127.0.0.1:8000/ann/ \
+    -H "Authorization: Bearer <access>" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "annId": 1
+    }'
+```
+
 ## 課程公告詳情 API
 
 **路徑**：`GET /ann/<course_id>/<ann_id>`
