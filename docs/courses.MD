@@ -387,7 +387,7 @@ curl -X POST http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
 | 課程不存在 | 404 | `{ "message": "Course not found." }` |
 | 學生不在課程 | 404 | `{ "message": "The student is not in the course." }` |
 | 要修改的成績不存在 | 404 | `{ "message": "Score not found." }` |
-| `new_title` 與他人成績重複 | 400 | `{ "message": "This title is taken." }` |
+| `new_title` 與該學生其他成績項目重複 | 400 | `{ "message": "This title is taken." }` |
 
 **cURL 測試**：
 
