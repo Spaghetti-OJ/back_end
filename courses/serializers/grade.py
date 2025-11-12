@@ -49,3 +49,23 @@ class CourseGradeCreateSerializer(serializers.ModelSerializer):
 
 class CourseGradeDeleteSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=200, required=True, allow_blank=False)
+
+
+class CourseGradeUpdateSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=200, required=True, allow_blank=False)
+    new_title = serializers.CharField(
+        max_length=200,
+        required=False,
+        allow_blank=False,
+    )
+    content = serializers.CharField(required=True, allow_blank=True)
+    score = serializers.JSONField()
+
+    def validate_score(self, value):
+        if isinstance(value, bool):
+            raise serializers.ValidationError("Score must be a number or letter.")
+        if isinstance(value, (int, float, str)):
+            if isinstance(value, str) and not value.strip():
+                raise serializers.ValidationError("Score cannot be blank.")
+            return value
+        raise serializers.ValidationError("Score must be a number or letter.")
