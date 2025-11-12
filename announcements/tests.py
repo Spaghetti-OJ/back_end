@@ -155,7 +155,7 @@ class AnnouncementCreateAPITestCase(APITestCase):
             user_id=self.student,
             role=Course_members.Role.STUDENT,
         )
-        self.url = reverse("system_announcements:create")
+        self.url = reverse("announcements:create")
 
     def test_requires_authentication(self):
         response = self.client.post(self.url, {})
@@ -336,7 +336,7 @@ class AnnouncementUpdateAPITestCase(APITestCase):
             creator_id=self.teacher,
             is_pinned=False,
         )
-        self.url = reverse("system_announcements:create")
+        self.url = reverse("announcements:create")
 
     def _payload(self, **overrides):
         data = {
@@ -404,3 +404,76 @@ class AnnouncementUpdateAPITestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["message"], "Validation error.")
+
+
+class AnnouncementDeleteAPITestCase(APITestCase):
+    def setUp(self):
+        self.teacher = User.objects.create_user(
+            username="delete_teacher",
+            email="delete_teacher@example.com",
+            password="pass1234",
+            real_name="Delete Teacher",
+            identity="teacher",
+        )
+        self.student = User.objects.create_user(
+            username="delete_student",
+            email="delete_student@example.com",
+            password="pass1234",
+            real_name="Delete Student",
+            identity="student",
+        )
+        self.course = Courses.objects.create(name="DeleteCourse", teacher_id=self.teacher)
+        Course_members.objects.create(
+            course_id=self.course,
+            user_id=self.student,
+            role=Course_members.Role.STUDENT,
+        )
+        self.announcement = Announcements.objects.create(
+            title="Delete me",
+            content="Delete content",
+            course_id=self.course,
+            creator_id=self.teacher,
+        )
+        self.url = reverse("announcements:create")
+
+    def _payload(self, **overrides):
+        data = {"annId": self.announcement.id}
+        data.update(overrides)
+        return data
+
+    def test_requires_authentication(self):
+        response = self.client.delete(self.url, self._payload(), format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_teacher_can_delete_announcement(self):
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.delete(self.url, self._payload(), format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["message"], "Deleted")
+        self.assertFalse(
+            Announcements.objects.filter(pk=self.announcement.id).exists()
+        )
+
+    def test_student_cannot_delete(self):
+        self.client.force_authenticate(self.student)
+
+        response = self.client.delete(self.url, self._payload(), format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "Permission denied.")
+        self.assertTrue(
+            Announcements.objects.filter(pk=self.announcement.id).exists()
+        )
+
+    def test_nonexistent_announcement_returns_404(self):
+        self.client.force_authenticate(self.teacher)
+
+        response = self.client.delete(
+            self.url, self._payload(annId=999999), format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["message"], "Announcement not found.")

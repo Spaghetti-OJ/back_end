@@ -5,6 +5,7 @@ from courses.models import Announcements, Courses, Course_members
 
 from .serializers import (
     AnnouncementCreateSerializer,
+    AnnouncementDeleteSerializer,
     AnnouncementUpdateSerializer,
     SystemAnnouncementSerializer,
 )
@@ -59,7 +60,11 @@ class CourseAnnouncementListView(CourseAnnouncementBaseView):
 
 
 class AnnouncementCreateView(generics.GenericAPIView):
-    """POST /ann/ 建立公告、PUT /ann/ 更新公告。"""
+    """
+    POST /ann/ 建立公告
+    PUT /ann/ 更新公告
+    DELETE /ann/ 刪除公告
+    """
 
     serializer_class = AnnouncementCreateSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -120,6 +125,36 @@ class AnnouncementCreateView(generics.GenericAPIView):
         announcement.save()
 
         return Response({"message": "Updated"}, status=status.HTTP_200_OK)
+
+    def delete(self, request, *args, **kwargs):
+        serializer = AnnouncementDeleteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"message": "Validation error.", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ann_id = serializer.validated_data["annId"]
+        try:
+            announcement = Announcements.objects.select_related("course_id").get(
+                pk=ann_id
+            )
+        except Announcements.DoesNotExist:
+            return Response(
+                {"message": "Announcement not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not _user_has_grade_permission(request.user, announcement.course_id):
+            return Response(
+                {"message": "Permission denied."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        announcement.delete()
+        return Response({"message": "Deleted"}, status=status.HTTP_200_OK)
+
+
 class CourseAnnouncementRetrieveView(CourseAnnouncementBaseView):
     """
     GET /ann/<course_id>/<ann_id> - 取得單一公告內容。

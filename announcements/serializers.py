@@ -88,3 +88,7 @@ class AnnouncementUpdateSerializer(serializers.Serializer):
         attrs["content"] = text
         attrs.pop("context", None)
         return attrs
+
+
+class AnnouncementDeleteSerializer(serializers.Serializer):
+    annId = serializers.IntegerField()
