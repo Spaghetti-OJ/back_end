@@ -246,6 +246,113 @@ class CourseGradeViewTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["message"], "This title is taken.")
 
+    def test_teacher_can_update_grade_with_new_title(self):
+        self.client.force_authenticate(self.teacher)
+
+        payload = {
+            "title": "Quiz 1",
+            "new_title": "Quiz 1 Updated",
+            "content": "Regraded after review",
+            "score": 85,
+        }
+        response = self.client.put(
+            self._url(self.course, self.student),
+            data=payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["message"], "Success.")
+        self.assertFalse(
+            CourseGrade.objects.filter(
+                course=self.course,
+                student=self.student,
+                title="Quiz 1",
+            ).exists()
+        )
+        updated_grade = CourseGrade.objects.get(
+            course=self.course,
+            student=self.student,
+            title="Quiz 1 Updated",
+        )
+        self.assertEqual(updated_grade.content, "Regraded after review")
+        self.assertEqual(updated_grade.score, 85)
+
+    def test_teacher_can_update_grade_without_new_title(self):
+        self.client.force_authenticate(self.teacher)
+
+        payload = {
+            "title": "Midterm",
+            "content": "Adjusted grading rubric",
+            "score": "A-",
+        }
+        response = self.client.put(
+            self._url(self.course, self.student),
+            data=payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        grade = CourseGrade.objects.get(
+            course=self.course,
+            student=self.student,
+            title="Midterm",
+        )
+        self.assertEqual(grade.content, "Adjusted grading rubric")
+        self.assertEqual(grade.score, "A-")
+
+    def test_update_returns_bad_request_when_new_title_taken(self):
+        self.client.force_authenticate(self.teacher)
+
+        payload = {
+            "title": "Quiz 1",
+            "new_title": "Midterm",
+            "content": "Updated",
+            "score": 75,
+        }
+        response = self.client.put(
+            self._url(self.course, self.student),
+            data=payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["message"], "This title is taken.")
+
+    def test_student_cannot_update_grade(self):
+        self.client.force_authenticate(self.student)
+
+        payload = {
+            "title": "Quiz 1",
+            "content": "Trying to cheat",
+            "score": 100,
+        }
+        response = self.client.put(
+            self._url(self.course, self.student),
+            data=payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "You can only view your score.")
+
+    def test_update_missing_grade_returns_not_found(self):
+        self.client.force_authenticate(self.teacher)
+
+        payload = {
+            "title": "Quiz X",
+            "content": "Nonexistent",
+            "score": 60,
+        }
+        response = self.client.put(
+            self._url(self.course, self.student),
+            data=payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data["message"], "Score not found.")
+
     def test_post_student_not_in_course_returns_not_found(self):
         self.client.force_authenticate(self.teacher)
 

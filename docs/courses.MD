@@ -359,6 +359,50 @@ curl -X POST http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
     }'
 ```
 
+**路徑**：`PUT /course/<course_id>/grade/<student>`
+
+**說明**：修改指定學生的成績項目。需登入且必須為該課程的教師、助教或管理員（並為課程成員）。若提供 `new_title`，會以其覆蓋原標題；若未提供則沿用原標題。
+
+**請求格式 (JSON)**
+
+| 欄位名 | 型別 | 必填 | 說明 |
+| --- | --- | --- | --- |
+| `title` | string | ✅ | 要修改的成績項目原標題 |
+| `new_title` | string | ⭕ | 新標題，若缺省則維持原標題 |
+| `content` | string | ✅ | 成績說明，可為空字串 |
+| `score` | number / string | ✅ | 分數，可為數字或字母（例如 `92`、`"A"`） |
+
+**成功回應 (200 OK)**：
+
+```json
+{ "message": "Success." }
+```
+
+**失敗回應**：
+
+| 狀況 | HTTP | 訊息 |
+| --- | --- | --- |
+| 不在課程內 | 403 | `{ "message": "You are not in this course." }` |
+| 無評分權限 | 403 | `{ "message": "You can only view your score." }` |
+| 課程不存在 | 404 | `{ "message": "Course not found." }` |
+| 學生不在課程 | 404 | `{ "message": "The student is not in the course." }` |
+| 要修改的成績不存在 | 404 | `{ "message": "Score not found." }` |
+| `new_title` 與他人成績重複 | 400 | `{ "message": "This title is taken." }` |
+
+**cURL 測試**：
+
+```bash
+curl -X PUT http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
+    -H "Authorization: Bearer <access>" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "title": "Quiz 1",
+        "new_title": "Quiz 1 (make-up)",
+        "content": "Updated after regrade",
+        "score": 85
+    }'
+```
+
 **路徑**：`DELETE /course/<course_id>/grade/<student>`
 
 **說明**：刪除指定學生的單一成績項目。需登入且必須為該課程的教師、助教或管理員（並為課程成員）。

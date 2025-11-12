@@ -9,6 +9,7 @@ from ..serializers import (
     CourseGradeDeleteSerializer,
     CourseGradeItemSerializer,
     CourseGradeListSerializer,
+    CourseGradeUpdateSerializer,
 )
 
 User = get_user_model()
@@ -25,6 +26,7 @@ class CourseGradeView(APIView):
     serializer_class = CourseGradeListSerializer
     create_serializer_class = CourseGradeCreateSerializer
     delete_serializer_class = CourseGradeDeleteSerializer
+    update_serializer_class = CourseGradeUpdateSerializer
 
     def get(self, request, course_id, student):
         course = self._get_course(course_id)
@@ -172,6 +174,77 @@ class CourseGradeView(APIView):
             )
 
         grade.delete()
+        return Response({"message": "Success."}, status=status.HTTP_200_OK)
+
+    def put(self, request, course_id, student):
+        course = self._get_course(course_id)
+        if course is None:
+            return Response(
+                {"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        target_student = self._get_student(student)
+        if target_student is None:
+            return Response(
+                {"message": "The student is not in the course."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not self._is_course_member(course, request.user):
+            return Response(
+                {"message": "You are not in this course."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not self._has_grading_permission(course, request.user):
+            return Response(
+                {"message": "You can only view your score."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not self._is_student_in_course(course, target_student):
+            return Response(
+                {"message": "The student is not in the course."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = self.update_serializer_class(data=request.data)
+        if not serializer.is_valid():
+            detail = self._extract_error_detail(serializer.errors)
+            message = str(detail) if detail else "Invalid data."
+            return Response(
+                {"message": message}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        title = serializer.validated_data["title"]
+        try:
+            grade = CourseGrade.objects.get(
+                course=course,
+                student=target_student,
+                title=title,
+            )
+        except CourseGrade.DoesNotExist:
+            return Response(
+                {"message": "Score not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        new_title = serializer.validated_data.get("new_title") or title
+        if new_title != title and CourseGrade.objects.filter(
+            course=course,
+            student=target_student,
+            title=new_title,
+        ).exclude(pk=grade.pk).exists():
+            return Response(
+                {"message": "This title is taken."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        grade.title = new_title
+        grade.content = serializer.validated_data["content"]
+        grade.score = serializer.validated_data["score"]
+        grade.save(update_fields=["title", "content", "score"])
+
         return Response({"message": "Success."}, status=status.HTTP_200_OK)
 
     @staticmethod
