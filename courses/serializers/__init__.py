@@ -11,6 +11,7 @@ from .grade import (
     CourseGradeItemSerializer,
     CourseGradeCreateSerializer,
     CourseGradeDeleteSerializer,
+    CourseGradeUpdateSerializer,
 )
 
 __all__ = [
@@ -25,4 +26,5 @@ __all__ = [
     "CourseGradeItemSerializer",
     "CourseGradeCreateSerializer",
     "CourseGradeDeleteSerializer",
+    "CourseGradeUpdateSerializer",
 ]
