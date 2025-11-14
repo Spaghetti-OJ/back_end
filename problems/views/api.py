@@ -32,6 +32,10 @@ from ..permissions import IsOwnerOrReadOnly, IsTeacherOrAdmin
 from rest_framework.pagination import PageNumberPagination
 from django.db.models import Count, Max
 from submissions.models import Submission
+from ..models import ProblemLike
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from django.db import models as dj_models
 
 class ProblemsViewSet(viewsets.ModelViewSet):
     queryset = Problems.objects.all().order_by("-created_at")
@@ -259,64 +263,74 @@ class ProblemStatsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-        from courses.models import Course_members
-        from submissions.models import Submission
-
-        # 1. 題目存在性
+        # Defensive: some dependent apps/tables may be missing while local migrations are being fixed.
+        # Wrap DB access in OperationalError to return a clear 503 instead of crashing the server.
+        from django.db.utils import OperationalError
         try:
-            problem = Problems.objects.get(pk=pk)
-        except Problems.DoesNotExist:
-            return Response({"detail": "Problem not found."}, status=404)
+            from courses.models import Course_members
+            from submissions.models import Submission
 
-        # 2. 總學生數（該課程所有學生）
-        course_id = getattr(problem, 'course_id', None)
-        total_students = 0
-        if course_id:
-            total_students = Course_members.objects.filter(course_id=course_id, role='student').count()
+            # 1. 題目存在性
+            try:
+                problem = Problems.objects.get(pk=pk)
+            except Problems.DoesNotExist:
+                return Response({"detail": "Problem not found."}, status=404)
 
-        # 3. 所有提交
-        submissions = Submission.objects.filter(problem_id=pk)
+            # 2. 總學生數（該課程所有學生）
+            course_id = getattr(problem, 'course_id', None)
+            total_students = 0
+            if course_id:
+                total_students = Course_members.objects.filter(course_id=course_id, role='student').count()
 
-        # 4. 嘗試過的用戶數
-        tried_user_ids = submissions.values_list('user', flat=True).distinct()
-        tried_user_count = len(tried_user_ids)
+            # 3. 所有提交
+            submissions = Submission.objects.filter(problem_id=pk)
 
-        # 5. AC 用戶數
-        ac_user_ids = submissions.filter(status='accepted').values_list('user', flat=True).distinct()
-        ac_user_count = len(ac_user_ids)
+            # 4. 嘗試過的用戶數
+            tried_user_ids = submissions.values_list('user', flat=True).distinct()
+            tried_user_count = len(tried_user_ids)
 
-        # 6. 分數統計
-        scores = list(submissions.values_list('score', flat=True))
-        average = sum(scores) / len(scores) if scores else 0
-        std = math.sqrt(sum((s - average) ** 2 for s in scores) / len(scores)) if scores else 0
+            # 5. AC 用戶數
+            ac_user_ids = submissions.filter(status='accepted').values_list('user', flat=True).distinct()
+            ac_user_count = len(ac_user_ids)
 
-        # 7. 分數分布
-        score_distribution = {}
-        for s in scores:
-            score_distribution[s] = score_distribution.get(s, 0) + 1
-        score_distribution = [ {'score': k, 'count': v} for k, v in sorted(score_distribution.items()) ]
+            # 6. 分數統計
+            scores = list(submissions.values_list('score', flat=True))
+            average = sum(scores) / len(scores) if scores else 0
+            std = math.sqrt(sum((s - average) ** 2 for s in scores) / len(scores)) if scores else 0
 
-        # 8. 狀態統計
-        status_count = {}
-        for status, cnt in submissions.values('status').annotate(cnt=Count('id')):
-            status_count[status] = cnt
+            # 7. 分數分布
+            score_distribution = {}
+            for s in scores:
+                score_distribution[s] = score_distribution.get(s, 0) + 1
+            score_distribution = [ {'score': k, 'count': v} for k, v in sorted(score_distribution.items()) ]
 
-        # 9. top10執行時間
-        top10_runtime = list(submissions.filter(execution_time__gt=0).order_by('execution_time')[:10].values('id', 'user', 'execution_time', 'score', 'status'))
+            # 8. 狀態統計
+            status_count = {}
+            for row in submissions.values('status').annotate(cnt=Count('id')):
+                status_count[row['status']] = row['cnt']
 
-        # 10. top10記憶體
-        top10_memory = list(submissions.filter(memory_usage__gt=0).order_by('memory_usage')[:10].values('id', 'user', 'memory_usage', 'score', 'status'))
+            # 9. top10執行時間
+            top10_runtime = list(submissions.filter(execution_time__gt=0).order_by('execution_time')[:10].values('id', 'user', 'execution_time', 'score', 'status'))
 
-        return Response({
-            "acUserRatio": [ac_user_count, total_students],
-            "triedUserCount": tried_user_count,
-            "average": average,
-            "std": std,
-            "scoreDistribution": score_distribution,
-            "statusCount": status_count,
-            "top10RunTime": top10_runtime,
-            "top10MemoryUsage": top10_memory,
-        }, status=200)
+            # 10. top10記憶體
+            top10_memory = list(submissions.filter(memory_usage__gt=0).order_by('memory_usage')[:10].values('id', 'user', 'memory_usage', 'score', 'status'))
+
+            return Response({
+                "acUserRatio": [ac_user_count, total_students],
+                "triedUserCount": tried_user_count,
+                "average": average,
+                "std": std,
+                "scoreDistribution": score_distribution,
+                "statusCount": status_count,
+                "top10RunTime": top10_runtime,
+                "top10MemoryUsage": top10_memory,
+            }, status=200)
+        except OperationalError as e:
+            # Helpful diagnostic for local dev when migrations/tables are missing
+            return Response({
+                "detail": "Service temporarily unavailable: dependent database tables appear to be missing.",
+                "error": str(e),
+            }, status=503)
 
 class ProblemHighScoreView(APIView):
     """
@@ -403,6 +417,65 @@ class ProblemManageView(APIView):
             problem.tags.set(tags_qs)
 
         return Response({"success": True, "problem_id": problem.id}, status=201)
+
+
+@api_view(['POST', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def problem_like_toggle(request, pk):
+    """POST /problem/<id>/like - 按讚
+    DELETE /problem/<id>/like - 取消按讚
+    """
+    try:
+        problem = Problems.objects.get(pk=pk)
+    except Problems.DoesNotExist:
+        return Response({"detail": "Problem not found."}, status=404)
+
+    user = request.user
+
+    try:
+        with transaction.atomic():
+            existing = ProblemLike.objects.filter(problem=problem, user=user).first()
+
+            if request.method == 'POST':
+                if existing:
+                    return Response({"detail": "You already liked this problem."}, status=400)
+                ProblemLike.objects.create(problem=problem, user=user)
+                # update counter
+                Problems.objects.filter(pk=pk).update(like_count=dj_models.F('like_count') + 1)
+                return Response({"detail": "Liked", "likes_count": problem.like_count + 1}, status=201)
+
+            # method == DELETE
+            if not existing:
+                return Response({"detail": "You have not liked this problem."}, status=400)
+            existing.delete()
+            Problems.objects.filter(pk=pk).update(like_count=dj_models.F('like_count') - 1)
+            return Response({"detail": "Unliked", "likes_count": max(0, problem.like_count - 1)}, status=200)
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"problem_like_toggle failed: {e}", exc_info=True)
+        return Response({"detail": "Operation failed"}, status=500)
+
+
+@api_view(['GET'])
+def problem_likes_count(request, pk):
+    """GET /problem/<id>/likes - 取得點讚數（簡單回傳 like_count）"""
+    try:
+        problem = Problems.objects.get(pk=pk)
+    except Problems.DoesNotExist:
+        return Response({"detail": "Problem not found."}, status=404)
+    return Response({"likes_count": problem.like_count}, status=200)
+
+
+class UserLikedProblemsView(generics.ListAPIView):
+    """GET /user/likes - 列出已按讚的題目（需登入）"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = ProblemStudentSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        liked_ids = ProblemLike.objects.filter(user=user).values_list('problem', flat=True)
+        return Problems.objects.filter(id__in=liked_ids).order_by('-created_at')
 
 
 # PUT/DELETE /api/problem/manage/<id> — 修改/刪除題目
