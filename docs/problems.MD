@@ -315,7 +315,7 @@ curl -X POST http://127.0.0.1:8000/problem/manage \
 
 - 路徑：`PUT /problem/manage/<problem_id>`
 - 權限：教師 / 管理員 / 題目擁有者 / 該課程 TA（課程成員角色為 `ta`）
-- 說明：可更新標題、描述、可見性、課程、標籤等。若提供 `tags`，將以提供的 id 陣列覆蓋既有關聯，且會做嚴格驗證。
+- 說明：可更新標題、描述、可見性、課程、標籤等(理論上所有欄位都可以透過這個編輯，欄位可參考上面的建立題目)。若提供 `tags`，將以提供的 id 陣列覆蓋既有關聯，且會做嚴格驗證。
 
 請求（JSON）：
 ```json
@@ -384,6 +384,168 @@ curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
 ```bash
 curl -X DELETE http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
   -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## 按讚題目
+
+- 路徑：`POST /problem/<problem_id>/like`
+- 權限：需要登入
+- 說明：對指定題目按讚。若已按讚過則回傳 400 錯誤。
+
+成功回應（201 Created）：
+```json
+{
+  "detail": "Liked",
+  "likes_count": 15
+}
+```
+
+可能錯誤：
+- 400 已按過讚（`You already liked this problem.`）
+- 401 未登入
+- 404 題目不存在
+- 500 操作失敗
+
+**cURL 測試**：
+```bash
+curl -X POST "http://127.0.0.1:8000/problem/$PROBLEM_ID/like" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## 取消按讚題目
+
+- 路徑：`DELETE /problem/<problem_id>/like`
+- 權限：需要登入
+- 說明：取消對指定題目的按讚。若尚未按讚則回傳 400 錯誤。
+
+成功回應（200 OK）：
+```json
+{
+  "detail": "Unliked",
+  "likes_count": 14
+}
+```
+
+可能錯誤：
+- 400 尚未按讚（`You have not liked this problem.`）
+- 401 未登入
+- 404 題目不存在
+- 500 操作失敗
+
+**cURL 測試**：
+```bash
+curl -X DELETE "http://127.0.0.1:8000/problem/$PROBLEM_ID/like" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## 取得題目按讚數
+
+- 路徑：`GET /problem/<problem_id>/likes`
+- 權限：無需登入
+- 說明：回傳指定題目的按讚總數（`like_count` 欄位）。
+
+成功回應（200 OK）：
+```json
+{
+  "likes_count": 42
+}
+```
+
+可能錯誤：
+- 404 題目不存在
+
+**cURL 測試**：
+```bash
+curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/likes"
+```
+
+---
+
+## 取得我按過讚的題目列表
+
+- 路徑：`GET /problem/liked`
+- 權限：需要登入
+- 說明：回傳當前使用者按讚過的所有題目（依建立時間倒序）。回傳格式與題目列表相同，包含每個題目的 `is_liked_by_user`（恆為 `true`）、`submit_count`、`high_score` 等個人化欄位。
+
+成功回應（200 OK）：
+```json
+[
+  {
+    "id": 3,
+    "title": "Binary Search",
+    "difficulty": "medium",
+    "is_public": "public",
+    "course_id": "<uuid>",
+    "tags": [{"id": 1, "name": "搜尋", "usage_count": 5}],
+    "submit_count": 10,
+    "high_score": 100,
+    "is_liked_by_user": true,
+    "created_at": "2025-11-10T08:00:00Z"
+  },
+  {
+    "id": 1,
+    "title": "Two Sum",
+    "difficulty": "easy",
+    "is_public": "public",
+    "course_id": "<uuid>",
+    "tags": [{"id": 2, "name": "陣列", "usage_count": 12}],
+    "submit_count": 5,
+    "high_score": 80,
+    "is_liked_by_user": true,
+    "created_at": "2025-11-08T06:45:00Z"
+  }
+]
+```
+
+可能錯誤：
+- 401 未登入
+
+**cURL 測試**：
+```bash
+curl "http://127.0.0.1:8000/problem/liked" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## 完整測試流程範例（點讚功能）
+
+```bash
+# 1. 取得 JWT token
+TOKEN=$(curl -s -X POST http://127.0.0.1:8000/auth/session/ \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"yourpassword"}' | jq -r '.access')
+
+# 2. 設定題目 ID（假設為 1）
+PROBLEM_ID=1
+
+# 3. 查看題目詳情（含 is_liked_by_user 欄位）
+curl "http://127.0.0.1:8000/problem/$PROBLEM_ID" \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# 4. 按讚
+curl -X POST "http://127.0.0.1:8000/problem/$PROBLEM_ID/like" \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# 5. 查看按讚數
+curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/likes" | jq
+
+# 6. 查看我按讚過的題目列表
+curl "http://127.0.0.1:8000/problem/liked" \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# 7. 取消按讚
+curl -X DELETE "http://127.0.0.1:8000/problem/$PROBLEM_ID/like" \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# 8. 再次查看按讚數（應減少 1）
+curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/likes" | jq
 ```
 
 ---

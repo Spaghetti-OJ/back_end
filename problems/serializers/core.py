@@ -199,6 +199,7 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
     # 個人化資訊（需在 view 中動態設定）
     submit_count = serializers.IntegerField(read_only=True, default=0)
     high_score = serializers.IntegerField(read_only=True, default=0)
+    is_liked_by_user = serializers.SerializerMethodField()
 
     class Meta:
         model = Problems
@@ -212,16 +213,32 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
             "course_id",
             "created_at",
             "tags", "tag_ids", "subtasks",
-            "submit_count", "high_score",
+            "submit_count", "high_score", "is_liked_by_user",
         ]
         read_only_fields = [
             "acceptance_rate", "total_submissions", "accepted_submissions",
             "created_at",
         ]
 
+    def get_is_liked_by_user(self, obj):
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            from ..models import ProblemLike
+            return ProblemLike.objects.filter(problem=obj, user=request.user).exists()
+        return False
+
 class ProblemTagSerializer(serializers.ModelSerializer):
     class Meta:
         model = Problem_tags
         fields = ["problem_id", "tag_id", "added_by"]
         read_only_fields = ["added_by"]
+
+
+class ProblemLikeSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source='user.username', read_only=True)
+
+    class Meta:
+        model = __import__('problems.models', fromlist=['ProblemLike']).ProblemLike
+        fields = ['id', 'problem', 'user', 'user_username', 'created_at']
+        read_only_fields = ['id', 'user', 'user_username', 'created_at']
 

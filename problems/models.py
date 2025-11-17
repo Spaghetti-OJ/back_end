@@ -216,3 +216,29 @@ class Problem_tags(models.Model):
 
     def __str__(self):
         return f"{self.problem_id.id}-{self.tag_id.id}"
+
+
+class ProblemLike(models.Model):
+    """使用者對題目的按讚紀錄
+
+    類似於 `EditorialLike`，用於追蹤使用者對題目的按讚，以支援“我按過的題目列表”。
+    """
+
+    id = models.AutoField(primary_key=True)
+    problem = models.ForeignKey(Problems, on_delete=models.CASCADE, related_name='likes')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'problem_likes'
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['problem', 'user'], name='unique_problem_user_like')
+        ]
+        indexes = [
+            models.Index(fields=['problem', 'user']),
+            models.Index(fields=['user', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"Like Problem {self.problem.id} by {self.user.username}" 

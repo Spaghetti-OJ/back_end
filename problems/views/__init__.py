@@ -10,6 +10,9 @@ from .api import (
     ProblemManageDetailView,
     ProblemHighScoreView,
     ProblemStatsView,
+    problem_like_toggle,
+    problem_likes_count,
+    UserLikedProblemsView,
 )
 
 __all__ = [
@@ -23,4 +26,7 @@ __all__ = [
     'ProblemManageDetailView',
     'ProblemHighScoreView',
     'ProblemStatsView',
+    'problem_like_toggle',
+    'problem_likes_count',
+    'UserLikedProblemsView',
 ]
