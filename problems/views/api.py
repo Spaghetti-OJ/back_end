@@ -442,14 +442,16 @@ def problem_like_toggle(request, pk):
                 ProblemLike.objects.create(problem=problem, user=user)
                 # update counter
                 Problems.objects.filter(pk=pk).update(like_count=dj_models.F('like_count') + 1)
-                return Response({"detail": "Liked", "likes_count": problem.like_count + 1}, status=201)
+                problem.refresh_from_db()
+                return Response({"detail": "Liked", "likes_count": problem.like_count}, status=201)
 
             # method == DELETE
             if not existing:
                 return Response({"detail": "You have not liked this problem."}, status=400)
             existing.delete()
             Problems.objects.filter(pk=pk).update(like_count=dj_models.F('like_count') - 1)
-            return Response({"detail": "Unliked", "likes_count": max(0, problem.like_count - 1)}, status=200)
+            problem.refresh_from_db()
+            return Response({"detail": "Unliked", "likes_count": problem.like_count}, status=200)
 
     except Exception as e:
         import logging
