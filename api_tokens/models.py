@@ -48,7 +48,7 @@ class ApiToken(models.Model):
     # last_used_at timestamp [null]
     last_used_at = models.DateTimeField(null=True, blank=True, verbose_name='最後使用時間')
 
-    # [建議新增] last_used_ip - 追蹤 Token 使用來源
+    # last_used_ip - 追蹤 Token 使用來源
     last_used_ip = models.GenericIPAddressField(null=True, blank=True, verbose_name='最後使用 IP')
     
     # created_at timestamp [default: `now()`]
