@@ -369,7 +369,8 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
   "email": "412470100S@gapps.ntnu.edu.tw",
   "user_id": "omuba",
   "student_id": "41247057S",
-  "introduction": "哈囉我是資工116"
+  "introduction": "哈囉我是資工116",
+  "avatar":null
 }
 ```
 
@@ -384,6 +385,7 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 | user_id      | string | 使用者的 ID             |
 | student_id   | string | 學號（若有）                           |
 | introduction | string | 個人簡介                             |
+| avatar       | string | 頭像 url                |
 
 ---
 
@@ -397,16 +399,6 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 ---
 
 ### 測試指令
-
-**1️⃣ 登入取得 Token**
-
-```bash
-curl -X POST http://127.0.0.1:8000/auth/session/ \
-  -H "Content-Type: application/json" \
-  -d '{"username":"momo","password":"abc12345"}'
-```
-
-**2️⃣ 使用 Access Token 呼叫 /profile/**
 
 ```bash
 curl -X GET http://127.0.0.1:8000/profile/ \
@@ -466,7 +458,8 @@ GET /profile/{username}/
   "role": "Student",
   "email": "momo@example.com",
   "user_id": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
-  "introduction": "哈囉我是資工116"
+  "introduction": "哈囉我是資工116",
+  "avatar":null
 }
 ```
 
@@ -479,6 +472,7 @@ GET /profile/{username}/
 | email        | string | 使用者電子郵件（依隱私策略可能顯示或遮蔽）                     |
 | user_id      | string | 使用者的公開 ID（預設為使用者主鍵；若系統有自訂公開 ID 則為該值）      |
 | introduction | string | 個人簡介（來源：UserProfile.bio；若未設定可能為空字串）       |
+| avatar       | string | 頭像 url                |
 
 > 注意：**不包含** `real_name`、`student_id`。
 

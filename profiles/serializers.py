@@ -15,6 +15,7 @@ class MeProfileSerializer(serializers.ModelSerializer):
     # 來自 UserProfile
     student_id = serializers.CharField(allow_blank=True, allow_null=True)
     introduction = serializers.CharField(source="bio", allow_blank=True, required=False)
+    avatar = serializers.ImageField(allow_null=True, required=False)
 
     # 顯示 choices 的「標籤」（Student/Teacher/Admin）
     role = serializers.SerializerMethodField()
@@ -29,6 +30,7 @@ class MeProfileSerializer(serializers.ModelSerializer):
             "user_id",
             "student_id",
             "introduction",
+            "avatar",
         ]
 
     def get_role(self, obj):
@@ -41,10 +43,11 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(read_only=True)
     user_id = serializers.CharField(source="id", read_only=True)
     introduction = serializers.CharField(source="userprofile.bio", read_only=True, allow_blank=True)
+    avatar = serializers.ImageField(source="userprofile.avatar", read_only=True, allow_null=True)
 
     class Meta:
         model = User
-        fields = ("user_name", "role", "email", "user_id", "introduction")
+        fields = ("user_name", "role", "email", "user_id", "introduction", "avatar")
 
     def get_role(self, obj):
         return obj.get_identity_display()
