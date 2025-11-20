@@ -9,6 +9,5 @@ class CourseSummarySerializer(serializers.Serializer):
         submissionCount = serializers.IntegerField()
         problemCount = serializers.IntegerField()
 
-    message = serializers.CharField(default="Success.")
     courseCount = serializers.IntegerField()
     breakdown = BreakdownItem(many=True)

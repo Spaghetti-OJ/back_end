@@ -33,7 +33,6 @@ class CourseInfoSerializer(serializers.ModelSerializer):
 
 
 class CourseDetailSerializer(serializers.Serializer):
-    message = serializers.CharField(default="Success.")
     course = CourseInfoSerializer()
     teacher = TeacherSerializer()
     TAs = TeacherSerializer(many=True)
