@@ -6,9 +6,25 @@ from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import IsAuthenticated
 
 from api_tokens.models import ApiToken
-# 注意 import 路徑的變化，從 ..serializers 子模組中導入
 from ..serializers.api_token import ApiTokenCreateSerializer, ApiTokenListSerializer
 from ..services import generate_api_token
+
+# ===================================================================
+def api_response(data=None, message="OK", status_code=200):
+    """
+    統一的 API 回應格式 (這個函式現在是這個檔案專屬的)
+    """
+    status_str = "ok" if 200 <= status_code < 400 else "error"
+    
+    if data is None:
+        data = {}
+        
+    return Response({
+        "data": data,
+        "message": message,
+        "status": status_str,
+    }, status=status_code)
+
 
 class ApiTokenListView(APIView):
     """
@@ -23,7 +39,7 @@ class ApiTokenListView(APIView):
     def get(self, request):
         tokens = ApiToken.objects.filter(user=request.user)
         serializer = ApiTokenListSerializer(tokens, many=True)
-        return Response(serializer.data)
+        return api_response(serializer.data, "成功取得 Token 列表")
 
     def post(self, request):
         serializer = ApiTokenCreateSerializer(data=request.data)
@@ -37,9 +53,13 @@ class ApiTokenListView(APIView):
             permissions=serializer.validated_data.get('permissions', []),
             expires_at=serializer.validated_data.get('expires_at')
         )
-        return Response(
-            {"message": "API Token created...", "full_token": full_token},
-            status=status.HTTP_201_CREATED
+        response_data = {
+            "full_token": full_token
+        }
+        return api_response(
+            response_data, 
+            "API Token 已建立，請妥善保存", 
+            status_code=status.HTTP_201_CREATED
         )
 
 class ApiTokenDetailView(APIView):
@@ -59,15 +79,23 @@ class ApiTokenDetailView(APIView):
             return None
 
     def get(self, request, tokenId):
-        token = self.get_object(request, tokenId)
-        if token is None:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-        serializer = ApiTokenListSerializer(token)
-        return Response(serializer.data)
+        # ❗ 此處為未實作的 GET /<id> 端點
+        return api_response(
+            None, 
+            "Token 詳情端點尚未實作",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
 
     def delete(self, request, tokenId):
         token = self.get_object(request, tokenId)
         if token is None:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+            # ⬇️ 替換 Delete 的失敗回傳 (404 Not Found) ⬇️
+            return api_response(
+                None, 
+                "Token 不存在或權限不足", 
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        
         token.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+
+        return api_response(None, "Token 已成功刪除")
