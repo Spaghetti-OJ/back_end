@@ -43,6 +43,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(read_only=True)
     user_id = serializers.CharField(source="id", read_only=True)
     introduction = serializers.CharField(source="userprofile.bio", read_only=True, allow_blank=True)
+    avatar = serializers.ImageField(source="userprofile.avatar", read_only=True, allow_null=True)
 
     class Meta:
         model = User

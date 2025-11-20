@@ -50,3 +50,8 @@ class PublicProfileView(RetrieveAPIView):
             return self.get_queryset().get(username__iexact=key)
         except User.DoesNotExist:
             raise NotFound("User not found.")
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return api_response(data=serializer.data, status_code=200)
