@@ -385,7 +385,7 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 | user_id      | string | 使用者的 ID             |
 | student_id   | string | 學號（若有）                           |
 | introduction | string | 個人簡介                             |
-| avater       | string | 頭像 url                |
+| avatar       | string | 頭像 url                |
 
 ---
 
