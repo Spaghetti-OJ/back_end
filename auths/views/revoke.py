@@ -1,8 +1,15 @@
-# auths/views/revoke.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
+
+def api_response(data=None, message="OK", status_code=200):
+    status_str = "ok" if 200 <= status_code < 400 else "error"
+    return Response({
+        "data": data,
+        "message": message,
+        "status": status_str,
+    }, status=status_code)
 
 class SessionRevokeView(APIView):
     """
@@ -22,16 +29,19 @@ class SessionRevokeView(APIView):
             refresh = request.COOKIES.get("refresh")
 
         if not refresh:
-            return Response({"detail": "refresh field required"}, status=status.HTTP_400_BAD_REQUEST)
+            return api_response(message="refresh field required", status_code=status.HTTP_400_BAD_REQUEST)
+            #return Response({"detail": "refresh field required"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             token = RefreshToken(refresh)  # 解析與驗證 refresh
             token.blacklist()              # 放入黑名單
         except TokenError:
-            return Response({"detail": "Invalid or expired refresh token"}, status=status.HTTP_400_BAD_REQUEST)
+            return api_response(message="Invalid or expired refresh token", status_code=status.HTTP_400_BAD_REQUEST)
+            #return Response({"detail": "Invalid or expired refresh token"}, status=status.HTTP_400_BAD_REQUEST)
 
         # 可選：若採 Cookie 流程，順便清除 cookie
-        resp = Response(status=status.HTTP_205_RESET_CONTENT)
+        #resp = Response(status=status.HTTP_205_RESET_CONTENT)
+        resp = api_response(message="Session revoked", status_code=status.HTTP_205_RESET_CONTENT)
         # resp.delete_cookie("refresh")
         # resp.delete_cookie("access")
         return resp
