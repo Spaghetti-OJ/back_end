@@ -472,7 +472,7 @@ GET /profile/{username}/
 | email        | string | 使用者電子郵件（依隱私策略可能顯示或遮蔽）                     |
 | user_id      | string | 使用者的公開 ID（預設為使用者主鍵；若系統有自訂公開 ID 則為該值）      |
 | introduction | string | 個人簡介（來源：UserProfile.bio；若未設定可能為空字串）       |
-| avater       | string | 頭像 url                |
+| avatar       | string | 頭像 url                |
 
 > 注意：**不包含** `real_name`、`student_id`。
 
