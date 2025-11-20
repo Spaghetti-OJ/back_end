@@ -398,16 +398,6 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 
 ### 測試指令
 
-**1️⃣ 登入取得 Token**
-
-```bash
-curl -X POST http://127.0.0.1:8000/auth/session/ \
-  -H "Content-Type: application/json" \
-  -d '{"username":"momo","password":"abc12345"}'
-```
-
-**2️⃣ 使用 Access Token 呼叫 /profile/**
-
 ```bash
 curl -X GET http://127.0.0.1:8000/profile/ \
   -H "Authorization: Bearer <ACCESS_TOKEN>" \
