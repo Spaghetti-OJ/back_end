@@ -9,6 +9,14 @@ from rest_framework import permissions
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.exceptions import NotFound
 
+def api_response(data=None, message="OK", status_code=200):
+    status_str = "ok" if 200 <= status_code < 400 else "error"
+    return Response({
+        "data": data,
+        "message": message,
+        "status": status_str,
+    }, status=status_code)
+
 User = get_user_model()
 
 class MeProfileView(APIView):
@@ -20,7 +28,8 @@ class MeProfileView(APIView):
         # 若還沒建 Profile，先建立一個空的（避免前端 404）
         profile, _ = UserProfile.objects.get_or_create(user=user)
         data = MeProfileSerializer(profile).data
-        return Response(data, status=200)
+        
+        return api_response(data=data, status_code=200)
 
 class PublicProfileView(RetrieveAPIView):
     """
