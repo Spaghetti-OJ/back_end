@@ -514,6 +514,112 @@ curl "http://127.0.0.1:8000/problem/liked" \
 
 ---
 
+## 標籤（Tags）API
+
+提供四個操作：
+1. 取得所有標籤：`GET /problem/tags`
+2. 建立新標籤：`POST /problem/tags`
+3. 新增標籤到題目：`POST /problem/<problem_id>/tags`
+4. 從題目移除標籤：`DELETE /problem/<problem_id>/tags/<tag_id>`
+
+> 注意：舊版路徑 `/problem/router/tags/` 已淘汰，現在統一使用上述格式方便前端整合。
+
+### 1. 取得所有標籤
+- 路徑：`GET /problem/tags`
+- 權限：公開（可匿名）
+
+成功回應：
+```json
+[
+  {"id":1, "name":"陣列", "usage_count":12},
+  {"id":2, "name":"字串", "usage_count":7}
+]
+```
+
+**cURL**
+```bash
+curl "http://127.0.0.1:8000/problem/tags" | jq
+```
+
+### 2. 建立新標籤
+- 路徑：`POST /problem/tags`
+- 權限：需要登入（建議僅教師/管理員；目前後端未限制）
+- Body：`{"name": "圖論"}`
+
+成功回應（201）：
+```json
+{"id":5, "name":"圖論", "usage_count":0}
+```
+
+錯誤：
+- 422 驗證失敗（名稱空白或重複）
+- 401 未登入
+
+**cURL**
+```bash
+curl -X POST "http://127.0.0.1:8000/problem/tags" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"圖論"}' | jq
+```
+
+### 3. 新增標籤到題目
+- 路徑：`POST /problem/<problem_id>/tags`
+- 權限：題目擁有者 / 課程 TA / 教師 / 管理員
+- Body：`{"tag_id": 1}`（也支援 `tagId`）
+
+成功回應（201）：
+```json
+{
+  "detail": "Tag added",
+  "tag": {"id":1, "name":"陣列", "usage_count":13}
+}
+```
+
+錯誤：
+- 400 缺少或無效的 `tag_id` / 標籤已存在於題目
+- 404 題目不存在 / 標籤不存在
+- 403 權限不足
+
+**cURL**
+```bash
+curl -X POST "http://127.0.0.1:8000/problem/$PROBLEM_ID/tags" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"tag_id":1}' | jq
+```
+
+### 4. 從題目移除標籤
+- 路徑：`DELETE /problem/<problem_id>/tags/<tag_id>`
+- 權限：題目擁有者 / 課程 TA / 教師 / 管理員
+
+成功回應（200）：
+```json
+{
+  "detail": "Tag removed",
+  "tag": {"id":1, "name":"陣列", "usage_count":12}
+}
+```
+
+錯誤：
+- 404 題目不存在 / 標籤不存在 / 關聯不存在
+- 403 權限不足
+- 400 無效 tag_id 格式
+
+**cURL**
+```bash
+curl -X DELETE "http://127.0.0.1:8000/problem/$PROBLEM_ID/tags/1" \
+  -H "Authorization: Bearer $TOKEN" | jq
+```
+
+### 使用計數（usage_count）說明
+`usage_count` 代表目前有多少題目關聯此標籤：
+- 新增標籤到題目會遞增。
+- 從題目移除標籤會遞減。
+- 透過舊的整批覆蓋（建立/編輯題目時傳 `tags` 陣列）目前不會即時重算；建議後續改用上述增/刪 API 保持數值正確。
+
+---
+
 ## 完整測試流程範例（點讚功能）
 
 ```bash
