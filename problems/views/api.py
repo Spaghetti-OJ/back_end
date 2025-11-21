@@ -23,7 +23,7 @@ from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnl
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 
-from ..models import Problems, Problem_subtasks, Test_cases, Tags
+from ..models import Problems, Problem_subtasks, Test_cases, Tags, Problem_tags
 from ..serializers import (
     ProblemSerializer, ProblemDetailSerializer, ProblemStudentSerializer,
     SubtaskSerializer, TestCaseSerializer, TagSerializer
@@ -111,10 +111,114 @@ class TestCasesViewSet(viewsets.ModelViewSet):
         self._ensure_owner(subtask)
         instance.delete()
 
-class TagsViewSet(viewsets.ModelViewSet):
-    queryset = Tags.objects.all().order_by("name")
-    serializer_class = TagSerializer
+class TagListCreateView(APIView):
+    """GET /tags/ 取得所有標籤
+    POST /tags/ 建立新標籤（需要登入，建議僅教師/管理員；此處暫允任何登入使用者）
+    """
     permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get(self, request):
+        tags = Tags.objects.all().order_by('name')
+        return Response(TagSerializer(tags, many=True).data)
+
+    def post(self, request):
+        ser = TagSerializer(data=request.data)
+        if not ser.is_valid():
+            return Response(ser.errors, status=422)
+        tag = ser.save()
+        return Response(TagSerializer(tag).data, status=201)
+
+
+class ProblemTagAddView(APIView):
+    """POST /problem/<id>/tags  將現有標籤加入題目
+    Body: {"tag_id": 1} 或 {"tagId": 1}
+    權限：題目擁有者 / 課程 TA / 教師 / 管理員
+    若標籤已存在於題目，回傳 400。
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_problem_for_modify(self, problem_id, user):
+        problem = get_object_or_404(Problems, pk=problem_id)
+        if user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher']:
+            return problem
+        if problem.creator_id == user:
+            return problem
+        if problem.course_id:
+            from courses.models import Course_members
+            is_staff = Course_members.objects.filter(
+                course_id=problem.course_id,
+                user_id=user,
+                role__in=['ta', 'teacher']
+            ).exists()
+            if is_staff:
+                return problem
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("Not enough permission to modify problem tags.")
+
+    def post(self, request, pk):
+        problem = self._get_problem_for_modify(pk, request.user)
+        tag_id = request.data.get('tag_id') or request.data.get('tagId')
+        if tag_id is None:
+            return Response({"detail": "tag_id is required"}, status=400)
+        try:
+            tag_id = int(tag_id)
+        except (ValueError, TypeError):
+            return Response({"detail": "Invalid tag_id"}, status=400)
+        tag = Tags.objects.filter(pk=tag_id).first()
+        if not tag:
+            return Response({"detail": "Tag not found."}, status=404)
+        # 已存在關聯？
+        if Problem_tags.objects.filter(problem_id=problem, tag_id=tag).exists():
+            return Response({"detail": "Tag already attached to problem."}, status=400)
+        from django.db.models import F
+        Problem_tags.objects.create(problem_id=problem, tag_id=tag, added_by=request.user)
+        Tags.objects.filter(pk=tag.pk).update(usage_count=F('usage_count') + 1)
+        tag.refresh_from_db()
+        return Response({"detail": "Tag added", "tag": TagSerializer(tag).data}, status=201)
+
+
+class ProblemTagRemoveView(APIView):
+    """DELETE /problem/<id>/tags/<tag_id>  從題目移除標籤
+    權限：題目擁有者 / 課程 TA / 教師 / 管理員
+    若關聯不存在則回傳 404。
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_problem_for_modify(self, problem_id, user):
+        problem = get_object_or_404(Problems, pk=problem_id)
+        if user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher']:
+            return problem
+        if problem.creator_id == user:
+            return problem
+        if problem.course_id:
+            from courses.models import Course_members
+            is_staff = Course_members.objects.filter(
+                course_id=problem.course_id,
+                user_id=user,
+                role__in=['ta', 'teacher']
+            ).exists()
+            if is_staff:
+                return problem
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("Not enough permission to modify problem tags.")
+
+    def delete(self, request, pk, tag_id):
+        problem = self._get_problem_for_modify(pk, request.user)
+        try:
+            tag_id_int = int(tag_id)
+        except (ValueError, TypeError):
+            return Response({"detail": "Invalid tag_id"}, status=400)
+        tag = Tags.objects.filter(pk=tag_id_int).first()
+        if not tag:
+            return Response({"detail": "Tag not found."}, status=404)
+        rel = Problem_tags.objects.filter(problem_id=problem, tag_id=tag).first()
+        if not rel:
+            return Response({"detail": "Tag not attached to this problem."}, status=404)
+        from django.db.models import F
+        rel.delete()
+        Tags.objects.filter(pk=tag.pk).update(usage_count=F('usage_count') - 1)
+        tag.refresh_from_db()
+        return Response({"detail": "Tag removed", "tag": TagSerializer(tag).data}, status=200)
 
 
 class ProblemPagination(PageNumberPagination):
