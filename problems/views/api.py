@@ -122,8 +122,6 @@ class TagListCreateView(APIView):
         return Response(TagSerializer(tags, many=True).data)
 
     def post(self, request):
-        if not request.user.is_authenticated:
-            return Response({"detail": "Authentication required."}, status=401)
         ser = TagSerializer(data=request.data)
         if not ser.is_valid():
             return Response(ser.errors, status=422)
