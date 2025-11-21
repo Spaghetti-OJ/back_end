@@ -83,7 +83,7 @@ class ApiTokenDetailView(APIView):
         return api_response(
             None, 
             "Token 詳情端點尚未實作",
-            status_code=status.HTTP_404_NOT_FOUND
+            status_code=status.HTTP_501_NOT_IMPLEMENTED
         )
 
     def delete(self, request, tokenId):
