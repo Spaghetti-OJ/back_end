@@ -35,35 +35,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 
-class MeSerializer(serializers.ModelSerializer):
-    class ProfileSerializer(serializers.Serializer):
-        student_id = serializers.CharField()
-        bio = serializers.CharField()
-        avatar = serializers.ImageField()
-        email_verified = serializers.BooleanField()
-        updated_at = serializers.DateTimeField()
-
-    profile = serializers.SerializerMethodField()
-
-    class Meta:
-        model = User
-        fields = ['id','username','email','real_name','identity','date_joined','last_login','profile']
-
-    def get_profile(self, obj):
-        try:
-            p = obj.userprofile
-            return {
-                "student_id": p.student_id,
-                "bio": p.bio,
-                "avatar": p.avatar.url if p.avatar else None,
-                "email_verified": p.email_verified,
-                "updated_at": p.updated_at,
-            }
-        except UserProfile.DoesNotExist:
-            return {
-                "student_id": "",
-                "bio": "",
-                "avatar": None,
-                "email_verified": False,
-                "updated_at": None,
-            }
+class MeSerializer(serializers.Serializer):
+    userid = serializers.CharField(source="id", read_only=True)
+    username = serializers.CharField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+    role = serializers.CharField(source="identity", read_only=True)

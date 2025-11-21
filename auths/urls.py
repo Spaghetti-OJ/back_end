@@ -13,4 +13,5 @@ urlpatterns = [
     path('session/revoke/', SessionRevokeView.as_view(), name='auth-session-revoke'),
     path("refresh/", TokenRefreshView.as_view(), name="token_refresh"), 
     path("verify/", TokenVerifyView.as_view(), name="token_verify"),
+    path('me/', MeView.as_view(), name='me'),
 ]

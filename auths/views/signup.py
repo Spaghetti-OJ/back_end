@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 from auths.serializers.signup import RegisterSerializer, MeSerializer
+from rest_framework.permissions import IsAuthenticated
 
 User = get_user_model()
 
@@ -25,6 +26,9 @@ class RegisterView(generics.CreateAPIView):
         return api_response(data=response.data, status_code=response.status_code)
 
 class MeView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
-        return api_response(data=MeSerializer(request.user).data)
+        user = request.user
+        data = MeSerializer(user).data
+        return api_response(data=data, message="Get current user")
