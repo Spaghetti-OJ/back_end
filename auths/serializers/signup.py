@@ -39,4 +39,4 @@ class MeSerializer(serializers.Serializer):
     userid = serializers.CharField(source="id", read_only=True)
     username = serializers.CharField(read_only=True)
     email = serializers.EmailField(read_only=True)
-    role = serializers.CharField(read_only=True)
+    role = serializers.CharField(source="identity", read_only=True)
