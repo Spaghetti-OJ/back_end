@@ -336,7 +336,7 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 
 ---
 
-## 取得當前登入使用者資訊 API
+## GET /auth/me/
 
 **路徑**：`GET /auth/me/`
 
