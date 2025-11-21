@@ -29,6 +29,6 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        user = request.user          
+        user = request.user
         data = MeSerializer(user).data
         return api_response(data=data, message="Get current user")
