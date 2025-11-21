@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import permissions, status
-from rest_framework.response import Response
 from rest_framework.views import APIView
+from ..common.responses import api_response
 
 from ..models import Course_members, Courses, CourseGrade
 from ..serializers import (
@@ -31,36 +31,36 @@ class CourseGradeView(APIView):
     def get(self, request, course_id, student):
         course = self._get_course(course_id)
         if course is None:
-            return Response(
-                {"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND
+            return api_response(
+                message="Course not found.", status_code=status.HTTP_404_NOT_FOUND
             )
 
         target_student = self._get_student(student)
         if target_student is None:
-            return Response(
-                {"message": "The student is not in the course."},
-                status=status.HTTP_404_NOT_FOUND,
+            return api_response(
+                message="The student is not in the course.",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         if not self._is_course_member(course, request.user):
-            return Response(
-                {"message": "You are not in this course."},
-                status=status.HTTP_403_FORBIDDEN,
+            return api_response(
+                message="You are not in this course.",
+                status_code=status.HTTP_403_FORBIDDEN,
             )
 
         if (
             getattr(request.user, "identity", None) == User.Identity.STUDENT
             and request.user != target_student
         ):
-            return Response(
-                {"message": "You can only view your score."},
-                status=status.HTTP_403_FORBIDDEN,
+            return api_response(
+                message="You can only view your score.",
+                status_code=status.HTTP_403_FORBIDDEN,
             )
 
         if not self._is_student_in_course(course, target_student):
-            return Response(
-                {"message": "The student is not in the course."},
-                status=status.HTTP_404_NOT_FOUND,
+            return api_response(
+                message="The student is not in the course.",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         grades_qs = CourseGrade.objects.filter(
@@ -69,41 +69,43 @@ class CourseGradeView(APIView):
         ).order_by("-created_at", "-id")
 
         grade_data = CourseGradeItemSerializer(grades_qs, many=True).data
-        payload = {"message": "Success.", "grades": grade_data}
+        payload = {"grades": grade_data}
         serializer = self.serializer_class(data=payload)
         serializer.is_valid(raise_exception=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return api_response(
+            data=serializer.data, message="Success.", status_code=status.HTTP_200_OK
+        )
 
     def post(self, request, course_id, student):
         course = self._get_course(course_id)
         if course is None:
-            return Response(
-                {"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND
+            return api_response(
+                message="Course not found.", status_code=status.HTTP_404_NOT_FOUND
             )
 
         target_student = self._get_student(student)
         if target_student is None:
-            return Response(
-                {"message": "The student is not in the course."},
-                status=status.HTTP_404_NOT_FOUND,
+            return api_response(
+                message="The student is not in the course.",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         if not self._is_course_member(course, request.user):
-            return Response(
-                {"message": "You are not in this course."},
-                status=status.HTTP_403_FORBIDDEN,
+            return api_response(
+                message="You are not in this course.",
+                status_code=status.HTTP_403_FORBIDDEN,
             )
 
         if not self._has_grading_permission(course, request.user):
-            return Response(
-                {"message": "You can only view your score."},
-                status=status.HTTP_403_FORBIDDEN,
+            return api_response(
+                message="You can only view your score.",
+                status_code=status.HTTP_403_FORBIDDEN,
             )
 
         if not self._is_student_in_course(course, target_student):
-            return Response(
-                {"message": "The student is not in the course."},
-                status=status.HTTP_404_NOT_FOUND,
+            return api_response(
+                message="The student is not in the course.",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = self.create_serializer_class(
@@ -113,51 +115,51 @@ class CourseGradeView(APIView):
         if not serializer.is_valid():
             detail = self._extract_error_detail(serializer.errors)
             message = str(detail) if detail else "Invalid data."
-            return Response(
-                {"message": message}, status=status.HTTP_400_BAD_REQUEST
+            return api_response(
+                message=message, status_code=status.HTTP_400_BAD_REQUEST
             )
 
         serializer.save(course=course, student=target_student)
-        return Response({"message": "Success."}, status=status.HTTP_200_OK)
+        return api_response(message="Success.", status_code=status.HTTP_200_OK)
 
     def delete(self, request, course_id, student):
         course = self._get_course(course_id)
         if course is None:
-            return Response(
-                {"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND
+            return api_response(
+                message="Course not found.", status_code=status.HTTP_404_NOT_FOUND
             )
 
         target_student = self._get_student(student)
         if target_student is None:
-            return Response(
-                {"message": "The student is not in the course."},
-                status=status.HTTP_404_NOT_FOUND,
+            return api_response(
+                message="The student is not in the course.",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         if not self._is_course_member(course, request.user):
-            return Response(
-                {"message": "You are not in this course."},
-                status=status.HTTP_403_FORBIDDEN,
+            return api_response(
+                message="You are not in this course.",
+                status_code=status.HTTP_403_FORBIDDEN,
             )
 
         if not self._has_grading_permission(course, request.user):
-            return Response(
-                {"message": "You can only view your score."},
-                status=status.HTTP_403_FORBIDDEN,
+            return api_response(
+                message="You can only view your score.",
+                status_code=status.HTTP_403_FORBIDDEN,
             )
 
         if not self._is_student_in_course(course, target_student):
-            return Response(
-                {"message": "The student is not in the course."},
-                status=status.HTTP_404_NOT_FOUND,
+            return api_response(
+                message="The student is not in the course.",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = self.delete_serializer_class(data=request.data)
         if not serializer.is_valid():
             detail = self._extract_error_detail(serializer.errors)
             message = str(detail) if detail else "Invalid data."
-            return Response(
-                {"message": message}, status=status.HTTP_400_BAD_REQUEST
+            return api_response(
+                message=message, status_code=status.HTTP_400_BAD_REQUEST
             )
 
         title = serializer.validated_data["title"]
@@ -168,52 +170,51 @@ class CourseGradeView(APIView):
                 title=title,
             )
         except CourseGrade.DoesNotExist:
-            return Response(
-                {"message": "Score not found."},
-                status=status.HTTP_404_NOT_FOUND,
+            return api_response(
+                message="Score not found.", status_code=status.HTTP_404_NOT_FOUND
             )
 
         grade.delete()
-        return Response({"message": "Success."}, status=status.HTTP_200_OK)
+        return api_response(message="Success.", status_code=status.HTTP_200_OK)
 
     def put(self, request, course_id, student):
         course = self._get_course(course_id)
         if course is None:
-            return Response(
-                {"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND
+            return api_response(
+                message="Course not found.", status_code=status.HTTP_404_NOT_FOUND
             )
 
         target_student = self._get_student(student)
         if target_student is None:
-            return Response(
-                {"message": "The student is not in the course."},
-                status=status.HTTP_404_NOT_FOUND,
+            return api_response(
+                message="The student is not in the course.",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         if not self._is_course_member(course, request.user):
-            return Response(
-                {"message": "You are not in this course."},
-                status=status.HTTP_403_FORBIDDEN,
+            return api_response(
+                message="You are not in this course.",
+                status_code=status.HTTP_403_FORBIDDEN,
             )
 
         if not self._has_grading_permission(course, request.user):
-            return Response(
-                {"message": "You can only view your score."},
-                status=status.HTTP_403_FORBIDDEN,
+            return api_response(
+                message="You can only view your score.",
+                status_code=status.HTTP_403_FORBIDDEN,
             )
 
         if not self._is_student_in_course(course, target_student):
-            return Response(
-                {"message": "The student is not in the course."},
-                status=status.HTTP_404_NOT_FOUND,
+            return api_response(
+                message="The student is not in the course.",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = self.update_serializer_class(data=request.data)
         if not serializer.is_valid():
             detail = self._extract_error_detail(serializer.errors)
             message = str(detail) if detail else "Invalid data."
-            return Response(
-                {"message": message}, status=status.HTTP_400_BAD_REQUEST
+            return api_response(
+                message=message, status_code=status.HTTP_400_BAD_REQUEST
             )
 
         title = serializer.validated_data["title"]
@@ -224,9 +225,8 @@ class CourseGradeView(APIView):
                 title=title,
             )
         except CourseGrade.DoesNotExist:
-            return Response(
-                {"message": "Score not found."},
-                status=status.HTTP_404_NOT_FOUND,
+            return api_response(
+                message="Score not found.", status_code=status.HTTP_404_NOT_FOUND
             )
 
         new_title = serializer.validated_data.get("new_title") or title
@@ -235,9 +235,8 @@ class CourseGradeView(APIView):
             student=target_student,
             title=new_title,
         ).exclude(pk=grade.pk).exists():
-            return Response(
-                {"message": "This title is taken."},
-                status=status.HTTP_400_BAD_REQUEST,
+            return api_response(
+                message="This title is taken.", status_code=status.HTTP_400_BAD_REQUEST
             )
 
         grade.title = new_title
@@ -245,7 +244,7 @@ class CourseGradeView(APIView):
         grade.score = serializer.validated_data["score"]
         grade.save(update_fields=["title", "content", "score"])
 
-        return Response({"message": "Success."}, status=status.HTTP_200_OK)
+        return api_response(message="Success.", status_code=status.HTTP_200_OK)
 
     @staticmethod
     def _get_course(course_id):
