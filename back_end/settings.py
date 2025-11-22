@@ -190,3 +190,11 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,                   # 舊 refresh 自動黑名單
     "UPDATE_LAST_LOGIN": True,                          # 可選
 }
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "New NOJ API Documentation",
+    "DESCRIPTION": "目前後端實作的NOJ API文件(會根據程式碼自動生成)",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+
+}
