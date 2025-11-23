@@ -203,3 +203,94 @@ class TestDraftDeleteAPI(DraftAPITestCase):
         response = self.client.delete('/editor/draft/9999/')
         
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+@pytest.mark.django_db
+class TestDraftSecurityAPI(DraftAPITestCase):
+    """測試草稿安全性"""
+    
+    def test_cannot_create_oversized_draft(self):
+        """測試無法創建超大草稿（DoS 攻擊防護）"""
+        self.client.force_authenticate(user=self.user1)
+        
+        # 創建超過 64KB 的代碼
+        oversized_code = 'a' * 70000  # 70KB
+        
+        response = self.client.put('/editor/draft/1001/', {
+            'language_type': 2,
+            'source_code': oversized_code
+        })
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        data = self.get_api_data(response)
+        self.assertIn('source_code', data)
+        self.assertIn('too large', str(data['source_code'][0]).lower())
+    
+    def test_max_size_draft_accepted(self):
+        """測試 64KB 邊界值可以接受"""
+        self.client.force_authenticate(user=self.user1)
+        
+        # 創建剛好 64KB 的代碼（65535 bytes）
+        max_size_code = 'x' * 65535
+        
+        response = self.client.put('/editor/draft/1001/', {
+            'language_type': 2,
+            'source_code': max_size_code
+        })
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.get_api_message(response), '草稿保存成功')
+    
+    def test_cannot_update_other_user_draft(self):
+        """測試無法更新其他用戶的草稿"""
+        # user1 創建草稿
+        draft = CodeDraft.objects.create(
+            user=self.user1,
+            problem_id=1001,
+            language_type=2,
+            source_code='user1 code'
+        )
+        
+        # user2 嘗試更新
+        self.client.force_authenticate(user=self.user2)
+        
+        response = self.client.put('/editor/draft/1001/', {
+            'language_type': 3,
+            'source_code': 'malicious code'
+        })
+        
+        # user2 會創建自己的草稿，不會覆蓋 user1 的
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # 驗證 user1 的草稿未被修改
+        draft.refresh_from_db()
+        self.assertEqual(draft.source_code, 'user1 code')
+        self.assertEqual(draft.language_type, 2)
+        
+        # 驗證 user2 創建了自己的草稿
+        user2_draft = CodeDraft.objects.get(user=self.user2, problem_id=1001)
+        self.assertEqual(user2_draft.source_code, 'malicious code')
+        self.assertEqual(user2_draft.language_type, 3)
+    
+    def test_cannot_delete_other_user_draft(self):
+        """測試無法刪除其他用戶的草稿"""
+        # user1 創建草稿
+        draft = CodeDraft.objects.create(
+            user=self.user1,
+            problem_id=1001,
+            language_type=2,
+            source_code='user1 code'
+        )
+        
+        # user2 嘗試刪除
+        self.client.force_authenticate(user=self.user2)
+        
+        response = self.client.delete('/editor/draft/1001/')
+        
+        # 應該返回 404，而不是成功刪除
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        
+        # 驗證 user1 的草稿仍然存在
+        self.assertTrue(
+            CodeDraft.objects.filter(user=self.user1, problem_id=1001).exists()
+        )

@@ -42,6 +42,9 @@ class DraftSerializer(serializers.ModelSerializer):
 class DraftCreateUpdateSerializer(serializers.ModelSerializer):
     """草稿創建/更新序列化器"""
     
+    # 最大代碼大小：64KB（與 Submission API 一致）
+    MAX_CODE_SIZE = 65535
+    
     class Meta:
         model = CodeDraft
         fields = [
@@ -63,7 +66,16 @@ class DraftCreateUpdateSerializer(serializers.ModelSerializer):
         return value
     
     def validate_source_code(self, value):
-        """驗證源代碼不為空"""
+        """驗證源代碼不為空且不超過大小限制"""
         if not value or not value.strip():
             raise serializers.ValidationError("Source code cannot be empty")
+        
+        # 檢查代碼大小（使用 UTF-8 編碼計算字節數）
+        code_size = len(value.encode('utf-8'))
+        if code_size > self.MAX_CODE_SIZE:
+            raise serializers.ValidationError(
+                f"Source code too large. Maximum size is {self.MAX_CODE_SIZE} bytes (64KB), "
+                f"but got {code_size} bytes"
+            )
+        
         return value
