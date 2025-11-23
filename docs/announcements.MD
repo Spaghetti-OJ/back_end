@@ -75,7 +75,7 @@ curl http://127.0.0.1:8000/ann/<course_id>/ann \
 | ----------- | ------ | ---- | ------------------------ |
 | `title`     | string | ✅   | 公告標題，最長 200 字    |
 | `content`   | string | ✅   | 公告內容（Markdown）     |
-| `course_id` | UUID   | ✅   | 目標課程 ID              |
+| `course_id` | int   | ✅   | 目標課程 ID（整數）              |
 | `is_pinned` | bool   | ❌   | 是否置頂，預設為 `false` |
 
 **成功回應 (201 Created)**
@@ -245,7 +245,7 @@ curl -X POST http://127.0.0.1:8000/ann/ \
     -d '{
       "title": "標題",
       "content": "內容",
-      "course_id": "課程UUID",
+      "course_id": 42,
       "is_pinned": true
     }'
 curl http://127.0.0.1:8000/ann/<course_id>/<ann_id> \
