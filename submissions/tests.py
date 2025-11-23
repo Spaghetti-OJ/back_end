@@ -13,11 +13,11 @@ from hypothesis.extra.django import TestCase as HypothesisTestCase
 
 from .models import (
     Submission, SubmissionResult, UserProblemStats, UserProblemSolveStatus,
-    UserProblemQuota, CustomTest, CodeDraft, Editorial, EditorialLike
+    UserProblemQuota, CustomTest, Editorial, EditorialLike
 )
 from .serializers import (
     SubmissionCreateSerializer, SubmissionSerializer,
-    CustomTestCreateSerializer, CodeDraftCreateSerializer, 
+    CustomTestCreateSerializer,
     EditorialCreateSerializer
 )
 

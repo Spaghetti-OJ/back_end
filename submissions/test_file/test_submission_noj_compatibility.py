@@ -53,6 +53,36 @@ class NOJCompatibilityTestCase(APITestCase):
         """以指定用戶身份認證"""
         self.client.force_authenticate(user=user)
     
+    def get_api_message(self, response):
+        """
+        從 api_response 格式的響應中提取 message
+        新格式: {"data": ..., "message": "...", "status": "ok/error"}
+        """
+        if isinstance(response.data, dict) and 'message' in response.data:
+            return response.data['message']
+        # 兼容舊格式（直接返回字串）
+        return response.data
+    
+    def get_api_data(self, response):
+        """
+        從 api_response 格式的響應中提取 data
+        新格式: {"data": {...}, "message": "...", "status": "ok/error"}
+        """
+        if isinstance(response.data, dict) and 'data' in response.data:
+            return response.data['data']
+        # 兼容舊格式（直接返回數據）
+        return response.data
+    
+    def get_api_status(self, response):
+        """
+        從 api_response 格式的響應中提取 status
+        新格式: {"data": ..., "message": "...", "status": "ok/error"}
+        """
+        if isinstance(response.data, dict) and 'status' in response.data:
+            return response.data['status']
+        # 根據 HTTP 狀態碼推斷
+        return "ok" if 200 <= response.status_code < 400 else "error"
+    
     def get_submission_create_url(self):
         """獲取創建提交的 URL"""
         return reverse('submissions:submission-list-create')
@@ -92,7 +122,7 @@ class TestNOJSubmissionCreateAPI(NOJCompatibilityTestCase):
         response = self.client.post(self.get_submission_create_url(), data)
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data, "problemId is required!")
+        self.assertEqual(self.get_api_message(response), "problemId is required!")
     
     def test_create_submission_invalid_problem_id(self):
         """測試 NOJ 格式：無效的 problem_id"""
@@ -106,7 +136,7 @@ class TestNOJSubmissionCreateAPI(NOJCompatibilityTestCase):
         response = self.client.post(self.get_submission_create_url(), data)
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data, "problemId is required!")
+        self.assertEqual(self.get_api_message(response), "problemId is required!")
     
     def test_create_submission_missing_language_type(self):
         """測試 NOJ 格式：缺少 language_type"""
@@ -119,7 +149,7 @@ class TestNOJSubmissionCreateAPI(NOJCompatibilityTestCase):
         response = self.client.post(self.get_submission_create_url(), data)
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data, "post data missing!")
+        self.assertEqual(self.get_api_message(response), "post data missing!")
     
     def test_create_submission_invalid_language_type(self):
         """測試 NOJ 格式：無效的 language_type"""
@@ -133,7 +163,7 @@ class TestNOJSubmissionCreateAPI(NOJCompatibilityTestCase):
         response = self.client.post(self.get_submission_create_url(), data)
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, "not allowed language")
+        self.assertEqual(self.get_api_message(response), "not allowed language")
     
     def test_create_submission_nonexistent_problem(self):
         """測試 NOJ 格式：不存在的題目"""
@@ -147,7 +177,7 @@ class TestNOJSubmissionCreateAPI(NOJCompatibilityTestCase):
         response = self.client.post(self.get_submission_create_url(), data)
         
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data, "Unexisted problem id.")
+        self.assertEqual(self.get_api_message(response), "Unexisted problem id.")
     
     def test_create_submission_success_noj_format(self):
         """測試 NOJ 格式：成功創建提交"""
@@ -161,11 +191,11 @@ class TestNOJSubmissionCreateAPI(NOJCompatibilityTestCase):
         response = self.client.post(self.get_submission_create_url(), data)
         
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        # NOJ 格式：submission recieved.{submissionId}
-        self.assertTrue(response.data.startswith("submission recieved."))
+        # NOJ 格式：submission received.{submissionId}
+        self.assertTrue(self.get_api_message(response).startswith("submission received."))
         
         # 驗證提交已創建
-        submission_id = response.data.split('.')[1]
+        submission_id = self.get_api_message(response).split('.')[1]
         self.assertTrue(Submission.objects.filter(id=submission_id).exists())
     
     def test_create_submission_valid_languages(self):
@@ -183,7 +213,7 @@ class TestNOJSubmissionCreateAPI(NOJCompatibilityTestCase):
             response = self.client.post(self.get_submission_create_url(), data)
             
             self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-            self.assertTrue(response.data.startswith("submission recieved."))
+            self.assertTrue(self.get_api_message(response).startswith("submission received."))
 
 
 class TestNOJSubmissionUploadAPI(NOJCompatibilityTestCase):
@@ -215,7 +245,7 @@ class TestNOJSubmissionUploadAPI(NOJCompatibilityTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, "user not equal!")
+        self.assertEqual(self.get_api_message(response), "user not equal!")
     
     def test_upload_code_already_judged(self):
         """測試 NOJ 格式：已完成判題"""
@@ -240,7 +270,7 @@ class TestNOJSubmissionUploadAPI(NOJCompatibilityTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, f"{judged_submission.id} has finished judgement.")
+        self.assertEqual(self.get_api_message(response), f"{judged_submission.id} has finished judgement.")
     
     def test_upload_code_already_uploaded(self):
         """測試 NOJ 格式：已上傳程式碼"""
@@ -265,7 +295,7 @@ class TestNOJSubmissionUploadAPI(NOJCompatibilityTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, f"{uploaded_submission.id} has been uploaded source file!")
+        self.assertEqual(self.get_api_message(response), f"{uploaded_submission.id} has been uploaded source file!")
     
     def test_upload_code_empty_file(self):
         """測試 NOJ 格式：空檔案"""
@@ -281,7 +311,7 @@ class TestNOJSubmissionUploadAPI(NOJCompatibilityTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data, "empty file")
+        self.assertEqual(self.get_api_message(response), "empty file")
     
     def test_upload_code_whitespace_only(self):
         """測試 NOJ 格式：只有空白字符"""
@@ -297,7 +327,7 @@ class TestNOJSubmissionUploadAPI(NOJCompatibilityTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data, "empty file")
+        self.assertEqual(self.get_api_message(response), "empty file")
     
     def test_upload_code_nonexistent_submission(self):
         """測試 NOJ 格式：提交不存在"""
@@ -314,7 +344,7 @@ class TestNOJSubmissionUploadAPI(NOJCompatibilityTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data, "can not find the source file")
+        self.assertEqual(self.get_api_message(response), "can not find the source file")
     
     def test_upload_code_success_noj_format(self):
         """測試 NOJ 格式：成功上傳程式碼"""
@@ -330,7 +360,7 @@ class TestNOJSubmissionUploadAPI(NOJCompatibilityTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data, f"{self.empty_submission.id} send to judgement.")
+        self.assertEqual(self.get_api_message(response), f"{self.empty_submission.id} send to judgement.")
         
         # 驗證程式碼已保存
         self.empty_submission.refresh_from_db()
@@ -348,7 +378,7 @@ class TestNOJSubmissionRetrieveAPI(NOJCompatibilityTestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('message', response.data)
-        self.assertEqual(response.data['message'], 'here you are, bro')
+        self.assertEqual(self.get_api_message(response), 'here you are, bro')
     
     def test_get_submission_detail_noj_format(self):
         """測試 NOJ 格式：獲取提交詳情"""
@@ -358,7 +388,7 @@ class TestNOJSubmissionRetrieveAPI(NOJCompatibilityTestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('message', response.data)
-        self.assertEqual(response.data['message'], 'here you are, bro')
+        self.assertEqual(self.get_api_message(response), 'here you are, bro')
     
     def test_get_submission_detail_no_permission(self):
         """測試 NOJ 格式：無權限查看提交"""
@@ -367,7 +397,7 @@ class TestNOJSubmissionRetrieveAPI(NOJCompatibilityTestCase):
         response = self.client.get(self.get_submission_detail_url(self.submission1.id))
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, "no permission")
+        self.assertEqual(self.get_api_message(response), "no permission")
     
     def test_get_submission_detail_not_found(self):
         """測試 NOJ 格式：提交不存在"""
@@ -377,7 +407,7 @@ class TestNOJSubmissionRetrieveAPI(NOJCompatibilityTestCase):
         response = self.client.get(self.get_submission_detail_url(fake_uuid))
         
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data, "can not find submission")
+        self.assertEqual(self.get_api_message(response), "can not find submission")
     
     def test_get_submission_code_noj_format(self):
         """測試 NOJ 格式：獲取提交程式碼"""
@@ -391,7 +421,7 @@ class TestNOJSubmissionRetrieveAPI(NOJCompatibilityTestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('message', response.data)
-        self.assertEqual(response.data['message'], 'here you are, bro')
+        self.assertEqual(self.get_api_message(response), 'here you are, bro')
     
     def test_get_submission_code_no_source_file(self):
         """測試 NOJ 格式：找不到程式碼檔案"""
@@ -404,7 +434,7 @@ class TestNOJSubmissionRetrieveAPI(NOJCompatibilityTestCase):
         response = self.client.get(self.get_submission_code_url(self.submission1.id))
         
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data, "can not find the source file")
+        self.assertEqual(self.get_api_message(response), "can not find the source file")
     
     def test_get_submission_stdout_noj_format(self):
         """測試 NOJ 格式：獲取提交輸出"""
@@ -414,7 +444,7 @@ class TestNOJSubmissionRetrieveAPI(NOJCompatibilityTestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('message', response.data)
-        self.assertEqual(response.data['message'], 'here you are, bro')
+        self.assertEqual(self.get_api_message(response), 'here you are, bro')
 
 
 class TestNOJSubmissionRejudgeAPI(NOJCompatibilityTestCase):
@@ -427,7 +457,7 @@ class TestNOJSubmissionRejudgeAPI(NOJCompatibilityTestCase):
         response = self.client.get(self.get_submission_rejudge_url(self.submission1.id))
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, "no permission")
+        self.assertEqual(self.get_api_message(response), "no permission")
     
     def test_rejudge_submission_not_found(self):
         """測試 NOJ 格式：提交不存在"""
@@ -437,7 +467,7 @@ class TestNOJSubmissionRejudgeAPI(NOJCompatibilityTestCase):
         response = self.client.get(self.get_submission_rejudge_url(fake_uuid))
         
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data, "can not find submission")
+        self.assertEqual(self.get_api_message(response), "can not find submission")
     
     def test_rejudge_submission_no_source_code(self):
         """測試 NOJ 格式：沒有程式碼無法重新判題"""
@@ -455,7 +485,7 @@ class TestNOJSubmissionRejudgeAPI(NOJCompatibilityTestCase):
         response = self.client.get(self.get_submission_rejudge_url(empty_submission.id))
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data, "can not find the source file")
+        self.assertEqual(self.get_api_message(response), "can not find the source file")
     
     def test_rejudge_submission_success_noj_format(self):
         """測試 NOJ 格式：成功重新判題"""
@@ -469,7 +499,7 @@ class TestNOJSubmissionRejudgeAPI(NOJCompatibilityTestCase):
         response = self.client.get(self.get_submission_rejudge_url(self.submission1.id))
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data, f"{self.submission1.id} rejudge successfully.")
+        self.assertEqual(self.get_api_message(response), f"{self.submission1.id} rejudge successfully.")
 
 
 class TestNOJRankingAPI(NOJCompatibilityTestCase):
@@ -483,9 +513,9 @@ class TestNOJRankingAPI(NOJCompatibilityTestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('message', response.data)
-        self.assertEqual(response.data['message'], 'here you are, bro')
-        self.assertIn('ranking', response.data)
-        self.assertIsInstance(response.data['ranking'], list)
+        self.assertEqual(self.get_api_message(response), 'here you are, bro')
+        self.assertIn('ranking', self.get_api_data(response))
+        self.assertIsInstance(self.get_api_data(response)['ranking'], list)
 
 
 class TestNOJLanguageTypes(NOJCompatibilityTestCase):
@@ -524,9 +554,9 @@ class TestNOJLanguageTypes(NOJCompatibilityTestCase):
             response = self.client.post(self.get_submission_create_url(), data)
             
             self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-            self.assertTrue(response.data.startswith("submission recieved."))
+            self.assertTrue(self.get_api_message(response).startswith("submission received."))
             
             # 驗證創建的提交有正確的語言類型
-            submission_id = response.data.split('.')[1]
+            submission_id = self.get_api_message(response).split('.')[1]
             submission = Submission.objects.get(id=submission_id)
             self.assertEqual(submission.language_type, lang_type)

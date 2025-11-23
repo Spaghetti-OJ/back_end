@@ -8,6 +8,24 @@ from rest_framework.exceptions import PermissionDenied, NotFound, ValidationErro
 from django.utils import timezone
 import uuid
 
+# 統一的 API 響應格式
+def api_response(data=None, message="OK", status_code=200):
+    """
+    統一的 API 響應格式
+    Args:
+        data: 響應數據
+        message: 響應消息
+        status_code: HTTP 狀態碼
+    Returns:
+        Response 對象，包含標準格式的響應
+    """
+    status_str = "ok" if 200 <= status_code < 400 else "error"
+    return Response({
+        "data": data,
+        "message": message,
+        "status": status_str,
+    }, status=status_code)
+
 from .models import Editorial, EditorialLike
 from .serializers import (
     EditorialSerializer, 
@@ -51,6 +69,10 @@ class BasePermissionMixin:
     
     def check_submission_view_permission(self, user, submission):
         """檢查是否有查看提交的權限"""
+        # 0. 管理員和 staff 可以查看所有提交
+        if user.is_staff or user.is_superuser:
+            return True
+        
         # 1. 如果是提交者本人，可以查看
         if submission.user == user:
             return True
@@ -163,9 +185,10 @@ class EditorialListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
         try:
             self.check_teacher_permission(request.user, problem_id)
         except (PermissionDenied, NotFound) as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_403_FORBIDDEN
+            return api_response(
+                data=None,
+                message=str(e),
+                status_code=status.HTTP_403_FORBIDDEN
             )
         
         # 調用父類的 create 方法
@@ -254,18 +277,20 @@ def editorial_like_toggle(request, problem_id, solution_id):
     try:
         uuid.UUID(str(solution_id))
     except (ValueError, TypeError):
-        return Response(
-            {'error': '無效的題解ID格式'},
-            status=status.HTTP_400_BAD_REQUEST
+        return api_response(
+            data=None,
+            message='無效的題解ID格式',
+            status_code=status.HTTP_400_BAD_REQUEST
         )
     
     # 檢查問題是否存在
     try:
         Problems.objects.get(id=problem_id)
     except Problems.DoesNotExist:
-        return Response(
-            {'error': '問題不存在'},
-            status=status.HTTP_404_NOT_FOUND
+        return api_response(
+            data=None,
+            message='問題不存在',
+            status_code=status.HTTP_404_NOT_FOUND
         )
     
     # 驗證題解是否存在
@@ -288,9 +313,10 @@ def editorial_like_toggle(request, problem_id, solution_id):
             if request.method == 'POST':
                 # 按讚
                 if existing_like:
-                    return Response(
-                        {'detail': '您已經對這篇題解按過讚了'},
-                        status=status.HTTP_400_BAD_REQUEST
+                    return api_response(
+                        data=None,
+                        message='您已經對這篇題解按過讚了',
+                        status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
                 # 創建按讚記錄
@@ -304,21 +330,22 @@ def editorial_like_toggle(request, problem_id, solution_id):
                     likes_count=models.F('likes_count') + 1
                 )
                 
-                return Response(
-                    {
-                        'detail': '按讚成功',
+                return api_response(
+                    data={
                         'is_liked': True,
                         'likes_count': editorial.likes_count + 1
                     },
-                    status=status.HTTP_201_CREATED
+                    message='按讚成功',
+                    status_code=status.HTTP_201_CREATED
                 )
             
             elif request.method == 'DELETE':
                 # 取消按讚
                 if not existing_like:
-                    return Response(
-                        {'detail': '您尚未對這篇題解按讚'},
-                        status=status.HTTP_400_BAD_REQUEST
+                    return api_response(
+                        data=None,
+                        message='您尚未對這篇題解按讚',
+                        status_code=status.HTTP_400_BAD_REQUEST
                     )
                 
                 # 刪除按讚記錄
@@ -329,13 +356,13 @@ def editorial_like_toggle(request, problem_id, solution_id):
                     likes_count=models.F('likes_count') - 1
                 )
                 
-                return Response(
-                    {
-                        'detail': '取消按讚成功',
+                return api_response(
+                    data={
                         'is_liked': False,
                         'likes_count': max(0, editorial.likes_count - 1)
                     },
-                    status=status.HTTP_200_OK
+                    message='取消按讚成功',
+                    status_code=status.HTTP_200_OK
                 )
     
     except Exception as e:
@@ -344,9 +371,10 @@ def editorial_like_toggle(request, problem_id, solution_id):
         logger = logging.getLogger(__name__)
         logger.error(f"Editorial update failed: {str(e)}", exc_info=True)
         
-        return Response(
-            {'detail': '操作失敗，請稍後再試'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        return api_response(
+            data=None,
+            message='操作失敗，請稍後再試',
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
@@ -391,22 +419,22 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                 
                 if 'problem_id' in errors:
                     if 'required' in str(errors['problem_id']):
-                        return Response("problemId is required!", status=status.HTTP_400_BAD_REQUEST)
+                        return api_response(data=None, message="problemId is required!", status_code=status.HTTP_400_BAD_REQUEST)
                     elif 'min_value' in str(errors['problem_id']):
-                        return Response("problemId is required!", status=status.HTTP_400_BAD_REQUEST)
+                        return api_response(data=None, message="problemId is required!", status_code=status.HTTP_400_BAD_REQUEST)
                     else:
-                        return Response("Unexisted problem id.", status=status.HTTP_404_NOT_FOUND)
+                        return api_response(data=None, message="Unexisted problem id.", status_code=status.HTTP_404_NOT_FOUND)
                 
                 if 'language_type' in errors:
                     if 'required' in str(errors['language_type']):
-                        return Response("post data missing!", status=status.HTTP_400_BAD_REQUEST)
+                        return api_response(data=None, message="post data missing!", status_code=status.HTTP_400_BAD_REQUEST)
                     elif 'not allowed language' in str(errors['language_type']):
-                        return Response("not allowed language", status=status.HTTP_403_FORBIDDEN)
+                        return api_response(data=None, message="not allowed language", status_code=status.HTTP_403_FORBIDDEN)
                     else:
-                        return Response("invalid data!", status=status.HTTP_400_BAD_REQUEST)
+                        return api_response(data=None, message="invalid data!", status_code=status.HTTP_400_BAD_REQUEST)
                 
                 # 其他驗證錯誤
-                return Response("invalid data!", status=status.HTTP_400_BAD_REQUEST)
+                return api_response(data=None, message="invalid data!", status_code=status.HTTP_400_BAD_REQUEST)
             
             # TODO: 添加其他 NOJ 檢查
             # - problem permission denied
@@ -418,21 +446,22 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
             submission = serializer.save()
             
             # NOJ 格式響應
-            return Response(
-                f"submission received.{submission.id}",
-                status=status.HTTP_201_CREATED
+            return api_response(
+                data=None,
+                message=f"submission received.{submission.id}",
+                status_code=status.HTTP_201_CREATED
             )
         
         except ValidationError as e:
             # 序列化器拋出的驗證錯誤
             error_message = str(e.detail[0]) if hasattr(e, 'detail') and e.detail else str(e)
             if 'problem' in error_message.lower():
-                return Response("Unexisted problem id.", status=status.HTTP_404_NOT_FOUND)
-            return Response("invalid data!", status=status.HTTP_400_BAD_REQUEST)
+                return api_response(data=None, message="Unexisted problem id.", status_code=status.HTTP_404_NOT_FOUND)
+            return api_response(data=None, message="invalid data!", status_code=status.HTTP_400_BAD_REQUEST)
         
         except Exception as e:
             # 其他系統錯誤
-            return Response("invalid data!", status=status.HTTP_400_BAD_REQUEST)
+            return api_response(data=None, message="invalid data!", status_code=status.HTTP_400_BAD_REQUEST)
     
     def list(self, request, *args, **kwargs):
         """獲取提交列表 (NOJ 兼容版本)"""
@@ -443,19 +472,25 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             # NOJ 格式響應（分頁版本）
-            return Response({
-                'message': 'here you are, bro',
-                'results': serializer.data,
-                'count': queryset.count()
-            })
+            return api_response(
+                data={
+                    'results': serializer.data,
+                    'count': queryset.count()
+                },
+                message='here you are, bro',
+                status_code=status.HTTP_200_OK
+            )
         
         serializer = self.get_serializer(queryset, many=True)
         # NOJ 格式響應
-        return Response({
-            'message': 'here you are, bro',
-            'results': serializer.data,
-            'count': queryset.count()
-        })
+        return api_response(
+            data={
+                'results': serializer.data,
+                'count': queryset.count()
+            },
+            message='here you are, bro',
+            status_code=status.HTTP_200_OK
+        )
 
 
 class SubmissionRetrieveUpdateView(BasePermissionMixin, generics.RetrieveUpdateAPIView):
@@ -489,22 +524,23 @@ class SubmissionRetrieveUpdateView(BasePermissionMixin, generics.RetrieveUpdateA
             try:
                 submission = Submission.objects.select_related('user').get(id=submission_id)
             except Submission.DoesNotExist:
-                return Response("can not find submission", status=status.HTTP_404_NOT_FOUND)
+                return api_response(data=None, message="can not find submission", status_code=status.HTTP_404_NOT_FOUND)
             
             # 再檢查查看權限
             if not self.check_submission_view_permission(request.user, submission):
-                return Response("no permission", status=status.HTTP_403_FORBIDDEN)
+                return api_response(data=None, message="no permission", status_code=status.HTTP_403_FORBIDDEN)
             
             serializer = self.get_serializer(submission)
             
             # NOJ 格式響應：添加 message 字段
-            response_data = serializer.data.copy()
-            response_data['message'] = 'here you are, bro'
-            
-            return Response(response_data)
+            return api_response(
+                data=serializer.data,
+                message='here you are, bro',
+                status_code=status.HTTP_200_OK
+            )
         
         except Exception as e:
-            return Response("can not find submission", status=status.HTTP_404_NOT_FOUND)
+            return api_response(data=None, message="can not find submission", status_code=status.HTTP_404_NOT_FOUND)
     
     def put(self, request, *args, **kwargs):
         """上傳程式碼 (NOJ 兼容版本)"""
@@ -514,19 +550,19 @@ class SubmissionRetrieveUpdateView(BasePermissionMixin, generics.RetrieveUpdateA
             try:
                 submission = Submission.objects.get(id=submission_id)
             except Submission.DoesNotExist:
-                return Response("can not find the source file", status=status.HTTP_400_BAD_REQUEST)
+                return api_response(data=None, message="can not find the source file", status_code=status.HTTP_400_BAD_REQUEST)
             
             # NOJ 權限檢查
             if submission.user != request.user:
-                return Response("user not equal!", status=status.HTTP_403_FORBIDDEN)
+                return api_response(data=None, message="user not equal!", status_code=status.HTTP_403_FORBIDDEN)
             
             # 檢查是否已經判題完成
             if submission.is_judged:
-                return Response(f"{submission.id} has finished judgement.", status=status.HTTP_403_FORBIDDEN)
+                return api_response(data=None, message=f"{submission.id} has finished judgement.", status_code=status.HTTP_403_FORBIDDEN)
             
             # 檢查是否已經上傳過程式碼
             if submission.source_code and submission.source_code.strip():
-                return Response(f"{submission.id} has been uploaded source file!", status=status.HTTP_403_FORBIDDEN)
+                return api_response(data=None, message=f"{submission.id} has been uploaded source file!", status_code=status.HTTP_403_FORBIDDEN)
             
             # 檢查是否有程式碼內容
             source_code = request.data.get('source_code', '') if hasattr(request.data, 'get') else ''
@@ -538,32 +574,33 @@ class SubmissionRetrieveUpdateView(BasePermissionMixin, generics.RetrieveUpdateA
                 try:
                     source_code = code_file.read().decode('utf-8')
                 except UnicodeDecodeError:
-                    return Response("can not find the source file", status=status.HTTP_400_BAD_REQUEST)
+                    return api_response(data=None, message="can not find the source file", status_code=status.HTTP_400_BAD_REQUEST)
             
             if not source_code or not source_code.strip():
-                return Response("empty file", status=status.HTTP_400_BAD_REQUEST)
+                return api_response(data=None, message="empty file", status_code=status.HTTP_400_BAD_REQUEST)
             
             # 使用序列化器處理數據
             serializer = self.get_serializer(submission, data={'source_code': source_code})
             if not serializer.is_valid():
-                return Response("can not find the source file", status=status.HTTP_400_BAD_REQUEST)
+                return api_response(data=None, message="can not find the source file", status_code=status.HTTP_400_BAD_REQUEST)
             
             updated_submission = serializer.save()
             
             # NOJ 格式響應 - 對程式題回應判題開始
-            return Response(
-                f"{updated_submission.id} send to judgement.",
-                status=status.HTTP_200_OK
+            return api_response(
+                data=None,
+                message=f"{updated_submission.id} send to judgement.",
+                status_code=status.HTTP_200_OK
             )
         
         except Submission.DoesNotExist:
-            return Response("can not find the source file", status=status.HTTP_400_BAD_REQUEST)
+            return api_response(data=None, message="can not find the source file", status_code=status.HTTP_400_BAD_REQUEST)
         
         except PermissionDenied:
-            return Response("user not equal!", status=status.HTTP_403_FORBIDDEN)
+            return api_response(data=None, message="user not equal!", status_code=status.HTTP_403_FORBIDDEN)
         
         except Exception as e:
-            return Response("can not find the source file", status=status.HTTP_400_BAD_REQUEST)
+            return api_response(data=None, message="can not find the source file", status_code=status.HTTP_400_BAD_REQUEST)
 
 
 # 保留原來的個別 view 類以便需要時使用
@@ -585,17 +622,24 @@ class SubmissionListView(BasePermissionMixin, generics.ListAPIView):
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
-            paginated_response = self.get_paginated_response(serializer.data)
-            # NOJ 格式：添加標準消息
-            paginated_response.data['message'] = "here you are, bro"
-            return paginated_response
+            return api_response(
+                data={
+                    'results': serializer.data,
+                    'count': queryset.count()
+                },
+                message="here you are, bro",
+                status_code=status.HTTP_200_OK
+            )
         
         serializer = self.get_serializer(queryset, many=True)
-        return Response({
-            'message': 'here you are, bro',
-            'results': serializer.data,
-            'count': queryset.count()
-        })
+        return api_response(
+            data={
+                'results': serializer.data,
+                'count': queryset.count()
+            },
+            message='here you are, bro',
+            status_code=status.HTTP_200_OK
+        )
 
 
 class SubmissionDetailView(BasePermissionMixin, generics.RetrieveAPIView):
@@ -616,15 +660,17 @@ class SubmissionDetailView(BasePermissionMixin, generics.RetrieveAPIView):
             
             # 檢查查看權限
             if not self.check_submission_view_permission(request.user, submission):
-                return Response("no permission", status=status.HTTP_403_FORBIDDEN)
+                return api_response(data=None, message="no permission", status_code=status.HTTP_403_FORBIDDEN)
             
             serializer = self.get_serializer(submission)
-            response_data = serializer.data
-            response_data['message'] = 'here you are, bro'
-            return Response(response_data)
+            return api_response(
+                data=serializer.data,
+                message='here you are, bro',
+                status_code=status.HTTP_200_OK
+            )
         
         except Submission.DoesNotExist:
-            return Response("can not find submission", status=status.HTTP_404_NOT_FOUND)
+            return api_response(data=None, message="can not find submission", status_code=status.HTTP_404_NOT_FOUND)
 
 
 class SubmissionCodeView(BasePermissionMixin, generics.RetrieveAPIView):
@@ -645,19 +691,21 @@ class SubmissionCodeView(BasePermissionMixin, generics.RetrieveAPIView):
             
             # 檢查查看權限
             if not self.check_submission_view_permission(request.user, submission):
-                return Response("no permission", status=status.HTTP_403_FORBIDDEN)
+                return api_response(data=None, message="no permission", status_code=status.HTTP_403_FORBIDDEN)
             
             # 檢查是否有程式碼
             if not submission.source_code:
-                return Response("can not find the source file", status=status.HTTP_404_NOT_FOUND)
+                return api_response(data=None, message="can not find the source file", status_code=status.HTTP_404_NOT_FOUND)
             
             serializer = self.get_serializer(submission)
-            response_data = serializer.data
-            response_data['message'] = 'here you are, bro'
-            return Response(response_data)
+            return api_response(
+                data=serializer.data,
+                message='here you are, bro',
+                status_code=status.HTTP_200_OK
+            )
         
         except Submission.DoesNotExist:
-            return Response("can not find submission", status=status.HTTP_404_NOT_FOUND)
+            return api_response(data=None, message="can not find submission", status_code=status.HTTP_404_NOT_FOUND)
 
 
 class SubmissionStdoutView(BasePermissionMixin, generics.RetrieveAPIView):
@@ -678,15 +726,17 @@ class SubmissionStdoutView(BasePermissionMixin, generics.RetrieveAPIView):
             
             # 檢查查看權限
             if not self.check_submission_view_permission(request.user, submission):
-                return Response("no permission", status=status.HTTP_403_FORBIDDEN)
+                return api_response(data=None, message="no permission", status_code=status.HTTP_403_FORBIDDEN)
             
             serializer = self.get_serializer(submission)
-            response_data = serializer.data
-            response_data['message'] = 'here you are, bro'
-            return Response(response_data)
+            return api_response(
+                data=serializer.data,
+                message='here you are, bro',
+                status_code=status.HTTP_200_OK
+            )
         
         except Submission.DoesNotExist:
-            return Response("can not find submission", status=status.HTTP_404_NOT_FOUND)
+            return api_response(data=None, message="can not find submission", status_code=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(['GET'])
@@ -698,7 +748,7 @@ def submission_rejudge(request, id):
         try:
             submission = Submission.objects.get(id=id)
         except Submission.DoesNotExist:
-            return Response("can not find submission", status=status.HTTP_404_NOT_FOUND)
+            return api_response(data=None, message="can not find submission", status_code=status.HTTP_404_NOT_FOUND)
         
         # NOJ 權限檢查：只有老師和 TA 可以重新判題
         mixin = BasePermissionMixin()
@@ -709,11 +759,11 @@ def submission_rejudge(request, id):
         except (PermissionDenied, NotFound):
             # 如果不是老師/TA，檢查是否為 staff
             if not request.user.is_staff:
-                return Response("no permission", status=status.HTTP_403_FORBIDDEN)
+                return api_response(data=None, message="no permission", status_code=status.HTTP_403_FORBIDDEN)
         
         # 檢查提交狀態 - NOJ 格式
         if submission.status == '-2':
-            return Response("can not find the source file", status=status.HTTP_400_BAD_REQUEST)
+            return api_response(data=None, message="can not find the source file", status_code=status.HTTP_400_BAD_REQUEST)
         
         # 重設判題狀態
         submission.status = '-1'  # Pending
@@ -730,10 +780,10 @@ def submission_rejudge(request, id):
         # send_to_sandbox(submission)
         
         # NOJ 格式響應
-        return Response(f"{submission.id} rejudge successfully.", status=status.HTTP_200_OK)
+        return api_response(data=None, message=f"{submission.id} rejudge successfully.", status_code=status.HTTP_200_OK)
     
     except Exception as e:
-        return Response("Some error occurred, please contact the admin", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return api_response(data=None, message="Some error occurred, please contact the admin", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -785,10 +835,11 @@ def ranking_view(request):
             ranking_data.append(user_data)
         
         # NOJ 格式：返回所有用戶資料，不進行排序（由前端處理）
-        return Response({
-            'message': 'here you are, bro',
-            'ranking': ranking_data
-        })
+        return api_response(
+            data={'ranking': ranking_data},
+            message='here you are, bro',
+            status_code=status.HTTP_200_OK
+        )
     
     except Exception as e:
-        return Response("Some error occurred, please contact the admin", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return api_response(data=None, message="Some error occurred, please contact the admin", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
