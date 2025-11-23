@@ -6,7 +6,7 @@ app_name = "course_courseid"
 
 urlpatterns = [
     path(
-        "<uuid:course_id>/",
+        "<course_id>/",
         detail_views.CourseDetailView.as_view(),
         name="detail",
     ),
