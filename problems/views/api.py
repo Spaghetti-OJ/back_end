@@ -518,7 +518,7 @@ class ProblemManageView(APIView):
                 existing_ids = set(Tags.objects.filter(id__in=tag_ids).values_list('id', flat=True))
                 missing_ids = [tid for tid in tag_ids if tid not in existing_ids]
                 if missing_ids:
-                    return api_response({"tags": f"Tag IDs do not exist: {missing_ids}"}, "Validation error", status_code=400)
+                    return api_response({"errors": {"tags": f"Tag IDs do not exist: {missing_ids}"}}, "Validation error", status_code=400)
 
         problem = serializer.save(creator_id=request.user)
 
