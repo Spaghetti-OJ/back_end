@@ -129,12 +129,12 @@ class SubmissionAPITestSetup:
             difficulty=Problems.Difficulty.MEDIUM
         )
         
-        # 沒有關聯課程的題目
+        # 原本是孤兒題目，但因為 course_id 不能為 NULL，所以關聯到 course2
         cls.orphan_problem = Problems.objects.create(
             id=9998,
             title='API測試孤兒題目',
-            description='API測試：沒有關聯課程的題目',
-            course_id=None,
+            description='API測試：用於測試權限的題目（關聯到 course2）',
+            course_id=cls.course2,  # 修改：不能為 None，使用 course2
             creator_id=cls.teacher,  # 添加必需的 creator_id
             difficulty=Problems.Difficulty.HARD
         )
@@ -220,6 +220,36 @@ class SubmissionAPIBaseTestCase(APITestCase, SubmissionAPITestSetup):
         """以特定用戶身份認證"""
         self.client.force_authenticate(user=user)
     
+    def get_api_message(self, response):
+        """
+        從 api_response 格式的響應中提取 message
+        新格式: {"data": ..., "message": "...", "status": "ok/error"}
+        """
+        if isinstance(response.data, dict) and 'message' in response.data:
+            return response.data['message']
+        # 兼容舊格式（直接返回字串）
+        return response.data
+    
+    def get_api_data(self, response):
+        """
+        從 api_response 格式的響應中提取 data
+        新格式: {"data": {...}, "message": "...", "status": "ok/error"}
+        """
+        if isinstance(response.data, dict) and 'data' in response.data:
+            return response.data['data']
+        # 兼容舊格式（直接返回數據）
+        return response.data
+    
+    def get_api_status(self, response):
+        """
+        從 api_response 格式的響應中提取 status
+        新格式: {"data": ..., "message": "...", "status": "ok/error"}
+        """
+        if isinstance(response.data, dict) and 'status' in response.data:
+            return response.data['status']
+        # 根據 HTTP 狀態碼推斷
+        return "ok" if 200 <= response.status_code < 400 else "error"
+    
     def get_submission_create_url(self):
         """獲取創建提交的 URL"""
         return '/submission/'
@@ -250,7 +280,7 @@ class TestSubmissionCreateAPI(SubmissionAPIBaseTestCase):
     """測試 POST /submission/ - 創建新提交"""
     
     def test_create_submission_success(self):
-        """測試成功創建提交 (更新為NOJ格式)"""
+        """測試成功創建提交 (更新為NOJ格式 + api_response)"""
         self.authenticate_as(self.student1)
         
         data = {
@@ -260,12 +290,13 @@ class TestSubmissionCreateAPI(SubmissionAPIBaseTestCase):
         
         response = self.client.post(self.get_submission_create_url(), data)
         
-        # 驗證 NOJ 格式響應
+        # 驗證 NOJ 格式響應 (通過 api_response 包裝)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(response.data.startswith("submission recieved."))
+        message = self.get_api_message(response)
+        self.assertTrue(message.startswith("submission received."))
         
         # 從響應中提取提交 ID
-        submission_id = response.data.split('.')[1]
+        submission_id = message.split('.')[1]
         
         # 驗證數據庫中的提交
         submission = Submission.objects.get(id=submission_id)
@@ -276,7 +307,7 @@ class TestSubmissionCreateAPI(SubmissionAPIBaseTestCase):
         self.assertEqual(submission.source_code, '')  # 初始為空
     
     def test_create_submission_invalid_problem(self):
-        """測試創建提交時題目不存在 (更新為NOJ格式)"""
+        """測試創建提交時題目不存在 (更新為NOJ格式 + api_response)"""
         self.authenticate_as(self.student1)
         
         data = {
@@ -287,10 +318,10 @@ class TestSubmissionCreateAPI(SubmissionAPIBaseTestCase):
         response = self.client.post(self.get_submission_create_url(), data)
         
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data, "Unexisted problem id.")
+        self.assertEqual(self.get_api_message(response), "Unexisted problem id.")
     
     def test_create_submission_invalid_language(self):
-        """測試創建提交時程式語言無效 (更新為NOJ格式)"""
+        """測試創建提交時程式語言無效 (更新為NOJ格式 + api_response)"""
         self.authenticate_as(self.student1)
         
         data = {
@@ -301,10 +332,10 @@ class TestSubmissionCreateAPI(SubmissionAPIBaseTestCase):
         response = self.client.post(self.get_submission_create_url(), data)
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, "not allowed language")
+        self.assertEqual(self.get_api_message(response), "not allowed language")
     
     def test_create_submission_missing_fields(self):
-        """測試創建提交時缺少必需字段 (更新為NOJ格式)"""
+        """測試創建提交時缺少必需字段 (更新為NOJ格式 + api_response)"""
         self.authenticate_as(self.student1)
         
         # 缺少 language_type
@@ -315,7 +346,7 @@ class TestSubmissionCreateAPI(SubmissionAPIBaseTestCase):
         response = self.client.post(self.get_submission_create_url(), data)
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data, "post data missing!")
+        self.assertEqual(self.get_api_message(response), "post data missing!")
     
     def test_create_submission_unauthenticated(self):
         """測試未認證用戶創建提交 (更新為整數語言類型)"""
@@ -329,7 +360,7 @@ class TestSubmissionCreateAPI(SubmissionAPIBaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
     
     def test_create_multiple_submissions(self):
-        """測試同一用戶可以創建多個提交 (更新為NOJ格式)"""
+        """測試同一用戶可以創建多個提交 (更新為NOJ格式 + api_response)"""
         self.authenticate_as(self.student1)
         
         data = {
@@ -340,16 +371,18 @@ class TestSubmissionCreateAPI(SubmissionAPIBaseTestCase):
         # 創建第一個提交
         response1 = self.client.post(self.get_submission_create_url(), data)
         self.assertEqual(response1.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(response1.data.startswith("submission recieved."))
+        message1 = self.get_api_message(response1)
+        self.assertTrue(message1.startswith("submission received."))
         
         # 創建第二個提交
         response2 = self.client.post(self.get_submission_create_url(), data)
         self.assertEqual(response2.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(response2.data.startswith("submission recieved."))
+        message2 = self.get_api_message(response2)
+        self.assertTrue(message2.startswith("submission received."))
         
         # 確保是不同的提交
-        submission_id1 = response1.data.split('.')[1]
-        submission_id2 = response2.data.split('.')[1]
+        submission_id1 = message1.split('.')[1]
+        submission_id2 = message2.split('.')[1]
         self.assertNotEqual(submission_id1, submission_id2)
 
 
@@ -381,9 +414,9 @@ def two_sum(nums, target):
             data
         )
         
-        # 驗證響應 - NOJ format: string message
+        # 驗證響應 - NOJ format: string message (通過 api_response 包裝)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data, f"{self.submission1.id} send to judgement.")
+        self.assertEqual(self.get_api_message(response), f"{self.submission1.id} send to judgement.")
         
         # 驗證數據庫更新
         self.submission1.refresh_from_db()
@@ -403,12 +436,12 @@ def two_sum(nums, target):
             data
         )
         
-        # 應該返回權限錯誤 (NOJ format)
+        # 應該返回權限錯誤 (NOJ format + api_response)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, "user not equal!")  # NOJ format
+        self.assertEqual(self.get_api_message(response), "user not equal!")
     
     def test_upload_code_empty_code(self):
-        """測試上傳空程式碼 (更新為NOJ格式)"""
+        """測試上傳空程式碼 (更新為NOJ格式 + api_response)"""
         self.authenticate_as(self.student1)
         
         data = {
@@ -421,10 +454,10 @@ def two_sum(nums, target):
         )
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data, "empty file")
+        self.assertEqual(self.get_api_message(response), "empty file")
     
     def test_upload_code_already_uploaded(self):
-        """測試重複上傳程式碼（NOJ 不允許）"""
+        """測試重複上傳程式碼（NOJ 不允許）+ api_response"""
         self.authenticate_as(self.student1)
         
         new_code = '''
@@ -443,14 +476,14 @@ def new_solution():
         
         # NOJ 不允許重複上傳已判題完成的
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, f"{self.submission2.id} has finished judgement.")
+        self.assertEqual(self.get_api_message(response), f"{self.submission2.id} has finished judgement.")
         
         # 驗證程式碼沒有被更新
         self.submission2.refresh_from_db()
         self.assertNotEqual(self.submission2.source_code.strip(), new_code.strip())
     
     def test_upload_code_invalid_submission_id(self):
-        """測試上傳程式碼到不存在的提交"""
+        """測試上傳程式碼到不存在的提交 + api_response"""
         self.authenticate_as(self.student1)
         
         fake_id = str(uuid.uuid4())
@@ -465,7 +498,7 @@ def new_solution():
         
         # NOJ returns 400 for invalid submission
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data, "can not find the source file")
+        self.assertEqual(self.get_api_message(response), "can not find the source file")
     
     @patch('submissions.views.send_to_sandbox', create=True)  # Mock SandBox 調用
     def test_upload_code_triggers_judging(self, mock_sandbox):
@@ -493,19 +526,20 @@ class TestSubmissionListAPI(SubmissionAPIBaseTestCase):
     """測試 GET /submission/ - 獲取提交列表"""
     
     def test_get_submissions_as_student(self):
-        """測試學生獲取提交列表（只能看到自己的）- NOJ format"""
+        """測試學生獲取提交列表（只能看到自己的）- NOJ format + api_response"""
         self.authenticate_as(self.student1)
         
         response = self.client.get(self.get_submission_create_url())
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('results', response.data)
-        self.assertIn('count', response.data)
+        data = self.get_api_data(response)
+        self.assertIn('results', data)
+        self.assertIn('count', data)
         
         # 學生1只能看到自己的 2 個提交
-        results = response.data['results']
+        results = data['results']
         self.assertEqual(len(results), 2)
-        self.assertEqual(response.data['count'], 2)
+        self.assertEqual(data['count'], 2)
         
         # 驗證都是自己的提交
         for submission in results:
@@ -526,7 +560,7 @@ class TestSubmissionListAPI(SubmissionAPIBaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
         # 老師可以看到自己課程的提交（包括 student1 和 student2 的）
-        results = response.data['results']
+        results = self.get_api_data(response)['results']
         self.assertGreaterEqual(len(results), 3)  # 至少 3 個提交
         
         # 檢查是否包含學生的提交
@@ -543,7 +577,7 @@ class TestSubmissionListAPI(SubmissionAPIBaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
         # TA 可以看到自己負責課程的提交
-        results = response.data['results']
+        results = self.get_api_data(response)['results']
         # TA 在 course1，應該能看到 student1 的提交
         usernames = [sub['user']['username'] for sub in results]
         self.assertIn('api_student1', usernames)
@@ -557,7 +591,7 @@ class TestSubmissionListAPI(SubmissionAPIBaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
         # 管理員可以看到所有提交
-        results = response.data['results']
+        results = self.get_api_data(response)['results']
         self.assertEqual(len(results), 3)  # 所有測試提交
     
     def test_get_submissions_ordering(self):
@@ -568,7 +602,7 @@ class TestSubmissionListAPI(SubmissionAPIBaseTestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
-        results = response.data['results']
+        results = self.get_api_data(response)['results']
         if len(results) > 1:
             # 驗證按創建時間倒序 - NOJ uses 'timestamp'
             for i in range(len(results) - 1):
@@ -592,7 +626,7 @@ class TestSubmissionListAPI(SubmissionAPIBaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
         # student2 只應該看到自己的提交
-        results = response.data['results']
+        results = self.get_api_data(response)['results']
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]['user']['username'], 'api_student2')
         
@@ -615,10 +649,10 @@ class TestSubmissionDetailAPI(SubmissionAPIBaseTestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # NOJ format uses different field names
-        self.assertEqual(response.data['submissionId'], str(self.submission1.id))
-        self.assertEqual(response.data['user']['username'], 'api_student1')
-        self.assertEqual(response.data['problemId'], self.problem1.id)
-        self.assertEqual(response.data['status'], '-2')
+        self.assertEqual(self.get_api_data(response)['submissionId'], str(self.submission1.id))
+        self.assertEqual(self.get_api_data(response)['user']['username'], 'api_student1')
+        self.assertEqual(self.get_api_data(response)['problemId'], self.problem1.id)
+        self.assertEqual(self.get_api_data(response)['status'], '-2')
         
         # 驗證詳情包含完整資訊 - NOJ format
         expected_fields = [
@@ -626,7 +660,7 @@ class TestSubmissionDetailAPI(SubmissionAPIBaseTestCase):
             'score', 'runTime', 'memoryUsage', 'timestamp'
         ]
         for field in expected_fields:
-            self.assertIn(field, response.data)
+            self.assertIn(field, self.get_api_data(response))
     
     def test_get_other_submission_as_student(self):
         """測試學生獲取其他人的提交詳情（應該被拒絕）"""
@@ -638,7 +672,7 @@ class TestSubmissionDetailAPI(SubmissionAPIBaseTestCase):
         
         # NOJ 返回 403 表示權限不足
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, "no permission")  # NOJ format
+        self.assertEqual(self.get_api_message(response), "no permission")  # NOJ format
     
     def test_get_submission_as_teacher(self):
         """測試老師獲取課程學生的提交詳情"""
@@ -649,10 +683,10 @@ class TestSubmissionDetailAPI(SubmissionAPIBaseTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['submissionId'], str(self.submission1.id))
+        self.assertEqual(self.get_api_data(response)['submissionId'], str(self.submission1.id))
         
         # 老師應該能看到學生的提交詳情
-        self.assertEqual(response.data['user']['username'], 'api_student1')
+        self.assertEqual(self.get_api_data(response)['user']['username'], 'api_student1')
     
     def test_get_submission_as_ta(self):
         """測試 TA 獲取提交詳情"""
@@ -671,7 +705,7 @@ class TestSubmissionDetailAPI(SubmissionAPIBaseTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, "no permission")  # NOJ format
+        self.assertEqual(self.get_api_message(response), "no permission")  # NOJ format
     
     def test_get_nonexistent_submission(self):
         """測試獲取不存在的提交"""
@@ -692,7 +726,7 @@ class TestSubmissionDetailAPI(SubmissionAPIBaseTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, "no permission")  # NOJ format
+        self.assertEqual(self.get_api_message(response), "no permission")  # NOJ format
 
 
 @pytest.mark.django_db
@@ -708,13 +742,13 @@ class TestSubmissionCodeAPI(SubmissionAPIBaseTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('source_code', response.data)
+        self.assertIn('source_code', self.get_api_data(response))
         expected_code = '# AC Solution\ndef two_sum(nums, target):\n    return [0, 1]'
-        self.assertEqual(response.data['source_code'], expected_code)
+        self.assertEqual(self.get_api_data(response)['source_code'], expected_code)
         
         # 驗證只返回程式碼相關字段
-        self.assertIn('language_type', response.data)
-        self.assertEqual(response.data['language_type'], 2)  # 整數格式
+        self.assertIn('language_type', self.get_api_data(response))
+        self.assertEqual(self.get_api_data(response)['language_type'], 2)  # 整數格式
     
     def test_get_submission_code_no_code(self):
         """測試獲取尚未上傳程式碼的提交"""
@@ -725,7 +759,7 @@ class TestSubmissionCodeAPI(SubmissionAPIBaseTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data, "can not find the source file")  # NOJ format
+        self.assertEqual(self.get_api_message(response), "can not find the source file")  # NOJ format
     
     def test_get_code_wrong_permission(self):
         """測試無權限查看程式碼"""
@@ -746,7 +780,7 @@ class TestSubmissionCodeAPI(SubmissionAPIBaseTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('source_code', response.data)
+        self.assertIn('source_code', self.get_api_data(response))
 
 
 @pytest.mark.django_db
@@ -763,14 +797,13 @@ class TestSubmissionStdoutAPI(SubmissionAPIBaseTestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # NOJ format: {stdout, submission_id, status, message}
-        self.assertIn('stdout', response.data)
-        self.assertIn('message', response.data)
-        self.assertEqual(response.data['message'], 'here you are, bro')
-        self.assertIn('submission_id', response.data)
-        self.assertIn('status', response.data)
+        self.assertIn('stdout', self.get_api_data(response))
+        self.assertEqual(self.get_api_message(response), 'here you are, bro')
+        self.assertIn('submission_id', self.get_api_data(response))
+        self.assertIn('status', self.get_api_data(response))
         
         # 驗證輸出結果
-        stdout = response.data['stdout']
+        stdout = self.get_api_data(response)['stdout']
         self.assertIn('Test Case', stdout)
     
     def test_get_stdout_no_results(self):
@@ -783,10 +816,9 @@ class TestSubmissionStdoutAPI(SubmissionAPIBaseTestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # NOJ format
-        self.assertIn('stdout', response.data)
-        self.assertIn('message', response.data)
-        self.assertEqual(response.data['message'], 'here you are, bro')
-        self.assertEqual(response.data['stdout'], '-')  # No output
+        self.assertIn('stdout', self.get_api_data(response))
+        self.assertEqual(self.get_api_message(response), 'here you are, bro')
+        self.assertEqual(self.get_api_data(response)['stdout'], '-')  # No output
     
     def test_get_stdout_wrong_permission(self):
         """測試無權限查看輸出"""
@@ -817,7 +849,7 @@ class TestSubmissionRejudgeAPI(SubmissionAPIBaseTestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # NOJ format: "{submission_id} rejudge successfully."
-        self.assertEqual(response.data, f"{self.submission2.id} rejudge successfully.")
+        self.assertEqual(self.get_api_message(response), f"{self.submission2.id} rejudge successfully.")
         
         # 驗證狀態重置
         self.submission2.refresh_from_db()
@@ -860,7 +892,7 @@ class TestSubmissionRejudgeAPI(SubmissionAPIBaseTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, "no permission")  # NOJ format
+        self.assertEqual(self.get_api_message(response), "no permission")  # NOJ format
     
     def test_rejudge_submission_without_code(self):
         """測試重新判題尚未上傳程式碼的提交"""
@@ -871,7 +903,7 @@ class TestSubmissionRejudgeAPI(SubmissionAPIBaseTestCase):
         )
         
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data, "can not find the source file")  # NOJ format
+        self.assertEqual(self.get_api_message(response), "can not find the source file")  # NOJ format
     
     def test_rejudge_nonexistent_submission(self):
         """測試重新判題不存在的提交"""
@@ -888,19 +920,19 @@ class TestRankingAPI(SubmissionAPIBaseTestCase):
     """測試 GET /ranking - 獲取排行榜"""
     
     def test_get_ranking_basic(self):
-        """測試獲取基本排行榜"""
+        """測試獲取基本排行榜 + api_response"""
         self.authenticate_as(self.student1)
         
         response = self.client.get(self.get_ranking_url())
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('message', response.data)
-        self.assertEqual(response.data['message'], 'here you are, bro')
-        self.assertIn('ranking', response.data)
-        self.assertIsInstance(response.data['ranking'], list)
+        self.assertEqual(self.get_api_message(response), 'here you are, bro')
+        data = self.get_api_data(response)
+        self.assertIn('ranking', data)
+        self.assertIsInstance(data['ranking'], list)
         
         # 驗證排行榜不為空
-        self.assertGreater(len(response.data['ranking']), 0)
+        self.assertGreater(len(data['ranking']), 0)
     
     def test_ranking_data_format(self):
         """測試排行榜數據格式"""
@@ -909,10 +941,10 @@ class TestRankingAPI(SubmissionAPIBaseTestCase):
         response = self.client.get(self.get_ranking_url())
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('ranking', response.data)
+        self.assertIn('ranking', self.get_api_data(response))
         
         # 驗證每個用戶的數據格式
-        for user_data in response.data['ranking']:
+        for user_data in self.get_api_data(response)['ranking']:
             # 檢查必需字段
             required_fields = ['user', 'ACProblem', 'ACSubmission', 'Submission']
             for field in required_fields:
@@ -940,7 +972,7 @@ class TestRankingAPI(SubmissionAPIBaseTestCase):
         
         # 找到 student1 的數據
         student1_data = None
-        for user_data in response.data['ranking']:
+        for user_data in self.get_api_data(response)['ranking']:
             if user_data['user']['username'] == 'api_student1':
                 student1_data = user_data
                 break
@@ -963,9 +995,9 @@ class TestRankingAPI(SubmissionAPIBaseTestCase):
             response = self.client.get(self.get_ranking_url())
             
             self.assertEqual(response.status_code, status.HTTP_200_OK)
-            self.assertIn('message', response.data)
-            self.assertIn('ranking', response.data)
-            self.assertIsInstance(response.data['ranking'], list)
+            self.assertIsNotNone(self.get_api_message(response))
+            self.assertIn('ranking', self.get_api_data(response))
+            self.assertIsInstance(self.get_api_data(response)['ranking'], list)
     
     def test_ranking_unauthenticated(self):
         """測試未認證用戶訪問排行榜"""
@@ -979,8 +1011,8 @@ class TestSubmissionPermissionEdgeCases(SubmissionAPIBaseTestCase):
     """測試權限系統的邊界情況和複雜場景"""
     
     def test_orphan_problem_submission_permission(self):
-        """測試孤兒題目（沒有關聯課程）的提交權限"""
-        # 創建對孤兒題目的提交
+        """測試孤兒題目（沒有關聯課程）的提交權限 - 更新：現在 orphan_problem 關聯到 course2"""
+        # 創建對 orphan_problem 的提交（現在關聯到 course2）
         orphan_submission = Submission.objects.create(
             problem_id=self.orphan_problem.id,
             user=self.student1,
@@ -989,21 +1021,19 @@ class TestSubmissionPermissionEdgeCases(SubmissionAPIBaseTestCase):
             status='-1'
         )
         
-        # 測試學生能看到自己對孤兒題目的提交
+        # 測試學生能看到自己對該題目的提交
         self.authenticate_as(self.student1)
         response = self.client.get(self.get_submission_detail_url(orphan_submission.id))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
-        # 測試其他學生也能看到（孤兒題目的提交似乎是公開的）
+        # 測試其他學生無法看到（因為不在 course2 中）
         self.authenticate_as(self.student2)
         response = self.client.get(self.get_submission_detail_url(orphan_submission.id))
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)  # 修改：不是同課程學生
         
-        # 測試老師能看到（老師有更高權限可以查看孤兒題目）
+        # 測試老師能看到（老師是 course2 的主要老師）
         self.authenticate_as(self.teacher)
         response = self.client.get(self.get_submission_detail_url(orphan_submission.id))
-        
-        # 老師可以看到孤兒題目的提交
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
         # 測試管理員能看到所有
@@ -1025,7 +1055,7 @@ class TestSubmissionPermissionEdgeCases(SubmissionAPIBaseTestCase):
         response = self.client.get(self.get_submission_create_url())
         
         # student1 現在應該能看到自己的提交
-        results = response.data['results']
+        results = self.get_api_data(response)['results']
         usernames = [sub['user']['username'] for sub in results]
         
         # 只能看到自己的提交，不能看到其他學生的
@@ -1039,7 +1069,7 @@ class TestSubmissionPermissionEdgeCases(SubmissionAPIBaseTestCase):
         # 老師應該能看到 course1 和 course2 的提交（因為都是他教的）
         response = self.client.get(self.get_submission_create_url())
         
-        usernames = [sub['user']['username'] for sub in response.data['results']]
+        usernames = [sub['user']['username'] for sub in self.get_api_data(response)['results']]
         
         # 應該包含兩個課程的學生
         self.assertIn('api_student1', usernames)  # course1
@@ -1061,7 +1091,7 @@ class TestSubmissionPermissionEdgeCases(SubmissionAPIBaseTestCase):
         # 重新測試，現在應該看不到其他人的提交 - NOJ 返回 403
         response = self.client.get(self.get_submission_detail_url(self.submission1.id))
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, "no permission")  # NOJ format
+        self.assertEqual(self.get_api_message(response), "no permission")  # NOJ format
 
 
 # 運行測試的輔助函數

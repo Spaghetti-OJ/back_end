@@ -81,9 +81,11 @@ class PermissionTestSetup:
             creator_id=cls.teacher1
         )
         
+        # 修改：因為 course_id 不能為 NULL，將 orphan 問題關聯到 course3
+        # （用於測試權限邊界情況）
         cls.problem_orphan = Problems.objects.create(
             id=3999, title='孤兒題目', description='沒有課程的題目',
-            course_id=None, difficulty=Problems.Difficulty.HARD,
+            course_id=cls.course3, difficulty=Problems.Difficulty.HARD,  # 修改：使用 course3
             creator_id=cls.teacher1
         )
         
@@ -184,10 +186,12 @@ class BasePermissionMixinUnitTests(TestCase, PermissionTestSetup):
             self.mixin.check_teacher_permission(self.teacher1, 99999)
     
     def test_check_teacher_permission_orphan_problem(self):
-        """測試孤兒題目（沒有課程）"""
+        """測試孤兒題目（現在關聯到 course3）"""
+        # teacher2 不是 course3 的成員，所以沒有權限
         with self.assertRaises(PermissionDenied) as cm:
-            self.mixin.check_teacher_permission(self.teacher1, self.problem_orphan.id)
-        self.assertIn('未關聯到任何課程', str(cm.exception))
+            self.mixin.check_teacher_permission(self.teacher2, self.problem_orphan.id)
+        # 因為 problem_orphan 關聯到 course3，但 teacher2 不在 course3
+        self.assertIn('沒有權限', str(cm.exception))
     
     def test_check_submission_view_permission_owner(self):
         """測試提交者本人的查看權限"""
@@ -221,14 +225,14 @@ class BasePermissionMixinUnitTests(TestCase, PermissionTestSetup):
         self.assertFalse(result)
     
     def test_check_submission_view_permission_orphan_problem(self):
-        """測試孤兒題目提交的查看權限"""
+        """測試孤兒題目提交的查看權限（現在關聯到 course3）"""
         # 提交者本人可以查看
         result = self.mixin.check_submission_view_permission(self.student1, self.sub_orphan)
         self.assertTrue(result)
         
-        # 其他人可以查看孤兒題目（根據當前邏輯）
+        # 其他人不能查看（因為 problem_orphan 現在關聯到 course3，student2 不在 course3）
         result = self.mixin.check_submission_view_permission(self.student2, self.sub_orphan)
-        self.assertTrue(result)  # 因為 orphan problem 沒有課程，暫時允許查看
+        self.assertFalse(result)  # 因為 student2 不在 course3
     
     def test_get_viewable_submissions_student(self):
         """測試學生的可查看提交過濾"""
@@ -321,6 +325,18 @@ class PermissionIntegrationTests(APITestCase, PermissionTestSetup):
         self.create_complex_test_data()
         self.client = APIClient()
     
+    def get_api_message(self, response):
+        """從 api_response 格式的響應中提取 message"""
+        if isinstance(response.data, dict) and 'message' in response.data:
+            return response.data['message']
+        return response.data
+    
+    def get_api_data(self, response):
+        """從 api_response 格式的響應中提取 data"""
+        if isinstance(response.data, dict) and 'data' in response.data:
+            return response.data['data']
+        return response.data
+    
     def test_complex_permission_scenario_1(self):
         """複雜場景1：teacher1 管理多個課程"""
         self.client.force_authenticate(user=self.teacher1)
@@ -329,7 +345,8 @@ class PermissionIntegrationTests(APITestCase, PermissionTestSetup):
         response = self.client.get('/submission/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
-        results = response.data['results']
+        # 使用 api_response 格式提取 data
+        results = self.get_api_data(response)['results']
         usernames = [sub['user']['username'] for sub in results]
         
         # 應該包含兩個課程的學生
@@ -344,7 +361,8 @@ class PermissionIntegrationTests(APITestCase, PermissionTestSetup):
         response = self.client.get('/submission/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
-        results = response.data['results']
+        # 使用 api_response 格式提取 data
+        results = self.get_api_data(response)['results']
         
         # student2 有兩個提交
         self.assertEqual(len(results), 2)
@@ -361,7 +379,8 @@ class PermissionIntegrationTests(APITestCase, PermissionTestSetup):
         response = self.client.get('/submission/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
-        results = response.data['results']
+        # 使用 api_response 格式提取 data
+        results = self.get_api_data(response)['results']
         
         # 應該能看到 course1 的提交 - NOJ format uses problemId
         problem_ids = [sub['problemId'] for sub in results]
@@ -403,7 +422,8 @@ class PermissionIntegrationTests(APITestCase, PermissionTestSetup):
         # 再次測試，應該沒有權限 - NOJ 返回 403
         response = self.client.get(f'/submission/{self.sub_s1_c1.id}/')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data, "no permission")  # NOJ format
+        # 使用 api_response 格式提取 message
+        self.assertEqual(self.get_api_message(response), "no permission")  # NOJ format
     
     def test_permission_performance_with_large_dataset(self):
         """測試大量數據時的權限性能"""

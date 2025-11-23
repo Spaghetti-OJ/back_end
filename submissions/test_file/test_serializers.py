@@ -31,12 +31,21 @@ class SubmissionSerializerHypothesisTests(HypothesisTestCase):
             password='testpass123'
         )
         
+        # 創建測試課程（因為 Problems.course_id 不能為 NULL）
+        from courses.models import Courses
+        self.test_course = Courses.objects.create(
+            name=f'Test Course {unique_id}',
+            description='Test Course for Serializer',
+            teacher_id=self.user
+        )
+        
         # 創建測試用的問題
         from problems.models import Problems
         self.test_problem = Problems.objects.create(
             title='Test Problem',
             description='Test Description',
             creator_id=self.user,  # User instance, not UUID
+            course_id=self.test_course,  # 添加必需的 course_id
             difficulty='easy',
             max_score=100
         )
@@ -225,7 +234,7 @@ class EditorialSerializerHypothesisTests(HypothesisTestCase):
         
         assert editorial.problem_id == 1
         assert editorial.title == title.strip()  # title 會被 strip
-        assert editorial.content == content      # content 保持原樣
+        assert editorial.content == content.strip()  # content 也會被 strip
         # 使用 Decimal 比較以避免精度問題
         if difficulty_rating is not None:
             from decimal import Decimal
