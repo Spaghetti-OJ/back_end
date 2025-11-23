@@ -8,7 +8,7 @@ urlpatterns = [
     path("", AnnouncementCreateView.as_view(), name="create"),
     path("<course_id>/ann", CourseAnnouncementListView.as_view(), name="course"),
     path(
-        "<course_id>/<ann_id>",
+        "<course_id>/<int:ann_id>",
         CourseAnnouncementRetrieveView.as_view(),
         name="announcement",
     ),
