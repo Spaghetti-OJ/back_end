@@ -253,6 +253,18 @@ curl -X GET http://localhost:8000/editor/draft/123/ \
 }
 ```
 
+```json
+{
+    "data": {
+        "source_code": [
+            "Source code too large. Maximum size is 65535 bytes (64KB), but got 70000 bytes"
+        ]
+    },
+    "message": "草稿保存失敗",
+    "status": "error"
+}
+```
+
 **範例**:
 ```bash
 # 請求 - 創建新草稿
@@ -486,7 +498,11 @@ window.addEventListener('online', () => {
 #### source_code 驗證
 - 不可為空字串
 - 不可只包含空白字元
-- 建議前端限制最大長度（如 64KB）
+- **最大大小：64KB（65535 bytes）**
+  - 使用 UTF-8 編碼計算字節數
+  - 超過限制返回 400 錯誤
+  - 前端建議在用戶輸入時提示當前大小
+  - 防止超大文件 DoS 攻擊
 
 #### problem_id 驗證
 - 必須是正整數
@@ -564,8 +580,17 @@ window.addEventListener('online', () => {
 
 1. **認證**: 所有請求必須攜帶有效 Token
 2. **授權**: 用戶只能操作自己的草稿
+   - 每個用戶只能查看、修改、刪除自己的草稿
+   - URL 中的 problem_id 配合 request.user 確保數據隔離
+   - 即使知道其他用戶的草稿存在，也無法訪問或修改
 3. **輸入驗證**: 前後端都要驗證輸入
-4. **大小限制**: 限制代碼文件大小
+   - language_type 必須在 0-4 範圍內
+   - source_code 不可為空
+4. **大小限制**: 代碼文件最大 64KB（65535 bytes）
+   - 防止 DoS 攻擊（超大文件消耗伺服器資源）
+   - 與 Submission API 保持一致
+   - 超過限制會返回 400 錯誤
+5. **數據庫隔離**: 使用 user + problem_id 的組合索引確保查詢效率和數據隔離
 
 ---
 
