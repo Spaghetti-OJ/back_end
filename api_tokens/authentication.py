@@ -41,6 +41,8 @@ class ApiTokenAuthentication(BaseAuthentication):
         # 5. 檢查是否過期 (RFC 要求)
         if token.expires_at and token.expires_at < timezone.now():
             raise AuthenticationFailed('API Token 已過期')
+        if not token.is_active:
+            raise AuthenticationFailed('API Token 已被撤銷')
 
         # 6. (RFC 要求) 更新使用統計
         # 只有在驗證成功時才更新
