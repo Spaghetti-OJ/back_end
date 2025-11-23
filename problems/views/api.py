@@ -684,7 +684,7 @@ class ProblemManageDetailView(APIView):
                     try:
                         tag_ids.append(int(v))
                     except (ValueError, TypeError):
-                        return api_response({"tags": f"Invalid tag id: {v}"}, "Validation error", status_code=400)
+                        return api_response({"errors": {"tags": f"Invalid tag id: {v}"}}, "Validation error", status_code=400)
                 
                 # Strict validation: all tag ids must exist
                 from ..models import Tags
