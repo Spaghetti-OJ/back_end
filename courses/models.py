@@ -10,7 +10,7 @@ def _random_code(n: int = 7) -> str:
     return "".join(secrets.choice(ALPHABET) for _ in range(n))
 
 class Courses(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.BigAutoField(primary_key=True)
 
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
