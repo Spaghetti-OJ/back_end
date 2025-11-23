@@ -1,6 +1,6 @@
 from rest_framework.views import APIView
-from rest_framework.response import Response
 from rest_framework import status, permissions
+from ..common.responses import api_response
 
 from courses.models import Courses, Course_members
 from assignments.models import Assignments
@@ -18,7 +18,9 @@ class CourseHomeworkListByIdView(APIView):
         try:
             course = Courses.objects.get(pk=course_id)
         except Courses.DoesNotExist:
-            return Response("course not exists", status=status.HTTP_404_NOT_FOUND)
+            return api_response(
+                message="course not exists", status_code=status.HTTP_404_NOT_FOUND
+            )
 
         staff_like = is_teacher_or_ta(request.user, course)
         qs = (
@@ -30,4 +32,8 @@ class CourseHomeworkListByIdView(APIView):
         )
 
         ser = HomeworkListItemSerializer(qs, many=True, context={"is_staff_like": staff_like, "user": request.user})
-        return Response({"message": "get homeworks", "items": ser.data}, status=status.HTTP_200_OK)
+        return api_response(
+            data={"items": ser.data},
+            message="get homeworks",
+            status_code=status.HTTP_200_OK,
+        )

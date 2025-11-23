@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
+from ..common.responses import api_response
 
 from ..models import Course_members, Courses
 from ..serializers import CourseDetailSerializer
@@ -32,9 +33,9 @@ class CourseDetailView(generics.GenericAPIView):
         )
         is_member = is_teacher or any(m.user_id.id == user.id for m in members)
         if not is_member:
-            return Response(
-                {"message": "You are not in this course."},
-                status=status.HTTP_403_FORBIDDEN,
+            return api_response(
+                message="You are not in this course.",
+                status_code=status.HTTP_403_FORBIDDEN,
             )
         tas = [
             membership.user_id
@@ -47,16 +48,16 @@ class CourseDetailView(generics.GenericAPIView):
             if membership.role == Course_members.Role.STUDENT
         ]
 
-        serializer = self.get_serializer(
-            {
-                "message": "Success.",
-                "course": course,
-                "teacher": course.teacher_id,
-                "TAs": tas,
-                "students": students,
-            }
+        payload = {
+            "course": course,
+            "teacher": course.teacher_id,
+            "TAs": tas,
+            "students": students,
+        }
+        serializer = self.get_serializer(payload)
+        return api_response(
+            data=serializer.data, message="Success.", status_code=status.HTTP_200_OK
         )
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def put(self, request, course_id, *args, **kwargs):
         course = self._get_course_or_response(course_id)
@@ -76,7 +77,9 @@ class CourseDetailView(generics.GenericAPIView):
         try:
             ta_users = self._resolve_ta_users(ta_usernames)
         except ValueError as exc:
-            return Response({"message": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+            return api_response(
+                message=str(exc), status_code=status.HTTP_404_NOT_FOUND
+            )
 
         student_membership = None
         if student_identifier:
@@ -91,36 +94,36 @@ class CourseDetailView(generics.GenericAPIView):
             if student_membership is not None:
                 student_membership.delete()
 
-        return Response({"message": "Success."}, status=status.HTTP_200_OK)
+        return api_response(message="Success.", status_code=status.HTTP_200_OK)
 
     @staticmethod
     def _get_course_or_response(course_id):
         try:
             return Courses.objects.select_related("teacher_id").get(id=course_id)
         except Courses.DoesNotExist:
-            return Response(
-                {"message": "Course not found."},
-                status=status.HTTP_404_NOT_FOUND,
+            return api_response(
+                message="Course not found.", status_code=status.HTTP_404_NOT_FOUND
             )
 
     @staticmethod
     def _check_edit_permission(user, course):
         identity = getattr(user, "identity", None)
         if identity not in ("teacher", "admin"):
-            return Response({"message": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+            return api_response(
+                message="Forbidden.", status_code=status.HTTP_403_FORBIDDEN
+            )
         if identity == "teacher" and course.teacher_id_id != getattr(user, "id", None):
-            return Response(
-                {"message": "You are not in this course."},
-                status=status.HTTP_403_FORBIDDEN,
+            return api_response(
+                message="You are not in this course.",
+                status_code=status.HTTP_403_FORBIDDEN,
             )
         return None
 
     @staticmethod
     def _extract_ta_payload(data):
         if not isinstance(data, dict):
-            return Response(
-                {"message": "Invalid payload."},
-                status=status.HTTP_400_BAD_REQUEST,
+            return api_response(
+                message="Invalid payload.", status_code=status.HTTP_400_BAD_REQUEST
             )
         if "TAs" not in data:
             return None
@@ -129,22 +132,22 @@ class CourseDetailView(generics.GenericAPIView):
         if tas is None:
             return []
         if not isinstance(tas, list):
-            return Response(
-                {"message": "TAs must be provided as a list."},
-                status=status.HTTP_400_BAD_REQUEST,
+            return api_response(
+                message="TAs must be provided as a list.",
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
         normalized = []
         for username in tas:
             if not isinstance(username, str):
-                return Response(
-                    {"message": "TAs must be provided as usernames."},
-                    status=status.HTTP_400_BAD_REQUEST,
+                return api_response(
+                    message="TAs must be provided as usernames.",
+                    status_code=status.HTTP_400_BAD_REQUEST,
                 )
             trimmed = username.strip()
             if not trimmed:
-                return Response(
-                    {"message": "TA username cannot be blank."},
-                    status=status.HTTP_400_BAD_REQUEST,
+                return api_response(
+                    message="TA username cannot be blank.",
+                    status_code=status.HTTP_400_BAD_REQUEST,
                 )
             normalized.append(trimmed)
         return normalized
@@ -179,9 +182,8 @@ class CourseDetailView(generics.GenericAPIView):
         try:
             student = User.objects.get(pk=student_identifier)
         except (User.DoesNotExist, ValueError):
-            return Response(
-                {"message": "Student not found."},
-                status=status.HTTP_404_NOT_FOUND,
+            return api_response(
+                message="Student not found.", status_code=status.HTTP_404_NOT_FOUND
             )
 
         membership = Course_members.objects.filter(
@@ -191,9 +193,8 @@ class CourseDetailView(generics.GenericAPIView):
         ).first()
 
         if membership is None:
-            return Response(
-                {"message": "Student not found."},
-                status=status.HTTP_404_NOT_FOUND,
+            return api_response(
+                message="Student not found.", status_code=status.HTTP_404_NOT_FOUND
             )
         return membership
 

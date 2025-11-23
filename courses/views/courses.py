@@ -1,7 +1,7 @@
 from django.db.models import Q
 from rest_framework import generics, permissions, status
 from rest_framework.exceptions import ErrorDetail
-from rest_framework.response import Response
+from ..common.responses import api_response
 
 from ..models import Courses
 from ..serializers import (
@@ -41,12 +41,18 @@ class CourseListCreateView(generics.GenericAPIView):
     def get(self, request, *args, **kwargs):
         queryset = self.get_queryset()
         serializer = self.get_serializer(queryset, many=True)
-        return Response({"message": "Success.", "courses": serializer.data})
+        return api_response(
+            data={"courses": serializer.data},
+            message="Success.",
+            status_code=status.HTTP_200_OK,
+        )
 
     def post(self, request, *args, **kwargs):
         user = request.user
         if getattr(user, "identity", None) not in ("teacher", "admin"):
-            return Response({"message": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+            return api_response(
+                message="Forbidden.", status_code=status.HTTP_403_FORBIDDEN
+            )
 
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
@@ -58,32 +64,42 @@ class CourseListCreateView(generics.GenericAPIView):
                 if error_code == "user_not_found"
                 else status.HTTP_400_BAD_REQUEST
             )
-            return Response({"message": message}, status=status_code)
+            return api_response(message=message, status_code=status_code)
 
         teacher = serializer.validated_data["teacher"]
         if user.identity == "teacher" and teacher != user:
-            return Response({"message": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+            return api_response(
+                message="Forbidden.", status_code=status.HTTP_403_FORBIDDEN
+            )
 
         serializer.save()
-        return Response({"message": "Success."}, status=status.HTTP_200_OK)
+        return api_response(message="Success.", status_code=status.HTTP_200_OK)
 
     def put(self, request, *args, **kwargs):
         user = request.user
         if getattr(user, "identity", None) not in ("teacher", "admin"):
-            return Response({"message": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+            return api_response(
+                message="Forbidden.", status_code=status.HTTP_403_FORBIDDEN
+            )
 
         course_id = request.data.get("course_id", "")
         course_id = course_id.strip() if isinstance(course_id, str) else ""
         if not course_id:
-            return Response({"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND)
+            return api_response(
+                message="Course not found.", status_code=status.HTTP_404_NOT_FOUND
+            )
 
         try:
             course_obj = Courses.objects.get(pk=course_id)
         except (Courses.DoesNotExist, ValueError):
-            return Response({"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND)
+            return api_response(
+                message="Course not found.", status_code=status.HTTP_404_NOT_FOUND
+            )
 
         if user.identity != "admin" and course_obj.teacher_id != user:
-            return Response({"message": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+            return api_response(
+                message="Forbidden.", status_code=status.HTTP_403_FORBIDDEN
+            )
 
         payload = {
             "new_course": request.data.get("new_course"),
@@ -99,31 +115,39 @@ class CourseListCreateView(generics.GenericAPIView):
                 if error_code == "user_not_found"
                 else status.HTTP_400_BAD_REQUEST
             )
-            return Response({"message": message}, status=status_code)
+            return api_response(message=message, status_code=status_code)
 
         serializer.save()
-        return Response({"message": "Success."}, status=status.HTTP_200_OK)
+        return api_response(message="Success.", status_code=status.HTTP_200_OK)
 
     def delete(self, request, *args, **kwargs):
         user = request.user
         if getattr(user, "identity", None) not in ("teacher", "admin"):
-            return Response({"message": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+            return api_response(
+                message="Forbidden.", status_code=status.HTTP_403_FORBIDDEN
+            )
 
         course_id = request.data.get("course_id", "")
         course_id = course_id.strip() if isinstance(course_id, str) else ""
         if not course_id:
-            return Response({"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND)
+            return api_response(
+                message="Course not found.", status_code=status.HTTP_404_NOT_FOUND
+            )
 
         try:
             course_obj = Courses.objects.get(pk=course_id)
         except (Courses.DoesNotExist, ValueError):
-            return Response({"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND)
+            return api_response(
+                message="Course not found.", status_code=status.HTTP_404_NOT_FOUND
+            )
 
         if user.identity != "admin" and course_obj.teacher_id != user:
-            return Response({"message": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+            return api_response(
+                message="Forbidden.", status_code=status.HTTP_403_FORBIDDEN
+            )
 
         course_obj.delete()
-        return Response({"message": "Success."}, status=status.HTTP_200_OK)
+        return api_response(message="Success.", status_code=status.HTTP_200_OK)
 
     @classmethod
     def _extract_error_detail(cls, errors):

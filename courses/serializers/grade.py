@@ -12,7 +12,6 @@ class CourseGradeItemSerializer(serializers.ModelSerializer):
 
 
 class CourseGradeListSerializer(serializers.Serializer):
-    message = serializers.CharField(default="Success.")
     grades = CourseGradeItemSerializer(many=True)
 
 

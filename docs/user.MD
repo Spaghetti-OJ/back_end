@@ -336,6 +336,97 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 
 ---
 
+## GET /auth/me/
+
+**路徑**：`GET /auth/me/`
+
+**說明**：
+使用目前登入狀態（Authorization Header 帶入 `Bearer <access>`）取得當前使用者的基本資料，包含 `userid`、`username`、`email`、`role`。
+
+### 請求格式
+
+此 API 為 `GET`，不需請求 body，但必須在 Header 帶入 JWT access token。
+
+**HTTP Header 必填項：**
+
+| 欄位名             | 型別     |  必填 | 說明                          |
+| --------------- | ------ | :-: | --------------------------- |
+| `Authorization` | string |  ✅  | 格式為 `Bearer <access_token>` |
+
+**請求範例（不含 body）**：
+
+```http
+GET /auth/me/ HTTP/1.1
+Host: 127.0.0.1:8000
+Authorization: Bearer <ACCESS_TOKEN>
+```
+
+---
+
+### 成功回應（200, JSON）
+
+```json
+{
+  "status": "ok",
+  "message": "Get current user",
+  "data": {
+    "userid": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
+    "username": "momo",
+    "email": "momo@example.com",
+    "role": "student"
+  }
+}
+```
+
+各欄位說明：
+
+| 路徑              | 型別     | 說明                 |
+| --------------- | ------ | ------------------ |
+| `status`        | string | 狀態字串，成功固定為 `"ok"`  |
+| `message`       | string | 描述訊息               |
+| `data.userid`   | string | 使用者在系統中的唯一 ID      |
+| `data.username` | string | 使用者帳號              |
+| `data.email`    | string | 使用者註冊 email        |
+| `data.role`     | string | 使用者角色（如：`student`） |
+
+---
+
+### 失敗回應範例
+
+* 未帶 token 或 token 無效（401）：
+
+  ```json
+  {
+    "detail": "Authentication credentials were not provided."
+  }
+  ```
+
+  或
+
+  ```json
+  {
+    "detail": "Given token not valid for any token type",
+    "code": "token_not_valid"
+  }
+  ```
+
+---
+
+### cURL 測試範例
+
+```bash
+curl -X GET "http://127.0.0.1:8000/auth/me/" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+> 使用說明：
+>
+> * 建議登入後（呼叫 `POST /auth/session/` 拿到 access）就立刻呼叫一次 `GET /auth/me/`，
+>   將回傳的 `userid`、`username`、`email`、`role` 存到前端的全域狀態（例如 Redux / Zustand / Vuex），作為之後顯示使用者名稱或判斷角色權限之用。
+> * 若收到 401，請先確認 access token 是否過期，可搭配 `POST /auth/refresh/` 重新取得新的 access。
+
+---
+
 ## GET /profile/
 
 **說明**：
@@ -511,14 +602,3 @@ curl -i -X GET "http://127.0.0.1:8000/profile/momo/" \
 ```
 
 ---
-
-## 附錄：常見錯誤總表
-
-| 錯誤情境                | HTTP 狀態 | 回應訊息                                                                          |
-| ------------------- | :-----: | ----------------------------------------------------------------------------- |
-| 帳密錯誤（登入）            |   401   | `{"detail":"No active account found with the given credentials"}`             |
-| 未帶 access（/auth/me） |   401   | `{"detail":"Authentication credentials were not provided."}`                  |
-| 帳號/信箱已存在（註冊）        |   400   | `{"username":["這個 username 在 user 已經存在。"],"email":["這個 email 在 user 已經存在。"]}` |
-| Email 格式錯誤（註冊）      |   400   | `{"email":["請輸入有效的電子郵件地址。"]}`                                                 |
-| 欄位缺漏（註冊/登入）         |   400   | `{"username":["This field is required."]}`                                    |
-| `identity` 缺漏或值錯誤   |   400   | `{"identity":["此為必需欄位。或值必須為 teacher/admin/student 之一"]}`                      |

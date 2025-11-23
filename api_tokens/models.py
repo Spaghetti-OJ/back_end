@@ -48,7 +48,7 @@ class ApiToken(models.Model):
     # last_used_at timestamp [null]
     last_used_at = models.DateTimeField(null=True, blank=True, verbose_name='最後使用時間')
 
-    # [建議新增] last_used_ip - 追蹤 Token 使用來源
+    # last_used_ip - 追蹤 Token 使用來源
     last_used_ip = models.GenericIPAddressField(null=True, blank=True, verbose_name='最後使用 IP')
     
     # created_at timestamp [default: `now()`]
@@ -56,6 +56,15 @@ class ApiToken(models.Model):
     
     # expires_at timestamp [null]
     expires_at = models.DateTimeField(null=True, blank=True, verbose_name='過期時間')
+
+    # (RFC 需求：查看現有的 Token)
+    last_used_at = models.DateTimeField(null=True, blank=True, verbose_name='上次使用時間')
+
+    # (RFC 需求：GET 回應中的 'last_used_ip')
+    last_used_ip = models.GenericIPAddressField(null=True, blank=True, verbose_name='上次使用 IP')
+    
+    # (RFC 需求：GET 回應中的 'usage_count')
+    usage_count = models.PositiveIntegerField(default=0, verbose_name='使用次數')
     
     # is_active boolean [default: true] - 允許使用者手動撤銷
     is_active = models.BooleanField(default=True, verbose_name='是否啟用')

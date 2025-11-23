@@ -3,8 +3,8 @@ from collections import Counter, defaultdict
 from django.db.models import Count
 from rest_framework import permissions
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.response import Response
 from rest_framework.views import APIView
+from ..common.responses import api_response
 
 from assignments.models import Assignments
 from problems.models import Problems
@@ -81,10 +81,9 @@ class CourseSummaryView(APIView):
             )
 
         data = {
-            "message": "Success.",
             "courseCount": len(breakdown),
             "breakdown": breakdown,
         }
 
         serializer = CourseSummarySerializer(data)
-        return Response(serializer.data)
+        return api_response(data=serializer.data, message="Success.")
