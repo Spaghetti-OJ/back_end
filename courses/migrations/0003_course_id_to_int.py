@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
             model_name="courses",
             name="id",
             field=models.BigAutoField(
-                auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                primary_key=True, serialize=False, verbose_name="ID"
             ),
         ),
         migrations.AlterField(
