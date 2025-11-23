@@ -35,6 +35,7 @@ urlpatterns = [
     path('api-tokens/', include('api_tokens.urls')),
     path('profile/', include('profiles.urls')),
     path('homework/',include('assignments.urls')),
+    path('editor/', include('editor.urls')),
 ]
 
 if settings.DEBUG:
