@@ -3,7 +3,6 @@ from .api import (
     ProblemsViewSet,
     SubtasksViewSet,
     TestCasesViewSet,
-    TagsViewSet,
     ProblemListView,
     ProblemDetailView,
     ProblemManageView,
@@ -13,13 +12,15 @@ from .api import (
     problem_like_toggle,
     problem_likes_count,
     UserLikedProblemsView,
+    TagListCreateView,
+    ProblemTagAddView,
+    ProblemTagRemoveView,
 )
 
 __all__ = [
     'ProblemsViewSet',
     'SubtasksViewSet',
     'TestCasesViewSet',
-    'TagsViewSet',
     'ProblemListView',
     'ProblemDetailView',
     'ProblemManageView',
@@ -29,4 +30,7 @@ __all__ = [
     'problem_like_toggle',
     'problem_likes_count',
     'UserLikedProblemsView',
+    'TagListCreateView',
+    'ProblemTagAddView',
+    'ProblemTagRemoveView',
 ]

@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from api_tokens.models import ApiToken
 from ..serializers.api_token import ApiTokenCreateSerializer, ApiTokenListSerializer
 from ..services import generate_api_token
+from ..authentication import ApiTokenAuthentication
 
 # ===================================================================
 def api_response(data=None, message="OK", status_code=200):
@@ -33,7 +34,7 @@ class ApiTokenListView(APIView):
     - POST: 為當前使用者建立一個新的 API Token。
     """
 
-    authentication_classes = [SessionAuthentication]
+    authentication_classes = [SessionAuthentication, ApiTokenAuthentication]
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
@@ -69,7 +70,7 @@ class ApiTokenDetailView(APIView):
     - POST: 為當前使用者建立一個新的 API Token。
     """
     
-    authentication_classes = [SessionAuthentication]
+    authentication_classes = [SessionAuthentication, ApiTokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get_object(self, request, tokenId):

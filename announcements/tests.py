@@ -1,4 +1,3 @@
-import uuid
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -85,7 +84,7 @@ class CourseAnnouncementAPITestCase(APITestCase):
 
     def test_nonexistent_course_returns_404(self):
         self.client.force_authenticate(user=self.teacher)
-        response = self.client.get(self.url(course_id=uuid.uuid4()))
+        response = self.client.get(self.url(course_id=999999))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.data["message"], "Course not found.")
@@ -281,7 +280,7 @@ class CourseAnnouncementDetailAPITestCase(APITestCase):
 
         self.client.force_authenticate(user=self.teacher)
         response = self.client.get(
-            self.url(course_id=uuid.uuid4(), ann_id=announcement.id)
+            self.url(course_id=999999, ann_id=announcement.id)
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

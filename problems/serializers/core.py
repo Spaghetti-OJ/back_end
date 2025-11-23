@@ -116,9 +116,12 @@ class ProblemSerializer(serializers.ModelSerializer):
         
         # Attach tags if provided
         if tag_ids:
+            from django.db.models import F
             tags_qs = Tags.objects.filter(id__in=tag_ids)
             print(f"[DEBUG] create() tags_qs count = {tags_qs.count()}")  # DEBUG
             problem.tags.set(tags_qs)
+            # usage_count 累加
+            Tags.objects.filter(id__in=tags_qs.values_list('id', flat=True)).update(usage_count=F('usage_count') + 1)
         else:
             print(f"[DEBUG] create() no tag_ids to attach")  # DEBUG
         
@@ -148,9 +151,18 @@ class ProblemSerializer(serializers.ModelSerializer):
         
         # Update tags if provided
         if tag_ids is not None:
+            from django.db.models import F
+            old_ids = set(instance.tags.values_list('id', flat=True))
             tags_qs = Tags.objects.filter(id__in=tag_ids)
-            print(f"[DEBUG] update() tags_qs count = {tags_qs.count()}, ids = {list(tags_qs.values_list('id', flat=True))}")  # DEBUG
+            new_ids = set(tags_qs.values_list('id', flat=True))
+            added = new_ids - old_ids
+            removed = old_ids - new_ids
+            print(f"[DEBUG] update() tags_qs count = {tags_qs.count()}, ids = {list(new_ids)} added={added} removed={removed}")  # DEBUG
             problem.tags.set(tags_qs)
+            if added:
+                Tags.objects.filter(id__in=added).update(usage_count=F('usage_count') + 1)
+            if removed:
+                Tags.objects.filter(id__in=removed).update(usage_count=F('usage_count') - 1)
             print(f"[DEBUG] update() after set, problem.tags.count() = {problem.tags.count()}")  # DEBUG
         else:
             print(f"[DEBUG] update() tag_ids is None, not updating tags")  # DEBUG

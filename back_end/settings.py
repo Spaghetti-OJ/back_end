@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+    "drf_spectacular",  
     "corsheaders",
     "courses.apps.CoursesConfig",
     "auths",
@@ -63,6 +64,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 MIDDLEWARE = [
@@ -188,4 +190,12 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": True,                      # 旋轉 refresh（建議開）
     "BLACKLIST_AFTER_ROTATION": True,                   # 舊 refresh 自動黑名單
     "UPDATE_LAST_LOGIN": True,                          # 可選
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "New NOJ API Documentation",
+    "DESCRIPTION": "目前後端實作的NOJ API文件(會根據程式碼自動生成)",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+
 }

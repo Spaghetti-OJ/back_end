@@ -21,9 +21,10 @@ from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
+from ..responses import api_response
 from django.shortcuts import get_object_or_404
 
-from ..models import Problems, Problem_subtasks, Test_cases, Tags
+from ..models import Problems, Problem_subtasks, Test_cases, Tags, Problem_tags
 from ..serializers import (
     ProblemSerializer, ProblemDetailSerializer, ProblemStudentSerializer,
     SubtaskSerializer, TestCaseSerializer, TagSerializer
@@ -111,16 +112,130 @@ class TestCasesViewSet(viewsets.ModelViewSet):
         self._ensure_owner(subtask)
         instance.delete()
 
-class TagsViewSet(viewsets.ModelViewSet):
-    queryset = Tags.objects.all().order_by("name")
-    serializer_class = TagSerializer
+class TagListCreateView(APIView):
+    """GET /tags/ 取得所有標籤
+    POST /tags/ 建立新標籤（需要登入，建議僅教師/管理員；此處暫允任何登入使用者）
+    """
     permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get(self, request):
+        tags = Tags.objects.all().order_by('name')
+        return api_response(TagSerializer(tags, many=True).data, "取得標籤列表成功", status_code=200)
+
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return api_response(None, "Authentication required.", status_code=401)
+        ser = TagSerializer(data=request.data)
+        if not ser.is_valid():
+            return api_response(ser.errors, "Validation error", status_code=422)
+        tag = ser.save()
+        return api_response(TagSerializer(tag).data, "Tag created", status_code=201)
+
+
+class ProblemTagAddView(APIView):
+    """POST /problem/<id>/tags  將現有標籤加入題目
+    Body: {"tag_id": 1} 或 {"tagId": 1}
+    權限：題目擁有者 / 課程 TA / 教師 / 管理員
+    若標籤已存在於題目，回傳 400。
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_problem_for_modify(self, problem_id, user):
+        problem = get_object_or_404(Problems, pk=problem_id)
+        if user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher']:
+            return problem
+        if problem.creator_id == user:
+            return problem
+        if problem.course_id:
+            from courses.models import Course_members
+            is_staff = Course_members.objects.filter(
+                course_id=problem.course_id,
+                user_id=user,
+                role__in=['ta', 'teacher']
+            ).exists()
+            if is_staff:
+                return problem
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("Not enough permission to modify problem tags.")
+
+    def post(self, request, pk):
+        problem = self._get_problem_for_modify(pk, request.user)
+        tag_id = request.data.get('tag_id') or request.data.get('tagId')
+        if tag_id is None:
+            return api_response(None, "tag_id is required", status_code=400)
+        try:
+            tag_id = int(tag_id)
+        except (ValueError, TypeError):
+            return api_response(None, "Invalid tag_id", status_code=400)
+        tag = Tags.objects.filter(pk=tag_id).first()
+        if not tag:
+            return api_response(None, "Tag not found.", status_code=404)
+        # 已存在關聯？
+        if Problem_tags.objects.filter(problem_id=problem, tag_id=tag).exists():
+            return api_response(None, "Tag already attached to problem.", status_code=400)
+        from django.db.models import F
+        Problem_tags.objects.create(problem_id=problem, tag_id=tag, added_by=request.user)
+        Tags.objects.filter(pk=tag.pk).update(usage_count=F('usage_count') + 1)
+        tag.refresh_from_db()
+        return api_response({"tag": TagSerializer(tag).data}, "Tag added", status_code=201)
+
+
+class ProblemTagRemoveView(APIView):
+    """DELETE /problem/<id>/tags/<tag_id>  從題目移除標籤
+    權限：題目擁有者 / 課程 TA / 教師 / 管理員
+    若關聯不存在則回傳 404。
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_problem_for_modify(self, problem_id, user):
+        problem = get_object_or_404(Problems, pk=problem_id)
+        if user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher']:
+            return problem
+        if problem.creator_id == user:
+            return problem
+        if problem.course_id:
+            from courses.models import Course_members
+            is_staff = Course_members.objects.filter(
+                course_id=problem.course_id,
+                user_id=user,
+                role__in=['ta', 'teacher']
+            ).exists()
+            if is_staff:
+                return problem
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("Not enough permission to modify problem tags.")
+
+    def delete(self, request, pk, tag_id):
+        problem = self._get_problem_for_modify(pk, request.user)
+        try:
+            tag_id_int = int(tag_id)
+        except (ValueError, TypeError):
+            return api_response(None, "Invalid tag_id", status_code=400)
+        tag = Tags.objects.filter(pk=tag_id_int).first()
+        if not tag:
+            return api_response(None, "Tag not found.", status_code=404)
+        rel = Problem_tags.objects.filter(problem_id=problem, tag_id=tag).first()
+        if not rel:
+            return api_response(None, "Tag not attached to this problem.", status_code=404)
+        from django.db.models import F
+        rel.delete()
+        Tags.objects.filter(pk=tag.pk).update(usage_count=F('usage_count') - 1)
+        tag.refresh_from_db()
+        return api_response({"tag": TagSerializer(tag).data}, "Tag removed", status_code=200)
 
 
 class ProblemPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = 'page_size'
     max_page_size = 100
+
+    def get_paginated_response(self, data):
+        return api_response({
+            "count": self.page.paginator.count,
+            "next": self.get_next_link(),
+            "previous": self.get_previous_link(),
+            "results": data,
+        }, "OK", status_code=200)
 
 
 class ProblemListView(APIView):
@@ -181,12 +296,12 @@ class ProblemListView(APIView):
             return paginator.get_paginated_response(serializer.data)
         
         serializer = ProblemSerializer(queryset, many=True)
-        return Response(serializer.data)
+        return api_response(serializer.data, "OK", status_code=200)
 
     # 重要：不允許在 /problem/ 進行建立，統一走 /problem/manage
     # 若誤用 POST /problem/，回傳 405，請改用 /problem/manage
     def post(self, request):
-        return Response({"detail": "Method Not Allowed. Use POST /problem/manage to create."}, status=405)
+        return api_response(None, "Method Not Allowed. Use POST /problem/manage to create.", status_code=405)
 
 
 class ProblemDetailView(APIView):
@@ -203,7 +318,7 @@ class ProblemDetailView(APIView):
                 'tags', 'subtasks__test_cases'
             ).get(pk=pk)
         except Problems.DoesNotExist:
-            return Response({"detail": "Problem not found."}, status=404)
+            return api_response(None, "Problem not found.", status_code=404)
         
         # 權限檢查
         user = request.user
@@ -214,7 +329,7 @@ class ProblemDetailView(APIView):
         if visibility_normalized not in ('public'):
             # not public -> need auth
             if not user.is_authenticated:
-                return Response({"detail": "Authentication required."}, status=401)
+                return api_response(None, "Authentication required.", status_code=401)
             # admin/teacher
             if user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher']:
                 pass
@@ -227,9 +342,9 @@ class ProblemDetailView(APIView):
                     user_id=user
                 ).exists()
                 if not is_course_member:
-                    return Response({"detail": "You do not have permission to view this problem."}, status=403)
+                    return api_response(None, "You do not have permission to view this problem.", status_code=403)
             else:
-                return Response({"detail": "You do not have permission to view this problem."}, status=403)
+                return api_response(None, "You do not have permission to view this problem.", status_code=403)
         
         # 序列化
         serializer = ProblemStudentSerializer(problem)
@@ -249,7 +364,7 @@ class ProblemDetailView(APIView):
             data['submit_count'] = None
             data['high_score'] = None
         
-        return Response(data)
+        return api_response(data, "取得題目成功", status_code=200)
 
 
 import math
@@ -274,7 +389,7 @@ class ProblemStatsView(APIView):
             try:
                 problem = Problems.objects.get(pk=pk)
             except Problems.DoesNotExist:
-                return Response({"detail": "Problem not found."}, status=404)
+                return api_response(None, "Problem not found.", status_code=404)
 
             # 2. 總學生數（該課程所有學生）
             course_id = getattr(problem, 'course_id', None)
@@ -315,7 +430,7 @@ class ProblemStatsView(APIView):
             # 10. top10記憶體
             top10_memory = list(submissions.filter(memory_usage__gt=0).order_by('memory_usage')[:10].values('id', 'user', 'memory_usage', 'score', 'status'))
 
-            return Response({
+            return api_response({
                 "acUserRatio": [ac_user_count, total_students],
                 "triedUserCount": tried_user_count,
                 "average": average,
@@ -324,13 +439,10 @@ class ProblemStatsView(APIView):
                 "statusCount": status_count,
                 "top10RunTime": top10_runtime,
                 "top10MemoryUsage": top10_memory,
-            }, status=200)
+            }, "OK", status_code=200)
         except OperationalError as e:
             # Helpful diagnostic for local dev when migrations/tables are missing
-            return Response({
-                "detail": "Service temporarily unavailable: dependent database tables appear to be missing.",
-                "error": str(e),
-            }, status=503)
+            return api_response({"error": str(e)}, "Service temporarily unavailable: dependent database tables appear to be missing.", status_code=503)
 
 class ProblemHighScoreView(APIView):
     """
@@ -343,7 +455,7 @@ class ProblemHighScoreView(APIView):
         try:
             problem = Problems.objects.get(pk=pk)
         except Problems.DoesNotExist:
-            return Response({"detail": "Problem not found."}, status=404)
+            return api_response(None, "Problem not found.", status_code=404)
         
         user = request.user
         high_score = Submission.objects.filter(
@@ -355,7 +467,7 @@ class ProblemHighScoreView(APIView):
         if high_score is None:
             high_score = 0
         
-        return Response({"score": high_score}, status=200)
+        return api_response({"score": high_score}, "OK", status_code=200)
 
 
 class ProblemManageView(APIView):
@@ -369,7 +481,7 @@ class ProblemManageView(APIView):
     def post(self, request):
         serializer = ProblemSerializer(data=request.data, context={"request": request})
         if not serializer.is_valid():
-            return Response({"success": False, "errors": serializer.errors}, status=422)
+            return api_response({"errors": serializer.errors}, "Validation error", status_code=422)
 
         # 權限檢查：
         user = request.user
@@ -389,7 +501,7 @@ class ProblemManageView(APIView):
                 role='ta',
             ).exists()
             if not is_course_ta:
-                return Response({"detail": "Not enough permission: need admin/teacher or TA of the course."}, status=403)
+                return api_response(None, "Not enough permission: need admin/teacher or TA of the course.", status_code=403)
 
         # 嚴格驗證 tags（若提供）
         tags_data = request.data.get('tags')
@@ -400,13 +512,13 @@ class ProblemManageView(APIView):
                     try:
                         tag_ids.append(int(v))
                     except (ValueError, TypeError):
-                        return Response({"success": False, "errors": {"tags": f"Invalid tag id: {v}"}}, status=400)
+                        return api_response({"tags": f"Invalid tag id: {v}"}, "Validation error", status_code=400)
 
                 from ..models import Tags
                 existing_ids = set(Tags.objects.filter(id__in=tag_ids).values_list('id', flat=True))
                 missing_ids = [tid for tid in tag_ids if tid not in existing_ids]
                 if missing_ids:
-                    return Response({"success": False, "errors": {"tags": f"Tag IDs do not exist: {missing_ids}"}}, status=400)
+                    return api_response({"errors": {"tags": f"Tag IDs do not exist: {missing_ids}"}}, "Validation error", status_code=400)
 
         problem = serializer.save(creator_id=request.user)
 
@@ -416,7 +528,7 @@ class ProblemManageView(APIView):
             tags_qs = Tags.objects.filter(id__in=tag_ids)
             problem.tags.set(tags_qs)
 
-        return Response({"success": True, "problem_id": problem.id}, status=201)
+        return api_response({"problem_id": problem.id}, "題目建立成功", status_code=201)
 
 
 @api_view(['POST', 'DELETE'])
@@ -428,7 +540,7 @@ def problem_like_toggle(request, pk):
     try:
         problem = Problems.objects.get(pk=pk)
     except Problems.DoesNotExist:
-        return Response({"detail": "Problem not found."}, status=404)
+        return api_response(None, "Problem not found.", status_code=404)
 
     user = request.user
 
@@ -438,25 +550,25 @@ def problem_like_toggle(request, pk):
 
             if request.method == 'POST':
                 if existing:
-                    return Response({"detail": "You already liked this problem."}, status=400)
+                    return api_response(None, "You already liked this problem.", status_code=400)
                 ProblemLike.objects.create(problem=problem, user=user)
                 # update counter
                 Problems.objects.filter(pk=pk).update(like_count=dj_models.F('like_count') + 1)
                 problem.refresh_from_db()
-                return Response({"detail": "Liked", "likes_count": problem.like_count}, status=201)
+                return api_response({"likes_count": problem.like_count}, "Liked", status_code=201)
 
             # method == DELETE
             if not existing:
-                return Response({"detail": "You have not liked this problem."}, status=400)
+                return api_response(None, "You have not liked this problem.", status_code=400)
             existing.delete()
             Problems.objects.filter(pk=pk).update(like_count=dj_models.F('like_count') - 1)
             problem.refresh_from_db()
-            return Response({"detail": "Unliked", "likes_count": problem.like_count}, status=200)
+            return api_response({"likes_count": problem.like_count}, "Unliked", status_code=200)
 
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"problem_like_toggle failed: {e}", exc_info=True)
-        return Response({"detail": "Operation failed"}, status=500)
+        return api_response(None, "Operation failed", status_code=500)
 
 
 @api_view(['GET'])
@@ -465,19 +577,32 @@ def problem_likes_count(request, pk):
     try:
         problem = Problems.objects.get(pk=pk)
     except Problems.DoesNotExist:
-        return Response({"detail": "Problem not found."}, status=404)
-    return Response({"likes_count": problem.like_count}, status=200)
+        return api_response(None, "Problem not found.", status_code=404)
+    return api_response({"likes_count": problem.like_count}, "OK", status_code=200)
 
 
 class UserLikedProblemsView(generics.ListAPIView):
     """GET /user/likes - 列出已按讚的題目（需登入）"""
     permission_classes = [IsAuthenticated]
     serializer_class = ProblemStudentSerializer
+    pagination_class = ProblemPagination
 
     def get_queryset(self):
         user = self.request.user
         liked_ids = ProblemLike.objects.filter(user=user).values_list('problem', flat=True)
         return Problems.objects.filter(id__in=liked_ids).order_by('-created_at')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            # pagination_class.get_paginated_response already wraps
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return api_response(serializer.data, "OK", status_code=200)
 
 
 # PUT/DELETE /api/problem/manage/<id> — 修改/刪除題目
@@ -516,7 +641,7 @@ class ProblemManageDetailView(APIView):
                 'tags', 'subtasks__test_cases'
             ).get(pk=pk)
         except Problems.DoesNotExist:
-            return Response({"detail": "Problem not found."}, status=404)
+            return api_response(None, "Problem not found.", status_code=404)
         
         # 權限檢查：admin/teacher 可看全部
         user = request.user
@@ -531,9 +656,9 @@ class ProblemManageDetailView(APIView):
                         role__in=['ta', 'teacher']
                     ).exists()
                     if not is_course_staff:
-                        return Response({"detail": "Not enough permission"}, status=403)
+                        return api_response(None, "Not enough permission", status_code=403)
                 else:
-                    return Response({"detail": "Not enough permission"}, status=403)
+                    return api_response(None, "Not enough permission", status_code=403)
         
         # 使用完整版 serializer
         serializer = ProblemDetailSerializer(problem)
@@ -541,14 +666,14 @@ class ProblemManageDetailView(APIView):
         data['ac_user_count'] = 0  # 暫時預設值
         data['submitter_count'] = 0
         data['can_view_stdout'] = True  # 預設值，可從 settings 或題目設定讀取
-        return Response(data)
+        return api_response(data, "取得題目（管理）成功", status_code=200)
 
     @transaction.atomic
     def put(self, request, pk):
         problem = self.get_object_for_modify(pk, request.user)
         serializer = ProblemSerializer(problem, data=request.data, partial=True, context={"request": request})
         if not serializer.is_valid():
-            return Response({"success": False, "errors": serializer.errors}, status=422)
+            return api_response({"errors": serializer.errors}, "Validation error", status_code=422)
         
         # Extract and validate tags before saving
         tags_data = request.data.get('tags')
@@ -559,7 +684,7 @@ class ProblemManageDetailView(APIView):
                     try:
                         tag_ids.append(int(v))
                     except (ValueError, TypeError):
-                        return Response({"success": False, "errors": {"tags": f"Invalid tag id: {v}"}}, status=400)
+                        return api_response({"errors": {"tags": f"Invalid tag id: {v}"}}, "Validation error", status_code=400)
                 
                 # Strict validation: all tag ids must exist
                 from ..models import Tags
@@ -567,10 +692,7 @@ class ProblemManageDetailView(APIView):
                 existing_ids = set(existing_tags.values_list('id', flat=True))
                 missing_ids = [tid for tid in tag_ids if tid not in existing_ids]
                 if missing_ids:
-                    return Response({
-                        "success": False, 
-                        "errors": {"tags": f"Tag IDs do not exist: {missing_ids}"}
-                    }, status=400)
+                    return api_response({"tags": f"Tag IDs do not exist: {missing_ids}"}, "Validation error", status_code=400)
         
         serializer.save(creator_id=problem.creator_id)  # 保留 owner
         
@@ -580,10 +702,10 @@ class ProblemManageDetailView(APIView):
             tags_qs = Tags.objects.filter(id__in=tag_ids)
             problem.tags.set(tags_qs)
         
-        return Response({"success": True, "problem_id": problem.id}, status=200)
+        return api_response({"problem_id": problem.id}, "題目更新成功", status_code=200)
 
     @transaction.atomic
     def delete(self, request, pk):
         problem = self.get_object_for_modify(pk, request.user)
         problem.delete()
-        return Response({"success": True}, status=204)
+        return api_response(None, "題目刪除成功", status_code=204)
