@@ -58,8 +58,9 @@ def test_problem_detail_personal_stats(api_client, teacher, student, course):
     res = api_client.get(f"/problem/{p.id}")
     assert res.status_code == 200
     body = res.json()
-    assert body.get("submit_count") is None
-    assert body.get("high_score") is None
+    data = body.get("data")
+    assert data.get("submit_count") is None
+    assert data.get("high_score") is None
 
     # 建立兩次提交（student）
     Submission.objects.create(problem_id=p.id, user=student, language_type='python', source_code='print(1)', score=10, created_at=timezone.now())
@@ -70,8 +71,9 @@ def test_problem_detail_personal_stats(api_client, teacher, student, course):
     res = api_client.get(f"/problem/{p.id}")
     assert res.status_code == 200
     body = res.json()
-    assert body.get("submit_count") == 2
-    assert body.get("high_score") == 80
+    data = body.get("data")
+    assert data.get("submit_count") == 2
+    assert data.get("high_score") == 80
 
 
 @pytest.mark.django_db
@@ -81,12 +83,13 @@ def test_problem_list_anonymous_filters_public(api_client, teacher, course):
 
     res = api_client.get("/problem/")
     assert res.status_code == 200
-    data = res.json()
-    # 若之後加上分頁，這裡可適配 'results'
-    if isinstance(data, dict) and "results" in data:
-        items = data["results"]
+    body = res.json()
+    payload = body.get("data")
+    # 分頁或非分頁都適配
+    if isinstance(payload, dict) and "results" in payload:
+        items = payload["results"]
     else:
-        items = data
+        items = payload
     assert len(items) == 1
     assert items[0]["title"] == "P1"
 
@@ -109,7 +112,7 @@ def test_problem_detail_permissions(api_client, teacher, student, course):
     res = api_client.get(f"/problem/{p.id}")
     assert res.status_code == 200
     body = res.json()
-    assert body["title"] == "Secret"
+    assert body["data"]["title"] == "Secret"
 
 
 @pytest.mark.django_db
@@ -131,9 +134,9 @@ def test_manage_create_requires_teacher(api_client, teacher, student, course):
     res = api_client.post("/problem/manage", payload, format="json")
     assert res.status_code == 201
     body = res.json()
-    assert body.get("success") is True
-    assert "problem_id" in body
+    assert body.get("status") == "201"
+    assert "problem_id" in body.get("data", {})
 
-    created = Problems.objects.get(pk=body["problem_id"])
+    created = Problems.objects.get(pk=body["data"]["problem_id"]) 
     assert created.title == "New Problem"
     assert created.course_id_id == course.id
