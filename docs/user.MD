@@ -455,10 +455,10 @@ curl -X GET "http://127.0.0.1:8000/auth/me/" \
 ```json
 {
   "real_name": "陳天天",
-  "user_name": "momo",
+  "username": "momo",
   "role": "Student",
   "email": "412470100S@gapps.ntnu.edu.tw",
-  "user_id": "omuba",
+  "userid": "omuba",
   "student_id": "41247057S",
   "introduction": "哈囉我是資工116",
   "avatar":null
@@ -470,10 +470,10 @@ curl -X GET "http://127.0.0.1:8000/auth/me/" \
 | 欄位           | 型別     | 說明                               |
 | ------------ | ------ | -------------------------------- |
 | real_name    | string | 使用者真實姓名                          |
-| user_name    | string | 使用者帳號（username）                  |
+| username    | string | 使用者帳號（username）                  |
 | role         | string | 使用者身份（Student / Teacher / Admin） |
 | email        | string | 使用者電子郵件                          |
-| user_id      | string | 使用者的 ID             |
+| userid      | string | 使用者的 ID             |
 | student_id   | string | 學號（若有）                           |
 | introduction | string | 個人簡介                             |
 | avatar       | string | 頭像 url                |
@@ -545,10 +545,10 @@ GET /profile/{username}/
 
 ```json
 {
-  "user_name": "momo",
+  "username": "momo",
   "role": "Student",
   "email": "momo@example.com",
-  "user_id": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
+  "userid": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
   "introduction": "哈囉我是資工116",
   "avatar":null
 }
@@ -558,10 +558,10 @@ GET /profile/{username}/
 
 | 欄位           | 類型     | 說明                                        |
 | ------------ | ------ | ----------------------------------------- |
-| user_name    | string | 使用者帳號（username）                           |
+| username    | string | 使用者帳號（username）                           |
 | role         | string | 使用者身份（例如：`Student` / `Teacher` / `Admin`） |
 | email        | string | 使用者電子郵件（依隱私策略可能顯示或遮蔽）                     |
-| user_id      | string | 使用者的公開 ID（預設為使用者主鍵；若系統有自訂公開 ID 則為該值）      |
+| userid      | string | 使用者的公開 ID（預設為使用者主鍵；若系統有自訂公開 ID 則為該值）      |
 | introduction | string | 個人簡介（來源：UserProfile.bio；若未設定可能為空字串）       |
 | avatar       | string | 頭像 url                |
 

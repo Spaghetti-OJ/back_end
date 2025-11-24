@@ -8,9 +8,9 @@ User = get_user_model()
 class MeProfileSerializer(serializers.ModelSerializer):
     # 來自 User
     real_name = serializers.CharField(source="user.real_name")
-    user_name = serializers.CharField(source="user.username")
+    username = serializers.CharField(source="user.username")
     email = serializers.EmailField(source="user.email")
-    user_id = serializers.CharField(source="user.id") 
+    userid = serializers.CharField(source="user.id") 
 
     # 來自 UserProfile
     student_id = serializers.CharField(allow_blank=True, allow_null=True)
@@ -24,10 +24,10 @@ class MeProfileSerializer(serializers.ModelSerializer):
         model = UserProfile
         fields = [
             "real_name",
-            "user_name",
+            "username",
             "role",
             "email",
-            "user_id",
+            "userid",
             "student_id",
             "introduction",
             "avatar",
@@ -38,16 +38,16 @@ class MeProfileSerializer(serializers.ModelSerializer):
         return obj.user.get_identity_display()
     
 class PublicProfileSerializer(serializers.ModelSerializer):
-    user_name = serializers.CharField(source="username", read_only=True)
+    username = serializers.CharField(source="username", read_only=True)
     role = serializers.SerializerMethodField(read_only=True)
     email = serializers.EmailField(read_only=True)
-    user_id = serializers.CharField(source="id", read_only=True)
+    userid = serializers.CharField(source="id", read_only=True)
     introduction = serializers.CharField(source="userprofile.bio", read_only=True, allow_blank=True)
     avatar = serializers.ImageField(source="userprofile.avatar", read_only=True, allow_null=True)
 
     class Meta:
         model = User
-        fields = ("user_name", "role", "email", "user_id", "introduction", "avatar")
+        fields = ("username", "role", "email", "userid", "introduction", "avatar")
 
     def get_role(self, obj):
         return obj.get_identity_display()
