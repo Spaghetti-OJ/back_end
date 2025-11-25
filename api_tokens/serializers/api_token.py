@@ -28,7 +28,6 @@ class ApiTokenCreateSerializer(serializers.ModelSerializer):
         if not isinstance(value, list):
             raise serializers.ValidationError("Permissions 必須是一個列表 (List)。")
             
-        # 找出不合法的 scope
         invalid_scopes = set(value) - VALID_SCOPES
         if invalid_scopes:
             raise serializers.ValidationError(
