@@ -1,6 +1,14 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import ProblemsViewSet, SubtasksViewSet, TestCasesViewSet, ProblemManageView, ProblemManageDetailView, ProblemListView, ProblemDetailView, ProblemHighScoreView, ProblemStatsView, problem_like_toggle, problem_likes_count, UserLikedProblemsView, TagListCreateView, ProblemTagAddView, ProblemTagRemoveView, ProblemCloneView, ProblemTestCaseUploadInitiateView, ProblemTestCaseUploadCompleteView, ProblemTestCaseDownloadView
+from .views.api import (
+    ProblemsViewSet, SubtasksViewSet, TestCasesViewSet,
+    ProblemManageView, ProblemManageDetailView,
+    ProblemListView, ProblemDetailView, ProblemHighScoreView, ProblemStatsView,
+    problem_like_toggle, problem_likes_count, UserLikedProblemsView,
+    TagListCreateView, ProblemTagAddView, ProblemTagRemoveView,
+    ProblemCloneView,
+    ProblemTestCaseUploadInitiateView, ProblemTestCaseUploadCompleteView, ProblemTestCaseDownloadView,
+)
 
 router = DefaultRouter()
 router.register(r"problems", ProblemsViewSet, basename="problems")
