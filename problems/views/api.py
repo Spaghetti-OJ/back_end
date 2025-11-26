@@ -255,6 +255,91 @@ class ProblemTestCaseDownloadView(APIView):
         return resp
 
 
+class ProblemTestCaseChecksumView(APIView):
+    """GET /problem/<pk>/checksum (Sandbox 專用)
+    目的：沙盒下載測資 zip 後驗證 MD5 完整性。
+    驗證：使用 query string `token` 與後端設定的 SANDBOX_TOKEN 比對。
+    回傳：{"checksum": "<md5>"}
+    錯誤：401 token 無效；404 題目或測資不存在。
+    """
+    permission_classes = []  # 以 sandbox token 驗證，不用一般身份驗證
+
+    def get(self, request, pk: int):
+        token_req = request.GET.get('token')
+        token_expected = getattr(settings, 'SANDBOX_TOKEN', os.environ.get('SANDBOX_TOKEN'))
+        if not token_expected or token_req != token_expected:
+            return api_response(None, "Invalid sandbox token", status_code=401)
+        problem = get_object_or_404(Problems, pk=pk)
+        from ..services.storage import _storage
+        rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
+        if not _storage.exists(rel):
+            raise Http404("Test case archive not found")
+        # 計算 MD5
+        import hashlib
+        with _storage.open(rel, 'rb') as fh:
+            md5 = hashlib.md5(fh.read()).hexdigest()
+        return api_response({"checksum": md5}, "OK", status_code=200)
+
+
+class ProblemTestCaseMetaView(APIView):
+    """GET /problem/<pk>/meta (Sandbox 專用)
+    目的：沙盒在判題前取得測資結構描述。
+    回傳 tasks：每個測試對象包含 in/out 檔名與序號；若有不成對檔案列於 missing_pairs。
+    驗證：query string `token`。
+    """
+    permission_classes = []
+
+    def get(self, request, pk: int):
+        token_req = request.GET.get('token')
+        token_expected = getattr(settings, 'SANDBOX_TOKEN', os.environ.get('SANDBOX_TOKEN'))
+        if not token_expected or token_req != token_expected:
+            return api_response(None, "Invalid sandbox token", status_code=401)
+        problem = get_object_or_404(Problems, pk=pk)
+        from ..services.storage import _storage
+        rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
+        if not _storage.exists(rel):
+            raise Http404("Test case archive not found")
+        import zipfile
+        import hashlib
+        with _storage.open(rel, 'rb') as fh:
+            data = fh.read()
+        md5 = hashlib.md5(data).hexdigest()
+        from io import BytesIO
+        buffer = BytesIO(data)
+        tasks = []
+        missing_pairs = []
+        try:
+            with zipfile.ZipFile(buffer) as zf:
+                names = zf.namelist()
+                ins = [n for n in names if n.endswith('.in')]
+                outs = [n for n in names if n.endswith('.out')]
+                def stem(n):
+                    base = os.path.basename(n)
+                    return os.path.splitext(base)[0]
+                in_map = {stem(n): n for n in ins}
+                out_map = {stem(n): n for n in outs}
+                all_stems = sorted(set(list(in_map.keys()) + list(out_map.keys())))
+                for idx, s in enumerate(all_stems, start=1):
+                    i_name = in_map.get(s)
+                    o_name = out_map.get(s)
+                    if not i_name or not o_name:
+                        missing_pairs.append(s)
+                    tasks.append({
+                        "no": idx,
+                        "stem": s,
+                        "in": i_name,
+                        "out": o_name,
+                    })
+        except zipfile.BadZipFile:
+            return api_response(None, "Corrupted test case archive", status_code=500)
+        return api_response({
+            "checksum": md5,
+            "task_count": len(tasks),
+            "missing_pairs": missing_pairs,
+            "tasks": tasks,
+        }, "OK", status_code=200)
+
+
 class ProblemTagAddView(APIView):
     """POST /problem/<id>/tags  將現有標籤加入題目
     Body: {"tag_id": 1} 或 {"tagId": 1}

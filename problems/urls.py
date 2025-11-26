@@ -8,6 +8,7 @@ from .views.api import (
     TagListCreateView, ProblemTagAddView, ProblemTagRemoveView,
     ProblemCloneView,
     ProblemTestCaseUploadInitiateView, ProblemTestCaseUploadCompleteView, ProblemTestCaseDownloadView,
+    ProblemTestCaseChecksumView, ProblemTestCaseMetaView,
 )
 
 router = DefaultRouter()
@@ -31,6 +32,9 @@ urlpatterns = [
     path("<int:pk>/initiate-test-case-upload", ProblemTestCaseUploadInitiateView.as_view(), name="problem-initiate-testcase"),
     path("<int:pk>/complete-test-case-upload", ProblemTestCaseUploadCompleteView.as_view(), name="problem-complete-testcase"),
     path("<int:pk>/test-case", ProblemTestCaseDownloadView.as_view(), name="problem-testcase-download"),
+    # Sandbox 專用：測資檔案完整性（MD5）與結構資訊
+    path("<int:pk>/checksum", ProblemTestCaseChecksumView.as_view(), name="problem-testcase-checksum"),
+    path("<int:pk>/meta", ProblemTestCaseMetaView.as_view(), name="problem-testcase-meta"),
     # 新標籤 API
     path("tags", TagListCreateView.as_view(), name="tag-list-create"),
     path("<int:pk>/tags", ProblemTagAddView.as_view(), name="problem-tag-add"),
