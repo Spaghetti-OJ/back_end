@@ -28,21 +28,28 @@
   - `course_id`: 課程 UUID
   - `page`, `page_size`: 分頁參數
 
-成功回應（200 OK，略）：
+成功回應（200 OK，分頁包裝）：
 ```json
-[
-  {
-    "id": 1,
-    "title": "Two Sum",
-    "difficulty": "easy",
-    "is_public": "public",
-    "course_id": "<uuid>",
-    "tags": [
-      {"id": 1, "name": "陣列", "usage_count": 10}
-    ],
-    "created_at": "2025-11-08T06:45:00Z"
-  }
-]
+{
+  "data": {
+    "count": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "id": 1,
+        "title": "Two Sum",
+        "difficulty": "easy",
+        "is_public": "public",
+        "course_id": "<uuid>",
+        "tags": [{"id": 1, "name": "陣列", "usage_count": 10}],
+        "created_at": "2025-11-08T06:45:00Z"
+      }
+    ]
+  },
+  "message": "OK",
+  "status": "200"
+}
 ```
 
 **cURL 測試**：
@@ -61,14 +68,18 @@ curl "http://127.0.0.1:8000/problem/" \
 成功回應（200 OK，部分欄位省略）：
 ```json
 {
-  "id": 1,
-  "title": "Two Sum",
-  "difficulty": "easy",
-  "is_public": "public",
-  "course_id": "<uuid>",
-  "tags": [{"id":1, "name":"陣列", "usage_count": 10}],
-  "submit_count": 2,
-  "high_score": 80
+  "data": {
+    "id": 1,
+    "title": "Two Sum",
+    "difficulty": "easy",
+    "is_public": "public",
+    "course_id": "<uuid>",
+    "tags": [{"id":1, "name":"陣列", "usage_count": 10}],
+    "submit_count": 2,
+    "high_score": 80
+  },
+  "message": "取得題目成功",
+  "status": "200"
 }
 ```
 未登入時 `submit_count`/`high_score` 會為 `null`。
@@ -95,7 +106,9 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID" \
 成功回應（200 OK）：
 ```json
 {
-  "score": 85
+  "data": { "score": 85 },
+  "message": "OK",
+  "status": "200"
 }
 ```
 
@@ -120,26 +133,30 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/high-score" \
 成功回應範例（200 OK）：
 ```json
 {
-  "acUserRatio": [5, 20],
-  "triedUserCount": 12,
-  "average": 67.5,
-  "std": 15.2,
-  "scoreDistribution": [
-    {"score": 0, "count": 2},
-    {"score": 50, "count": 3},
-    {"score": 100, "count": 7}
-  ],
-  "statusCount": {
-    "accepted": 7,
-    "wrong_answer": 3,
-    "runtime_error": 2
+  "data": {
+    "acUserRatio": [5, 20],
+    "triedUserCount": 12,
+    "average": 67.5,
+    "std": 15.2,
+    "scoreDistribution": [
+      {"score": 0, "count": 2},
+      {"score": 50, "count": 3},
+      {"score": 100, "count": 7}
+    ],
+    "statusCount": {
+      "accepted": 7,
+      "wrong_answer": 3,
+      "runtime_error": 2
+    },
+    "top10RunTime": [
+      {"id": "...", "user": "...", "execution_time": 120, "score": 100, "status": "accepted"}
+    ],
+    "top10MemoryUsage": [
+      {"id": "...", "user": "...", "memory_usage": 1024, "score": 100, "status": "accepted"}
+    ]
   },
-  "top10RunTime": [
-    {"id": "...", "user": "...", "execution_time": 120, "score": 100, "status": "accepted"}
-  ],
-  "top10MemoryUsage": [
-    {"id": "...", "user": "...", "memory_usage": 1024, "score": 100, "status": "accepted"}
-  ]
+  "message": "OK",
+  "status": "200"
 }
 ```
 
@@ -240,7 +257,11 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/stats" \
 
 成功回應（201 Created）：
 ```json
-{ "success": true, "problem_id": 1 }
+{
+  "data": { "problem_id": 1 },
+  "message": "題目建立成功",
+  "status": "201"
+}
 ```
 
 錯誤情況：
@@ -307,7 +328,14 @@ curl -X POST http://127.0.0.1:8000/problem/manage \
 - 權限：教師或管理員（或題目擁有者）
 - 說明：回傳完整題目資訊（包含 subtasks/test cases 等管理用欄位）。
 
-成功回應（200 OK）：結構與一般詳情類似，但欄位更完整，略。
+成功回應（200 OK）：結構與一般詳情類似，但欄位更完整，略。統一包裝：
+```json
+{
+  "data": { /* 管理詳情 payload */ },
+  "message": "取得題目（管理）成功",
+  "status": "200"
+}
+```
 
 ---
 
@@ -328,7 +356,11 @@ curl -X POST http://127.0.0.1:8000/problem/manage \
 
 成功回應（200 OK）：
 ```json
-{ "success": true, "problem_id": 1 }
+{
+  "data": { "problem_id": 1 },
+  "message": "題目更新成功",
+  "status": "200"
+}
 ```
 
 錯誤情況：
@@ -397,8 +429,9 @@ curl -X DELETE http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
 成功回應（201 Created）：
 ```json
 {
-  "detail": "Liked",
-  "likes_count": 15
+  "data": { "likes_count": 15 },
+  "message": "Liked",
+  "status": "201"
 }
 ```
 
@@ -425,8 +458,9 @@ curl -X POST "http://127.0.0.1:8000/problem/$PROBLEM_ID/like" \
 成功回應（200 OK）：
 ```json
 {
-  "detail": "Unliked",
-  "likes_count": 14
+  "data": { "likes_count": 14 },
+  "message": "Unliked",
+  "status": "200"
 }
 ```
 
@@ -453,7 +487,9 @@ curl -X DELETE "http://127.0.0.1:8000/problem/$PROBLEM_ID/like" \
 成功回應（200 OK）：
 ```json
 {
-  "likes_count": 42
+  "data": { "likes_count": 42 },
+  "message": "OK",
+  "status": "200"
 }
 ```
 
@@ -473,34 +509,43 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/likes"
 - 權限：需要登入
 - 說明：回傳當前使用者按讚過的所有題目（依建立時間倒序）。回傳格式與題目列表相同，包含每個題目的 `is_liked_by_user`（恆為 `true`）、`submit_count`、`high_score` 等個人化欄位。
 
-成功回應（200 OK）：
+成功回應（200 OK，分頁包裝）：
 ```json
-[
-  {
-    "id": 3,
-    "title": "Binary Search",
-    "difficulty": "medium",
-    "is_public": "public",
-    "course_id": "<uuid>",
-    "tags": [{"id": 1, "name": "搜尋", "usage_count": 5}],
-    "submit_count": 10,
-    "high_score": 100,
-    "is_liked_by_user": true,
-    "created_at": "2025-11-10T08:00:00Z"
+{
+  "data": {
+    "count": 2,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "id": 3,
+        "title": "Binary Search",
+        "difficulty": "medium",
+        "is_public": "public",
+        "course_id": "<uuid>",
+        "tags": [{"id": 1, "name": "搜尋", "usage_count": 5}],
+        "submit_count": 10,
+        "high_score": 100,
+        "is_liked_by_user": true,
+        "created_at": "2025-11-10T08:00:00Z"
+      },
+      {
+        "id": 1,
+        "title": "Two Sum",
+        "difficulty": "easy",
+        "is_public": "public",
+        "course_id": "<uuid>",
+        "tags": [{"id": 2, "name": "陣列", "usage_count": 12}],
+        "submit_count": 5,
+        "high_score": 80,
+        "is_liked_by_user": true,
+        "created_at": "2025-11-08T06:45:00Z"
+      }
+    ]
   },
-  {
-    "id": 1,
-    "title": "Two Sum",
-    "difficulty": "easy",
-    "is_public": "public",
-    "course_id": "<uuid>",
-    "tags": [{"id": 2, "name": "陣列", "usage_count": 12}],
-    "submit_count": 5,
-    "high_score": 80,
-    "is_liked_by_user": true,
-    "created_at": "2025-11-08T06:45:00Z"
-  }
-]
+  "message": "OK",
+  "status": "200"
+}
 ```
 
 可能錯誤：
@@ -522,18 +567,20 @@ curl "http://127.0.0.1:8000/problem/liked" \
 3. 新增標籤到題目：`POST /problem/<problem_id>/tags`
 4. 從題目移除標籤：`DELETE /problem/<problem_id>/tags/<tag_id>`
 
-> 注意：舊版路徑 `/problem/router/tags/` 已淘汰，現在統一使用上述格式方便前端整合。
-
 ### 1. 取得所有標籤
 - 路徑：`GET /problem/tags`
 - 權限：公開（可匿名）
 
-成功回應：
+成功回應（200 OK）：
 ```json
-[
-  {"id":1, "name":"陣列", "usage_count":12},
-  {"id":2, "name":"字串", "usage_count":7}
-]
+{
+  "data": [
+    {"id":1, "name":"陣列", "usage_count":12},
+    {"id":2, "name":"字串", "usage_count":7}
+  ],
+  "message": "取得標籤列表成功",
+  "status": "200"
+}
 ```
 
 **cURL**
@@ -548,7 +595,11 @@ curl "http://127.0.0.1:8000/problem/tags" | jq
 
 成功回應（201）：
 ```json
-{"id":5, "name":"圖論", "usage_count":0}
+{
+  "data": {"id":5, "name":"圖論", "usage_count":0},
+  "message": "Tag created",
+  "status": "201"
+}
 ```
 
 錯誤：
@@ -563,6 +614,50 @@ curl -X POST "http://127.0.0.1:8000/problem/tags" \
   -d '{"name":"圖論"}' | jq
 ```
 
+---
+
+## 複製題目（管理）
+
+- 路徑：`POST /problem/clone`
+- 權限：系統管理員或目標課程教師/TA
+- 說明：將指定題目複製到目標課程，並複製其 tags、subtasks 與 test cases；統計欄位歸零。
+
+請求（JSON）：
+```json
+{
+  "problem_id": 30,
+  "target": "演算法(上)",
+  "status": "public" // 可選，接受 0/1/2 或 "hidden|course|public"
+}
+```
+
+成功回應（200 OK）：
+```json
+{
+  "data": { "problemId": 31 },
+  "message": "Success.",
+  "status": "200"
+}
+```
+
+可能錯誤：
+- 400 缺少 `problem_id` 或 `target`
+- 403 `Problem can not view.`（無權檢視來源題目）或 `Permission denied`（無權在目標課程建立）
+- 404 `Problem not found` / `Target course not found`
+
+**cURL 測試**：
+```bash
+curl -X POST "http://127.0.0.1:8000/problem/clone" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "problem_id": 30,
+    "target": "演算法(上)",
+    "status": "public"
+  }'
+```
+
+
 ### 3. 新增標籤到題目
 - 路徑：`POST /problem/<problem_id>/tags`
 - 權限：題目擁有者 / 課程 TA / 教師 / 管理員
@@ -571,8 +666,9 @@ curl -X POST "http://127.0.0.1:8000/problem/tags" \
 成功回應（201）：
 ```json
 {
-  "detail": "Tag added",
-  "tag": {"id":1, "name":"陣列", "usage_count":13}
+  "data": {"tag": {"id":1, "name":"陣列", "usage_count":13}},
+  "message": "Tag added",
+  "status": "201"
 }
 ```
 
@@ -596,8 +692,9 @@ curl -X POST "http://127.0.0.1:8000/problem/$PROBLEM_ID/tags" \
 成功回應（200）：
 ```json
 {
-  "detail": "Tag removed",
-  "tag": {"id":1, "name":"陣列", "usage_count":12}
+  "data": {"tag": {"id":1, "name":"陣列", "usage_count":12}},
+  "message": "Tag removed",
+  "status": "200"
 }
 ```
 
