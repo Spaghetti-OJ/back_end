@@ -72,8 +72,12 @@ class CourseListCreateView(generics.GenericAPIView):
                 message="Forbidden.", status_code=status.HTTP_403_FORBIDDEN
             )
 
-        serializer.save()
-        return api_response(message="Success.", status_code=status.HTTP_200_OK)
+        course = serializer.save()
+        return api_response(
+            data={"course": {"id": course.id}},
+            message="Success.",
+            status_code=status.HTTP_200_OK,
+        )
 
     def put(self, request, *args, **kwargs):
         user = request.user
