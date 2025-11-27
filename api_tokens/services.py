@@ -19,7 +19,7 @@ def generate_api_token(prefix=TOKEN_PREFIX, length=TOKEN_LENGTH):
     """
     random_part = secrets.token_urlsafe(length)
     
-    full_token = f"{prefix}_{random_part}"
+    full_token = f"{prefix}{random_part}"
     
     token_hash = hashlib.sha256(full_token.encode('utf-8')).hexdigest()
     
