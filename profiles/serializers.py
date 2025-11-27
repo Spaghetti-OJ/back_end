@@ -66,21 +66,30 @@ class MeProfileUpdateSerializer(serializers.Serializer):
         if "real_name" in validated_data:
             user.real_name = validated_data["real_name"]
             user_updated = True
+        user_updated = False
+        if "real_name" in validated_data:
+            user.real_name = validated_data["real_name"]
+            user_updated = True
         if "email" in validated_data:
             user.email = validated_data["email"]
             user_updated = True
         if user_updated:
             user.save()
 
+        profile_updated = False
         if "student_id" in validated_data:
             instance.student_id = validated_data["student_id"]
+            profile_updated = True
         if "bio" in validated_data:
             instance.bio = validated_data["bio"]
+            profile_updated = True
         if "avatar" in validated_data:
             # 允許上傳新頭像或傳 null 清空（前端就送 avatar=null）
             instance.avatar = validated_data["avatar"]
+            profile_updated = True
 
-        instance.save()
+        if profile_updated:
+            instance.save()
         return instance
 
     def create(self, validated_data):
