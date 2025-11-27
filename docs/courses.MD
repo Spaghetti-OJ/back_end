@@ -189,7 +189,7 @@ curl -X PUT "http://127.0.0.1:8000/course/<course_id>/?student=<student_id>" \
 **成功回應 (200 OK)**
 
 ```json
-{ "message": "Success." }
+{ "message": "Success.", "data": { "course": { "id": 42 } }, "status_code": 200 }
 ```
 
 **失敗回應**

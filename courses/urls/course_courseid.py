@@ -6,7 +6,7 @@ app_name = "course_courseid"
 
 urlpatterns = [
     path(
-        "<course_id>/",
+        "",
         detail_views.CourseDetailView.as_view(),
         name="detail",
     ),
