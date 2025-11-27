@@ -51,3 +51,33 @@ class PublicProfileSerializer(serializers.ModelSerializer):
 
     def get_role(self, obj):
         return obj.get_identity_display()
+    
+class MeProfileUpdateSerializer(serializers.Serializer):
+    real_name = serializers.CharField(required=False)
+    email = serializers.EmailField(required=False)
+    student_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    bio = serializers.CharField(required=False, allow_blank=True)
+    avatar = serializers.ImageField(required=False, allow_null=True)
+
+    def update(self, instance: UserProfile, validated_data):
+        user = instance.user
+
+        if "real_name" in validated_data:
+            user.real_name = validated_data["real_name"]
+        if "email" in validated_data:
+            user.email = validated_data["email"]
+        user.save()
+
+        if "student_id" in validated_data:
+            instance.student_id = validated_data["student_id"]
+        if "bio" in validated_data:
+            instance.bio = validated_data["bio"]
+        if "avatar" in validated_data:
+            # 允許上傳新頭像或傳 null 清空（前端就送 avatar=null）
+            instance.avatar = validated_data["avatar"]
+
+        instance.save()
+        return instance
+
+    def create(self, validated_data):
+        raise NotImplementedError("Use update() with an existing UserProfile instance.")

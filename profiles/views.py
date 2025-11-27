@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from user.models import UserProfile 
-from .serializers import MeProfileSerializer, PublicProfileSerializer
+from .serializers import MeProfileSerializer, MeProfileUpdateSerializer, PublicProfileSerializer
 from rest_framework import permissions
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.exceptions import NotFound
@@ -30,6 +30,23 @@ class MeProfileView(APIView):
         data = MeProfileSerializer(profile).data
         
         return api_response(data=data, status_code=200)
+    
+    def post(self, request):
+        user = User.objects.select_related("userprofile").get(pk=request.user.pk)
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+
+        serializer = MeProfileUpdateSerializer(profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+
+            data = MeProfileSerializer(profile).data
+            return api_response(data=data, message="Profile updated")
+
+        return api_response(
+            data=serializer.errors,
+            message="Validation error",
+            status_code=400,
+        )
 
 class PublicProfileView(RetrieveAPIView):
     """
