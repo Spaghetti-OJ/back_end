@@ -14,7 +14,7 @@ def generate_api_token(prefix=TOKEN_PREFIX, length=TOKEN_LENGTH):
     生成一個安全的 API Token 和它的雜湊值。
 
     返回 (full_token, token_hash)
-    - full_token: "ojt_A..." (這是給用戶看的，只會顯示這一次)
+    - full_token: "noj_pat__A..." (這是給用戶看的，只會顯示這一次)
     - token_hash: (這是儲存在資料庫的)
     """
     random_part = secrets.token_urlsafe(length)
