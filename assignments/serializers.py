@@ -165,3 +165,19 @@ class AddProblemsInSerializer(serializers.Serializer):
         if not data.get("problems") and not data.get("problem_ids"):
             raise serializers.ValidationError("problem_ids or problems is required")
         return data
+
+class HomeworkScoreboardItemSerializer(serializers.Serializer):
+    """
+    單一使用者在某作業的排行資訊
+    """
+    user_id = serializers.UUIDField()
+    username = serializers.CharField()
+    real_name = serializers.CharField(allow_null=True, required=False)
+    student_id = serializers.CharField(allow_null=True, required=False)
+
+    total_score = serializers.IntegerField()
+    accepted_count = serializers.IntegerField()
+    submission_count = serializers.IntegerField()
+    last_submission_time = serializers.DateTimeField(allow_null=True)
+
+    rank = serializers.IntegerField()

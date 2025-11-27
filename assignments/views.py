@@ -6,18 +6,22 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status, permissions
-from django.db.models import Max
+from django.db.models import Sum, Count, Max, Q
 from decimal import Decimal
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from assignments.models import Assignments, Assignment_problems
 from courses.models import Courses, Course_members
 from problems.models import Problems
+from submissions.models import UserProblemStats
 from .serializers import (
     HomeworkCreateSerializer,
     HomeworkDetailSerializer,
     HomeworkUpdateSerializer,
     AddProblemsInSerializer,
     make_list_item_from_instance,
+    HomeworkScoreboardSerializer,
 )
 
 # --------- 權限 & 工具 ---------
@@ -31,6 +35,25 @@ def is_teacher_or_ta(user, course) -> bool:
 def collect_problem_ids(hw: Assignments) -> List[int]:
     return list(
         hw.assignment_problems.order_by("order_index").values_list("problem_id", flat=True)
+    )
+
+def api_response(data=None, message="OK", status_code=status.HTTP_200_OK):
+    """
+    統一 API 回傳格式：
+    {
+      "data": <payload>,
+      "message": "給人看的訊息",
+      "status": "ok" | "error"
+    }
+    """
+    status_str = "ok" if 200 <= status_code < 400 else "error"
+    return Response(
+        {
+            "data": data,
+            "message": message,
+            "status": status_str,
+        },
+        status=status_code,
     )
 
 # --------- POST /homework/ ---------
@@ -283,3 +306,141 @@ class AddProblemsToHomeworkView(APIView):
 
         # 9) 回傳結果
         return Response("Add problems Success", status=status.HTTP_200_OK)
+
+# --------- GET /homework/<id>/scoreboard ---------
+class HomeworkScoreboardView(APIView):
+    """
+    GET /homework/{id}/scoreboard
+    回傳作業排行榜，欄位名稱對齊 DB spec：
+    - assignment_id, title, course_id
+    - items[]:
+        - rank, user_id, username, real_name
+        - total_score, max_total_score, is_late
+        - first_ac_time, last_submission_time
+        - problems[]: problem_id, best_score, max_possible_score, solve_status
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_assignment(self, homework_id: int) -> Assignments:
+        return get_object_or_404(
+            Assignments.objects.select_related("course"),
+            pk=homework_id,
+        )
+
+    def get(self, request, homework_id: int):
+        assignment = self._get_assignment(homework_id)
+
+        # 1. 取出這份作業的所有題目統計 (UserProblemStats)
+        stats_qs = (
+            UserProblemStats.objects
+            .filter(assignment_id=assignment.id)
+            .select_related("user")
+            .order_by("user__username", "problem_id")
+        )
+
+        # 2. 依 user 聚合
+        per_user = {}
+
+        for s in stats_qs:
+            uid = s.user_id
+            if uid not in per_user:
+                per_user[uid] = {
+                    "user": s.user,
+                    "total_score": 0,
+                    "max_total_score": 0,
+                    "is_late": False,
+                    "first_ac_time": None,
+                    "last_submission_time": None,
+                    "problems": [],
+                }
+
+            row = per_user[uid]
+
+            # 累積作業總分 / 總滿分
+            row["total_score"] += s.best_score
+            row["max_total_score"] += s.max_possible_score
+
+            # 是否曾經晚交
+            row["is_late"] = row["is_late"] or s.is_late
+
+            # 最早 AC 時間
+            if s.first_ac_time:
+                if (
+                    row["first_ac_time"] is None
+                    or s.first_ac_time < row["first_ac_time"]
+                ):
+                    row["first_ac_time"] = s.first_ac_time
+
+            # 最晚提交時間
+            if s.last_submission_time:
+                if (
+                    row["last_submission_time"] is None
+                    or s.last_submission_time > row["last_submission_time"]
+                ):
+                    row["last_submission_time"] = s.last_submission_time
+
+            # 單題資訊
+            row["problems"].append(
+                {
+                    "problem_id": s.problem_id,
+                    "best_score": s.best_score,
+                    "max_possible_score": s.max_possible_score,
+                    "solve_status": s.solve_status,
+                }
+            )
+
+        # 3. 變成 list，並排序 + 計算 rank
+        rows = []
+        for uid, agg in per_user.items():
+            user: User = agg["user"]
+            rows.append(
+                {
+                    # user 資訊：對齊 Users table
+                    "user_id": user.id,
+                    "username": user.username,
+                    "real_name": getattr(user, "real_name", ""),
+
+                    # scoreboard 統計欄位
+                    "total_score": agg["total_score"],
+                    "max_total_score": agg["max_total_score"],
+                    "is_late": agg["is_late"],
+                    "first_ac_time": agg["first_ac_time"],
+                    "last_submission_time": agg["last_submission_time"],
+                    "problems": agg["problems"],
+                }
+            )
+
+        # 排序：總分 ↓，再最早 AC ↑，再 username
+        def sort_key(r):
+            # 沒有 first_ac_time 的當成「很晚」
+            max_dt = timezone.datetime.max.replace(tzinfo=timezone.utc)
+            first_ac = r["first_ac_time"] or max_dt
+            return (-r["total_score"], first_ac, r["username"])
+
+        rows.sort(key=sort_key)
+
+        # 加 rank
+        current_rank = 1
+        last_score = None
+        last_rank = 1
+        for row in rows:
+            if last_score is None or row["total_score"] != last_score:
+                last_rank = current_rank
+                last_score = row["total_score"]
+            row["rank"] = last_rank
+            current_rank += 1
+
+        # 4. 組 payload：欄位名稱對齊 Assignments / Courses
+        payload = {
+            "assignment_id": assignment.id,
+            "title": assignment.title,
+            "course_id": assignment.course_id,  # 這裡會是 UUID(primary key)
+            "items": rows,
+        }
+
+        serializer = HomeworkScoreboardSerializer(payload)
+        return api_response(
+            data=serializer.data,
+            message="get homework scoreboard",
+            status_code=200,
+        )
