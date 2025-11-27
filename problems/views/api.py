@@ -82,6 +82,97 @@ class SubtasksViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only the problem owner can delete its subtasks.")
         instance.delete()
 
+
+class ProblemSubtaskListCreateView(APIView):
+    """GET /problem/<problemId>/subtasks — 取得子題列表
+    POST /problem/<problemId>/subtasks — 新增子題
+    權限：GET 可匿名（視題目可見性過濾）；POST 需為題目擁有者或課程 TA/教師/管理員。
+    """
+    permission_classes = []
+
+    def get(self, request, pk: int):
+        try:
+            problem = Problems.objects.get(pk=pk)
+        except Problems.DoesNotExist:
+            return api_response(None, "Problem not found.", status_code=404)
+
+        # 可見性過濾：非公開需檢查身份
+        user = request.user
+        visibility = getattr(problem, 'is_public', 'hidden')
+        legacy_public = visibility in (True, 1)
+        visibility_normalized = 'public' if legacy_public else visibility
+        if visibility_normalized not in ('public'):
+            if not user.is_authenticated:
+                return api_response(None, "Authentication required.", status_code=401)
+            if not (user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher'] or problem.creator_id == user):
+                if visibility_normalized == 'course' and problem.course_id:
+                    from courses.models import Course_members
+                    is_course_member = Course_members.objects.filter(course_id=problem.course_id, user_id=user).exists()
+                    if not is_course_member:
+                        return api_response(None, "You do not have permission to view this problem.", status_code=403)
+                else:
+                    return api_response(None, "You do not have permission to view this problem.", status_code=403)
+
+        subtasks = Problem_subtasks.objects.filter(problem_id=problem).order_by('subtask_no')
+        return api_response(SubtaskSerializer(subtasks, many=True).data, "OK", status_code=200)
+
+    def post(self, request, pk: int):
+        if not request.user.is_authenticated:
+            return api_response(None, "Authentication required.", status_code=401)
+        problem = get_object_or_404(Problems, pk=pk)
+        user = request.user
+
+        # 權限：owner/課程 TA/教師/管理員
+        if not (user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher'] or problem.creator_id == user):
+            from courses.models import Course_members
+            is_staff = Course_members.objects.filter(course_id=problem.course_id, user_id=user, role__in=['ta', 'teacher']).exists()
+            if not is_staff:
+                return api_response(None, "Not enough permission", status_code=403)
+
+        data = request.data.copy()
+        data['problem_id'] = problem.id
+        serializer = SubtaskSerializer(data=data)
+        if not serializer.is_valid():
+            return api_response({"errors": serializer.errors}, "Validation error", status_code=422)
+        subtask = serializer.save()
+        return api_response(SubtaskSerializer(subtask).data, "Subtask created", status_code=201)
+
+
+class ProblemSubtaskDetailView(APIView):
+    """PUT /problem/<problemId>/subtasks/<subtaskId> — 修改子題
+    DELETE /problem/<problemId>/subtasks/<subtaskId> — 刪除子題
+    權限：題目擁有者或課程 TA/教師/管理員。
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_subtask_with_permission(self, problem_id: int, subtask_id: int, user):
+        subtask = get_object_or_404(Problem_subtasks, pk=subtask_id)
+        if subtask.problem_id_id != problem_id:
+            from rest_framework.exceptions import NotFound
+            raise NotFound("Subtask does not belong to this problem")
+        problem = subtask.problem_id
+        if user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher'] or problem.creator_id == user:
+            return subtask
+        from courses.models import Course_members
+        is_staff = Course_members.objects.filter(course_id=problem.course_id, user_id=user, role__in=['ta', 'teacher']).exists()
+        if not is_staff:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Not enough permission")
+        return subtask
+
+    def put(self, request, pk: int, subtask_id: int):
+        subtask = self._get_subtask_with_permission(pk, subtask_id, request.user)
+        serializer = SubtaskSerializer(subtask, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return api_response({"errors": serializer.errors}, "Validation error", status_code=422)
+        serializer.save()
+        return api_response(SubtaskSerializer(subtask).data, "Subtask updated", status_code=200)
+
+    def delete(self, request, pk: int, subtask_id: int):
+        subtask = self._get_subtask_with_permission(pk, subtask_id, request.user)
+        subtask.delete()
+        return api_response(None, "Subtask deleted", status_code=204)
+
 class TestCasesViewSet(viewsets.ModelViewSet):
     queryset = Test_cases.objects.all().order_by("subtask_id", "idx")
     serializer_class = TestCaseSerializer
