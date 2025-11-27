@@ -45,7 +45,44 @@
         "tags": [{"id": 1, "name": "陣列", "usage_count": 10}],
         "created_at": "2025-11-08T06:45:00Z"
       }
-    ## 測資（Test Cases）上傳／下載（題目層級）
+    ]
+  },
+  "message": "OK",
+  "status": "200"
+}
+```
+
+**cURL 測試**：
+```bash
+curl "http://127.0.0.1:8000/problem/" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## 查看題目詳情（學生視角）
+
+- 路徑：`GET /problem/<problem_id>`
+- 說明：回傳題目詳情；未登入僅能查看 `public` 題目。對於 `course`/`hidden` 依權限與課程成員資格判斷。
+
+成功回應（200 OK，部分欄位省略）：
+```json
+{
+  "data": {
+    "id": 1,
+    "title": "Two Sum",
+    "difficulty": "easy",
+    "is_public": "public",
+    "course_id": "<uuid>",
+    "tags": [{"id":1, "name":"陣列", "usage_count": 10}],
+    "submit_count": 2,
+    "high_score": 80
+  },
+  "message": "取得題目成功",
+  "status": "200"
+}
+```
+未登入時 `submit_count`/`high_score` 會為 `null`。
 
     本地 Django Storage 採三個端點：
 
@@ -61,12 +98,12 @@
 
     注意：下載端點為檔案串流回應，不包 JSON（合理例外）。
 
-    ### 1) 初始化上傳
-    - 路徑：`POST /problem/<pid>/initiate-test-case-upload`
-    - Body：
-    ```json
-    { "length": 123456, "part_size": 1048576 }
-    ```
+### 1) 初始化上傳
+- 路徑：`POST /problem/<pid>/initiate-test-case-upload`
+- Body：
+```json
+{ "length": 123456, "part_size": 1048576 }
+```
 
     成功回應（200 OK）：
     ```json
