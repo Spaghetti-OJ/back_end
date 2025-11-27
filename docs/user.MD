@@ -602,3 +602,118 @@ curl -i -X GET "http://127.0.0.1:8000/profile/momo/" \
 ```
 
 ---
+
+## POST /profile/
+
+### 說明
+
+更新登入使用者的個人資料。所有欄位皆為非必填，僅會更新請求中提供的欄位，其餘保持不變。
+
+可修改欄位：
+
+* `real_name`：真實姓名（User）
+* `email`：Email（User）
+* `student_id`：學號，可空（UserProfile）
+* `bio`：個人簡介，可空（UserProfile）
+* `avatar`：頭像圖片檔案，可選（UserProfile）
+
+📌 不含檔案 → 使用 `application/json`
+📌 含 `avatar` → 使用 `multipart/form-data`
+
+---
+
+## 請求格式
+
+### JSON（不含檔案）
+
+```
+POST /profile/
+Content-Type: application/json
+Authorization: Bearer <ACCESS_TOKEN>
+```
+
+```json
+{
+  "real_name": "新名字",
+  "email": "new_email@example.com",
+  "student_id": "4103xxxx",
+  "bio": "更新後的自我介紹"
+}
+```
+
+### multipart/form-data（含 avatar）
+
+```
+POST /profile/
+Content-Type: multipart/form-data
+Authorization: Bearer <ACCESS_TOKEN>
+```
+
+欄位：
+
+* `avatar`: file
+* `bio`: text
+* 其餘文字欄位：`real_name`, `email`, `student_id`
+
+---
+
+## 成功回應（200）
+
+```json
+{
+  "data": {
+    "real_name": "新名字",
+    "username": "momo",
+    "role": "Student",
+    "email": "new_email@example.com",
+    "user_id": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
+    "student_id": "4103xxxx",
+    "bio": "更新後的自我介紹",
+    "avatar": "http://127.0.0.1:8000/media/avatars/xxx.png"
+  },
+  "message": "Profile updated",
+  "status": "ok"
+}
+```
+
+---
+
+## 失敗回應（400）
+
+```json
+{
+  "data": {
+    "email": ["Enter a valid email address."],
+    "avatar": ["The submitted file is empty."]
+  },
+  "message": "Validation error",
+  "status": "error"
+}
+```
+
+---
+
+## curl 範例
+
+### 修改文字欄位（JSON）
+
+```bash
+curl -X POST "http://127.0.0.1:8000/profile/" \
+  -H "Authorization: Bearer $ACCESS" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "real_name": "小桃改名版",
+    "email": "new_momo@example.com",
+    "bio": "這是新的自介！"
+  }'
+```
+
+### 上傳頭像（multipart/form-data）
+
+```bash
+curl -X POST "http://127.0.0.1:8000/profile/" \
+  -H "Authorization: Bearer $ACCESS" \
+  -F "avatar=@/home/rokusenn/Pictures/avatar.png" \
+  -F "bio=更新過的自我介紹"
+```
+---
