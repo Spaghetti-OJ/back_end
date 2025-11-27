@@ -9,6 +9,7 @@ from api_tokens.models import ApiToken
 from ..serializers.api_token import ApiTokenCreateSerializer, ApiTokenListSerializer
 from ..services import generate_api_token
 from ..authentication import ApiTokenAuthentication
+from ..permissions import TokenHasScope
 
 # ===================================================================
 def api_response(data=None, message="OK", status_code=200):
@@ -35,8 +36,8 @@ class ApiTokenListView(APIView):
     """
 
     authentication_classes = [SessionAuthentication, ApiTokenAuthentication]
-    permission_classes = [IsAuthenticated]
-    
+    permission_classes = [IsAuthenticated, TokenHasScope]
+
     def get(self, request):
         tokens = ApiToken.objects.filter(user=request.user)
         serializer = ApiTokenListSerializer(tokens, many=True)
