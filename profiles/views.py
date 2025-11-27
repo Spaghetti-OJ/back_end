@@ -38,7 +38,7 @@ class MeProfileView(APIView):
         serializer = MeProfileUpdateSerializer(profile, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
-
+            profile.refresh_from_db()
             data = MeProfileSerializer(profile).data
             return api_response(data=data, message="Profile updated")
 
