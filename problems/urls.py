@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import ProblemsViewSet, SubtasksViewSet, TestCasesViewSet, ProblemManageView, ProblemManageDetailView, ProblemListView, ProblemDetailView, ProblemHighScoreView, ProblemStatsView, problem_like_toggle, problem_likes_count, UserLikedProblemsView, TagListCreateView, ProblemTagAddView, ProblemTagRemoveView, ProblemCloneView
+from .views import ProblemsViewSet, SubtasksViewSet, TestCasesViewSet, ProblemManageView, ProblemManageDetailView, ProblemListView, ProblemDetailView, ProblemHighScoreView, ProblemStatsView, problem_like_toggle, problem_likes_count, UserLikedProblemsView, TagListCreateView, ProblemTagAddView, ProblemTagRemoveView, ProblemCloneView, ProblemTestCaseUploadInitiateView, ProblemTestCaseUploadCompleteView, ProblemTestCaseDownloadView
 
 router = DefaultRouter()
 router.register(r"problems", ProblemsViewSet, basename="problems")
@@ -19,6 +19,10 @@ urlpatterns = [
     path("liked", UserLikedProblemsView.as_view(), name="user-liked-problems"),
     path("<int:pk>", ProblemDetailView.as_view(), name="problem-detail"),
     path("", ProblemListView.as_view(), name="problem-list"),
+    # 問題層級測資上傳/完成/下載
+    path("<int:pk>/initiate-test-case-upload", ProblemTestCaseUploadInitiateView.as_view(), name="problem-initiate-testcase"),
+    path("<int:pk>/complete-test-case-upload", ProblemTestCaseUploadCompleteView.as_view(), name="problem-complete-testcase"),
+    path("<int:pk>/test-case", ProblemTestCaseDownloadView.as_view(), name="problem-testcase-download"),
     # 新標籤 API
     path("tags", TagListCreateView.as_view(), name="tag-list-create"),
     path("<int:pk>/tags", ProblemTagAddView.as_view(), name="problem-tag-add"),

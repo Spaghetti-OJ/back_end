@@ -38,6 +38,12 @@ from ..models import ProblemLike
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from django.db import models as dj_models
+from django.http import FileResponse, Http404
+from django.core.cache import cache
+import os
+import uuid
+import mimetypes
+from django.conf import settings
 
 class ProblemsViewSet(viewsets.ModelViewSet):
     queryset = Problems.objects.all().order_by("-created_at")
@@ -131,6 +137,122 @@ class TagListCreateView(APIView):
             return api_response(ser.errors, "Validation error", status_code=422)
         tag = ser.save()
         return api_response(TagSerializer(tag).data, "Tag created", status_code=201)
+
+
+def _has_problem_manage_permission(problem, user) -> bool:
+    if user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher']:
+        return True
+    # 含 TA
+    return Course_members.objects.filter(course_id=problem.course_id, user_id=user, role__in=['ta', 'teacher']).exists()
+
+
+class ProblemTestCaseUploadInitiateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        problem = get_object_or_404(Problems, pk=pk)
+        if not _has_problem_manage_permission(problem, request.user):
+            return api_response(None, "Not enough permission", status_code=403)
+        try:
+            length = int(request.data.get('length'))
+            part_size = int(request.data.get('part_size'))
+        except (TypeError, ValueError):
+            return api_response(None, "length and part_size are required integers", status_code=422)
+        upload_id = str(uuid.uuid4())
+        ttl_seconds = 600
+        cache.set(f"prob_tc_multipart:{upload_id}", {
+            "problem_id": problem.id,
+            "user_id": request.user.id,
+            "length": length,
+            "part_size": part_size,
+            "parts": [],
+        }, ttl_seconds)
+        # 本地 storage 無 presigned URL，提供本服務的分片上傳端點占位
+        part_endpoint = f"/problem/{problem.id}/test-case-upload-part"
+        return api_response({
+            "upload_id": upload_id,
+            "ttl": ttl_seconds,
+            "part_endpoint": part_endpoint,
+        }, "Upload initiated", status_code=200)
+
+
+# 移除本地分片端點，改以三端點規格運作：initiate、complete、download
+
+
+class ProblemTestCaseUploadCompleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        problem = get_object_or_404(Problems, pk=pk)
+        if not _has_problem_manage_permission(problem, request.user):
+            return api_response(None, "Not enough permission", status_code=403)
+        upload_id = request.data.get('upload_id')
+        if not upload_id:
+            return api_response(None, "upload_id is required", status_code=422)
+        info = cache.get(f"prob_tc_multipart:{upload_id}")
+        if not info:
+            return api_response(None, "upload_id expired or invalid", status_code=410)
+        # 合併所有分片為一個 zip 或原始檔（此處直接存為完整檔，並驗證檔名成對）
+        tmp_dir = os.path.join(settings.MEDIA_ROOT, "tmp_uploads", upload_id)
+        part_files = sorted([os.path.join(tmp_dir, f) for f in os.listdir(tmp_dir) if f.startswith('part_')])
+        if not part_files:
+            return api_response(None, "No uploaded parts", status_code=422)
+        from io import BytesIO
+        buffer = BytesIO()
+        for p in part_files:
+            with open(p, 'rb') as f:
+                buffer.write(f.read())
+        buffer.seek(0)
+        # 驗證同名成對：使用簡單規則，內容為 zip，檢查內部包含 0001.in / 0001.out 配對
+        import zipfile
+        try:
+            with zipfile.ZipFile(buffer) as zf:
+                names = zf.namelist()
+                ins = {n for n in names if n.endswith('.in')}
+                outs = {n for n in names if n.endswith('.out')}
+                def stem(n):
+                    base = os.path.basename(n)
+                    return os.path.splitext(base)[0]
+                ins_stems = {stem(n) for n in ins}
+                outs_stems = {stem(n) for n in outs}
+                missing_pairs = sorted(list(ins_stems ^ outs_stems))
+                if missing_pairs:
+                    return api_response({"missing_pairs": missing_pairs}, "Validation error: missing paired .in/.out", status_code=400)
+        except zipfile.BadZipFile:
+            return api_response(None, "Uploaded content must be a zip with paired files", status_code=400)
+
+        # 保存 zip 到本地 storage
+        from ..services.storage import _storage
+        zip_rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
+        buffer.seek(0)
+        saved = _storage.save(zip_rel, buffer)
+        # 清理臨時檔
+        try:
+            for p in part_files:
+                os.remove(p)
+            os.rmdir(tmp_dir)
+        except Exception:
+            pass
+        cache.delete(f"prob_tc_multipart:{upload_id}")
+        return api_response({"path": saved.replace('\\','/')}, "Upload completed", status_code=201)
+
+
+class ProblemTestCaseDownloadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk: int):
+        problem = get_object_or_404(Problems, pk=pk)
+        if not _has_problem_manage_permission(problem, request.user):
+            return api_response(None, "Not enough permission", status_code=403)
+        # 嘗試提供問題層級的 zip
+        from ..services.storage import _storage
+        rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
+        if not _storage.exists(rel):
+            raise Http404("No test case archive")
+        fh = _storage.open(rel, 'rb')
+        resp = FileResponse(fh, content_type='application/zip')
+        resp["Content-Disposition"] = f"attachment; filename=\"problem-{problem.id}-testcases.zip\""
+        return resp
 
 
 class ProblemTagAddView(APIView):

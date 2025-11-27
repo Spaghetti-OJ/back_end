@@ -45,77 +45,64 @@
         "tags": [{"id": 1, "name": "陣列", "usage_count": 10}],
         "created_at": "2025-11-08T06:45:00Z"
       }
-    ]
-  },
-  "message": "OK",
-  "status": "200"
-}
-```
+    ## 測資（Test Cases）上傳／下載（題目層級）
 
-**cURL 測試**：
-```bash
-curl "http://127.0.0.1:8000/problem/" \
-  -H "Authorization: Bearer $TOKEN"
-```
+    本地 Django Storage 採三個端點：
 
----
+    1. 初始化上傳：`POST /problem/<problem_id>/initiate-test-case-upload`
+    2. 完成上傳：`POST /problem/<problem_id>/complete-test-case-upload`
+    3. 下載測資：`GET /problem/<problem_id>/test-case`
 
-## 查看題目詳情（學生視角）
+    權限：
+    - 管理權限含 TA（題目擁有者/課程 TA/教師/管理員）。
 
-- 路徑：`GET /problem/<problem_id>`
-- 說明：回傳題目詳情；未登入僅能查看 `public` 題目。對於 `course`/`hidden` 依權限與課程成員資格判斷。
+    檔名驗證：
+    - 完成上傳要求 zip 內容包含四位數成對檔，如 `0001.in` 與 `0001.out`，否則回 400。
 
-成功回應（200 OK，部分欄位省略）：
-```json
-{
-  "data": {
-    "id": 1,
-    "title": "Two Sum",
-    "difficulty": "easy",
-    "is_public": "public",
-    "course_id": "<uuid>",
-    "tags": [{"id":1, "name":"陣列", "usage_count": 10}],
-    "submit_count": 2,
-    "high_score": 80
-  },
-  "message": "取得題目成功",
-  "status": "200"
-}
-```
-未登入時 `submit_count`/`high_score` 會為 `null`。
+    注意：下載端點為檔案串流回應，不包 JSON（合理例外）。
 
-**cURL 測試**：
-```bash
-curl "http://127.0.0.1:8000/problem/$PROBLEM_ID" \
-  -H "Authorization: Bearer $TOKEN"
-```
+    ### 1) 初始化上傳
+    - 路徑：`POST /problem/<pid>/initiate-test-case-upload`
+    - Body：
+    ```json
+    { "length": 123456, "part_size": 1048576 }
+    ```
 
-可能錯誤：
-- 401 未登入（針對非公開題目）
-- 403 非課程成員/非擁有者/非教師管理員（當題目為 `course` 或 `hidden`）
-- 404 題目不存在
+    成功回應（200 OK）：
+    ```json
+    {
+      "data": { "upload_id": "<uuid>", "ttl": 600, "part_endpoint": "/problem/<pid>/test-case-upload-part" },
+      "message": "Upload initiated",
+      "status": "200"
+    }
+    ```
 
----
+    ### 2) 完成上傳
+    - 路徑：`POST /problem/<pid>/complete-test-case-upload`
+    - Body：
+    ```json
+    { "upload_id": "<uuid>", "parts": [ { "PartNumber": 1, "ETag": "..." } ] }
+    ```
 
-## 取得題目最高分數
+    成功回應（201 Created）：
+    ```json
+    {
+      "data": { "path": "testcases/p<pid>/problem.zip" },
+      "message": "Upload completed",
+      "status": "201"
+    }
+    ```
 
-- 路徑：`GET /problem/<problem_id>/high-score`
-- 權限：需要登入
-- 說明：回傳當前使用者在該題目的最高分數。若從未提交過則回傳 0。
+    ### 3) 下載測資
+    - 路徑：`GET /problem/<pid>/test-case`
+    - 回應：zip 檔串流（`Content-Disposition: attachment`）
 
-成功回應（200 OK）：
-```json
-{
-  "data": { "score": 85 },
-  "message": "OK",
-  "status": "200"
-}
-```
-
-可能錯誤：
-- 401 未登入
-- 404 題目不存在
-
+    **cURL**
+    ```powershell
+    curl "http://127.0.0.1:8000/problem/30/test-case" `
+      -H "Authorization: Bearer $TOKEN" `
+      -o "problem-30-testcases.zip"
+    ```
 **cURL 測試**：
 ```bash
 curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/high-score" \
