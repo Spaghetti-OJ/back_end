@@ -20,7 +20,7 @@
 | `password`   | string |  ✅  | 使用者密碼（後端會雜湊儲存）                                              |
 | `email`      | string |  ✅  | 有效 Email，**唯一**                                             |
 | `real_name`  | string |  ✅  | 最多 150 字元                                                   |
-| `identity`   | string |  ✅  | 身分：`teacher` / `admin` / `student`（**必填**；模型預設仍為 `student`） |
+| `role`   | string |  ✅  | 身分：`teacher` / `admin` / `student`（**必填**；模型預設仍為 `student`） |
 | `student_id` | string |  ❌  | 最多 50 字元（唯一）。若無可省略                                          |
 | `bio`        | string |  ❌  | 自我介紹                                                        |
 
@@ -32,7 +32,7 @@
   "email": "momo@example.com",
   "password": "abc12345",
   "real_name": "小桃",
-  "identity": "student",
+  "role": "student",
   "student_id": "1160001",
   "bio": "我愛娃娃"
 }
@@ -46,7 +46,7 @@
   "username": "momo",
   "email": "momo@example.com",
   "real_name": "小桃",
-  "identity": "student",
+  "role": "student",
   "date_joined": "2025-10-03T07:15:14.123Z",
   "last_login": null
 }
@@ -69,10 +69,10 @@
   ```json
   {"email":["請輸入有效的電子郵件地址。"]}
   ```
-* `identity` 未填或值錯誤：
+* `role` 未填或值錯誤：
 
   ```json
-  {"identity":["此為必需欄位。或值必須為 teacher/admin/student 之一"]}
+  {"role":["此為必需欄位。或值必須為 teacher/admin/student 之一"]}
   ```
 
 **cURL 測試**：
@@ -85,7 +85,7 @@ curl -X POST http://127.0.0.1:8000/auth/signup/ \
     "email":"momo@example.com",
     "password":"abc12345",
     "real_name":"小桃",
-    "identity":"student"
+    "role":"student"
   }'
 ```
 
