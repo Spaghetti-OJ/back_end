@@ -458,9 +458,9 @@ curl -X GET "http://127.0.0.1:8000/auth/me/" \
   "username": "momo",
   "role": "Student",
   "email": "412470100S@gapps.ntnu.edu.tw",
-  "userid": "omuba",
+  "user_id": "omuba",
   "student_id": "41247057S",
-  "introduction": "哈囉我是資工116",
+  "bio": "哈囉我是資工116",
   "avatar":null
 }
 ```
@@ -473,9 +473,9 @@ curl -X GET "http://127.0.0.1:8000/auth/me/" \
 | username    | string | 使用者帳號（username）                  |
 | role         | string | 使用者身份（Student / Teacher / Admin） |
 | email        | string | 使用者電子郵件                          |
-| userid      | string | 使用者的 ID             |
+| user_id      | string | 使用者的 ID             |
 | student_id   | string | 學號（若有）                           |
-| introduction | string | 個人簡介                             |
+| bio | string | 個人簡介                             |
 | avatar       | string | 頭像 url                |
 
 ---
@@ -548,8 +548,8 @@ GET /profile/{username}/
   "username": "momo",
   "role": "Student",
   "email": "momo@example.com",
-  "userid": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
-  "introduction": "哈囉我是資工116",
+  "user_id": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
+  "bio": "哈囉我是資工116",
   "avatar":null
 }
 ```
@@ -561,8 +561,8 @@ GET /profile/{username}/
 | username    | string | 使用者帳號（username）                           |
 | role         | string | 使用者身份（例如：`Student` / `Teacher` / `Admin`） |
 | email        | string | 使用者電子郵件（依隱私策略可能顯示或遮蔽）                     |
-| userid      | string | 使用者的公開 ID（預設為使用者主鍵；若系統有自訂公開 ID 則為該值）      |
-| introduction | string | 個人簡介（來源：UserProfile.bio；若未設定可能為空字串）       |
+| user_id      | string | 使用者的公開 ID（預設為使用者主鍵；若系統有自訂公開 ID 則為該值）      |
+| bio | string | 個人簡介（來源：UserProfile.bio；若未設定可能為空字串）       |
 | avatar       | string | 頭像 url                |
 
 > 注意：**不包含** `real_name`、`student_id`。
