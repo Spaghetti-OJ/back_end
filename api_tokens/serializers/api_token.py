@@ -27,13 +27,16 @@ class ApiTokenCreateSerializer(serializers.ModelSerializer):
         """
         if not isinstance(value, list):
             raise serializers.ValidationError("Permissions 必須是一個列表 (List)。")
-            
+        
+        if len(value) != len(set(value)):
+            raise serializers.ValidationError("Permissions 列表包含重複的權限範圍。")
+        
         invalid_scopes = set(value) - VALID_SCOPES
         if invalid_scopes:
             raise serializers.ValidationError(
                 f"包含無效的權限範圍: {', '.join(invalid_scopes)}。合法的權限為: {', '.join(VALID_SCOPES)}"
             )
-            
+        
         return value
 
 class ApiTokenListSerializer(serializers.ModelSerializer):
