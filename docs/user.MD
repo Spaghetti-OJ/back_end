@@ -341,7 +341,7 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 **路徑**：`GET /auth/me/`
 
 **說明**：
-使用目前登入狀態（Authorization Header 帶入 `Bearer <access>`）取得當前使用者的基本資料，包含 `userid`、`username`、`email`、`role`。
+使用目前登入狀態（Authorization Header 帶入 `Bearer <access>`）取得當前使用者的基本資料，包含 `user_id`、`username`、`email`、`role`。
 
 ### 請求格式
 
@@ -370,7 +370,7 @@ Authorization: Bearer <ACCESS_TOKEN>
   "status": "ok",
   "message": "Get current user",
   "data": {
-    "userid": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
+    "user_id": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
     "username": "momo",
     "email": "momo@example.com",
     "role": "student"
@@ -384,7 +384,7 @@ Authorization: Bearer <ACCESS_TOKEN>
 | --------------- | ------ | ------------------ |
 | `status`        | string | 狀態字串，成功固定為 `"ok"`  |
 | `message`       | string | 描述訊息               |
-| `data.userid`   | string | 使用者在系統中的唯一 ID      |
+| `data.user_id`   | string | 使用者在系統中的唯一 ID      |
 | `data.username` | string | 使用者帳號              |
 | `data.email`    | string | 使用者註冊 email        |
 | `data.role`     | string | 使用者角色（如：`student`） |
@@ -422,7 +422,7 @@ curl -X GET "http://127.0.0.1:8000/auth/me/" \
 > 使用說明：
 >
 > * 建議登入後（呼叫 `POST /auth/session/` 拿到 access）就立刻呼叫一次 `GET /auth/me/`，
->   將回傳的 `userid`、`username`、`email`、`role` 存到前端的全域狀態（例如 Redux / Zustand / Vuex），作為之後顯示使用者名稱或判斷角色權限之用。
+>   將回傳的 `user_id`、`username`、`email`、`role` 存到前端的全域狀態（例如 Redux / Zustand / Vuex），作為之後顯示使用者名稱或判斷角色權限之用。
 > * 若收到 401，請先確認 access token 是否過期，可搭配 `POST /auth/refresh/` 重新取得新的 access。
 
 ---
