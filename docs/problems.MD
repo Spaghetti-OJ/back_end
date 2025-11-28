@@ -548,42 +548,57 @@ curl -X POST "http://127.0.0.1:8000/problem/tags" \
 ## 複製題目（管理）
 
 - 路徑：`POST /problem/clone`
-- 權限：系統管理員或目標課程教師/TA
-- 說明：將指定題目複製到目標課程，並複製其 tags、subtasks 與 test cases；統計欄位歸零。
+- 權限：系統管理員或目標課程教師 / TA
+- 功能：複製指定題目到目標課程，複製其 tags、subtasks、test cases；統計欄位（提交次數、讚數、瀏覽、AC 率等）會歸零。
+- 支援 `status` 欄位（可選）：接受 `0|1|2` 或 `hidden|course|public`；未提供則沿用原題目狀態。
+- 支援 `dry_run`（布林，可選）：若為 `true`，只建立題目本體，不複製關聯資料（用於除錯）。
 
-請求（JSON）：
+請求（JSON 範例）：
 ```json
 {
-  "problem_id": 30,
-  "target": "演算法(上)",
-  "status": "public" // 可選，接受 0/1/2 或 "hidden|course|public"
+  "problem_id": 2,
+  "target": "作業系統",
+  "status": "public"
 }
 ```
 
 成功回應（200 OK）：
 ```json
 {
-  "data": { "problemId": 31 },
+  "data": { "problemId": 99 },
   "message": "Success.",
+  "status": "200"
+}
+```
+
+`dry_run: true` 範例成功回應：
+```json
+{
+  "data": { "problemId": 100 },
+  "message": "Success (dry_run: only problem created).",
   "status": "200"
 }
 ```
 
 可能錯誤：
 - 400 缺少 `problem_id` 或 `target`
-- 403 `Problem can not view.`（無權檢視來源題目）或 `Permission denied`（無權在目標課程建立）
+- 403 `Problem can not view.`（來源題目不可視） / `Permission denied`（無權在目標課程建立）
 - 404 `Problem not found` / `Target course not found`
 
-**cURL 測試**：
+**cURL（一般複製）**
 ```bash
 curl -X POST "http://127.0.0.1:8000/problem/clone" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "problem_id": 30,
-    "target": "演算法(上)",
-    "status": "public"
-  }'
+  -d '{ "problem_id": 2, "target": "作業系統", "status": "public" }'
+```
+
+**cURL（dry_run 只建立題目本體(除錯用)）**
+```bash
+curl -X POST "http://127.0.0.1:8000/problem/clone" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "problem_id": 2, "target": "作業系統", "status": "public", "dry_run": true }'
 ```
 
 
