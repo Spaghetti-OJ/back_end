@@ -43,6 +43,7 @@ urlpatterns = [
     path('homework/',include('assignments.urls')),
     path('editor/', include('editor.urls')),
     path('api-auth/', include('rest_framework.urls')),
+    path('copycat/', include('copycat.urls')),
     
     ## Swagger API Documentation URLs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

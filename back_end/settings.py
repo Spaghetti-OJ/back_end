@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "announcements",
     "profiles",
     "editor",
+    "copycat",
 ]
 
 AUTH_USER_MODEL = 'user.User'
@@ -199,3 +200,6 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
 
 }
+
+# MOSS User ID
+MOSS_USER_ID = 525795500
