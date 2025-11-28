@@ -622,9 +622,9 @@ curl -i -X GET "http://127.0.0.1:8000/profile/momo/" \
 
 ---
 
-## 請求格式
+### 請求格式
 
-### JSON（不含檔案）
+#### JSON（不含檔案）
 
 ```
 POST /profile/
@@ -641,7 +641,7 @@ Authorization: Bearer <ACCESS_TOKEN>
 }
 ```
 
-### multipart/form-data（含 avatar）
+#### multipart/form-data（含 avatar）
 
 ```
 POST /profile/
@@ -657,7 +657,7 @@ Authorization: Bearer <ACCESS_TOKEN>
 
 ---
 
-## 成功回應（200）
+### 成功回應（200）
 
 ```json
 {
@@ -678,7 +678,7 @@ Authorization: Bearer <ACCESS_TOKEN>
 
 ---
 
-## 失敗回應（400）
+### 失敗回應（400）
 
 ```json
 {
@@ -693,9 +693,9 @@ Authorization: Bearer <ACCESS_TOKEN>
 
 ---
 
-## curl 範例
+### curl 範例
 
-### 修改文字欄位（JSON）
+#### 修改文字欄位（JSON）
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/profile/" \
@@ -708,7 +708,7 @@ curl -X POST "http://127.0.0.1:8000/profile/" \
   }'
 ```
 
-### 上傳頭像（multipart/form-data）
+#### 上傳頭像（multipart/form-data）
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/profile/" \
@@ -716,4 +716,145 @@ curl -X POST "http://127.0.0.1:8000/profile/" \
   -F "avatar=@/home/rokusenn/Pictures/avatar.png" \
   -F "bio=更新過的自我介紹"
 ```
+---
+
+## POST /auth/check/<item>/ - 檢查使用者名稱 / 電子郵件可用性
+
+**說明**：
+此 API 用於檢查使用者名稱或電子郵件是否已被使用。主要應用場景為「已登入使用者修改帳號資料（例如變更 Email）」時，確認新填寫的值是否可使用。本端點需要登入（JWT 驗證）。
+
+---
+
+### HTTP 方法與路徑
+
+`POST /auth/check/<item>/`
+
+* `item`（Path 參數）：
+
+  * `username`：檢查使用者名稱
+  * `email`：檢查電子郵件
+  * 其他值 → 回傳 400
+
+---
+
+### 驗證方式
+
+需要登入（JWT Access Token）。
+
+Header：
+
+```http
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+---
+
+### Request Body
+
+#### 檢查 Username
+
+```json
+{
+  "username": "momo"
+}
+```
+
+#### 檢查 Email
+
+```json
+{
+  "email": "momo@example.com"
+}
+```
+
+> 檢查 email 時，後端會排除目前登入使用者本身的 email，避免誤判為已被使用。
+
+---
+
+### cURL 範例
+
+#### 1. 檢查使用者名稱
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/check/username/ \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "momo"}'
+```
+
+#### 2. 檢查電子郵件
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/check/email/ \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "new_email@example.com"}'
+```
+
+---
+
+### 成功回應（200 OK）
+
+#### 可使用
+
+```json
+{
+  "data": { "valid": 1 },
+  "message": "Email Can Be Used",
+  "status": "ok"
+}
+```
+
+#### 已被使用
+
+```json
+{
+  "data": { "valid": 0 },
+  "message": "Email Has Been Used",
+  "status": "ok"
+}
+```
+
+---
+
+### 錯誤回應
+
+#### 1. item 無效（例如 `/auth/check/abc/`）
+
+```json
+{
+  "data": null,
+  "message": "Invalid Checking Type",
+  "status": "error"
+}
+```
+
+#### 2. 缺少欄位
+
+```json
+{
+  "data": null,
+  "message": "Missing email",
+  "status": "error"
+}
+```
+
+#### 3. 未登入
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+HTTP 401 Unauthorized
+
+---
+
+### 使用時機
+
+* 修改帳號資料（例如變更 Email）前，先用此 API 檢查新 email 是否可用。
+* 若 email `valid: 1`，前端即可讓使用者送出「變更 Email」並進行後續驗證流程。
+
 ---
