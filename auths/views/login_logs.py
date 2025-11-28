@@ -61,3 +61,22 @@ class UserLoginLogListView(APIView):
         
         # ⬇️ 呼叫本地的 helper ⬇️
         return api_response(serializer.data, f"成功取得使用者 {user_id} 的登入日誌")
+    
+# ===================================================================
+# --- SuspiciousLoginListView---
+# ===================================================================
+class SuspiciousLoginListView(APIView):
+    """
+    列出所有異常的登入日誌。
+    定義：login_status 不等於 'success' 的紀錄。
+    """
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAdminUser] 
+
+    def get(self, request):
+        
+        logs = LoginLog.objects.exclude(login_status='success').order_by('-created_at')
+        
+        serializer = LoginLogSerializer(logs, many=True)
+        
+        return api_response(serializer.data, "成功取得異常登入紀錄列表")

@@ -8,6 +8,7 @@ from .views import activity
 urlpatterns = [
     path('login-logs/', login_logs.LoginLogListView.as_view(), name='login-log-list-self'),
     path('login-logs/<uuid:userId>/', login_logs.UserLoginLogListView.as_view(), name='user-login-log-list'),
+    path('suspicious-activities/', login_logs.SuspiciousLoginListView.as_view(), name='suspicious-activity-list'),
     path('signup/', RegisterView.as_view(), name='register'),
     path('session/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('session/revoke/', SessionRevokeView.as_view(), name='auth-session-revoke'),
