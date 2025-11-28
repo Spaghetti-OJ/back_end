@@ -4,6 +4,7 @@ from .views.signup import RegisterView, MeView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from .views.revoke import SessionRevokeView
 from .views import activity
+from .views.check import CheckAvailabilityView
 
 urlpatterns = [
     path('login-logs/', login_logs.LoginLogListView.as_view(), name='login-log-list-self'),
@@ -16,4 +17,5 @@ urlpatterns = [
     path('me/', MeView.as_view(), name='me'),
     path('activity/', activity.UserActivityCreateView.as_view(), name='activity-create'),
     path('activity/<uuid:user_id>/', activity.UserActivityListView.as_view(), name='user-activity-list'),
+    path('check/<str:item>/', CheckAvailabilityView.as_view(), name='auth-check'),
 ]
