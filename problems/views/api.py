@@ -676,6 +676,7 @@ class ProblemCloneView(APIView):
         problem_id = payload.get("problem_id")
         target_name = payload.get("target")
         new_status_raw = payload.get("status")
+        dry_run = payload.get("dry_run", False)
 
         if not problem_id or not target_name:
             return api_response(None, "Missing required fields: problem_id, target", status_code=400)
@@ -732,6 +733,10 @@ class ProblemCloneView(APIView):
                     new_visibility = src.is_public
 
         # 建立新題目（統計歸零）
+        # 注意：部分環境下 request.user.id 可能為非整數（例如 UUID 字串），
+        # 而 Problems.creator_id 的 FK 目標 PK 為整數，直接指定可能造成型別錯誤。
+        # 為避免 500 錯誤，這裡沿用來源題目的 creator 作為新題目的建立者。
+        # 若日後要改為目前使用者，可在確認 User PK 型別相容後再調整。
         new_problem = Problems.objects.create(
             title=src.title,
             difficulty=src.difficulty,
@@ -751,19 +756,28 @@ class ProblemCloneView(APIView):
             hint=src.hint,
             subtask_description=src.subtask_description,
             supported_languages=src.supported_languages,
-            creator_id=user,
-            course_id=target_course,
+            # 明確指定 FK 原始 id，避免 ORM 嘗試型別轉換造成錯誤
+            creator_id_id=src.creator_id_id,
+            course_id_id=target_course.id,
         )
 
-        # 複製 tags
+        # 僅建立 Problems，本次請求不複製關聯資料，用於隔離與定位問題
+        if dry_run:
+            return api_response({"problemId": new_problem.id}, "Success (dry_run: only problem created).", status_code=200)
+
+        # 複製 tags（使用 *_id 明確指定原始型別，避免不必要的型別轉換）
         tag_ids = list(src.tags.values_list('id', flat=True))
         for tid in tag_ids:
-            Problem_tags.objects.get_or_create(problem_id=new_problem, tag_id_id=tid, defaults={"added_by": user})
+            Problem_tags.objects.get_or_create(
+                problem_id_id=new_problem.id,
+                tag_id_id=tid,
+                defaults={"added_by_id": user.id},
+            )
 
-        # 複製 subtasks + test cases
+        # 複製 subtasks + test cases（同樣以 *_id 指派 FK）
         for st in Problem_subtasks.objects.filter(problem_id=src).order_by('subtask_no'):
             new_st = Problem_subtasks.objects.create(
-                problem_id=new_problem,
+                problem_id_id=new_problem.id,
                 subtask_no=st.subtask_no,
                 weight=st.weight,
                 time_limit_ms=st.time_limit_ms,
@@ -773,7 +787,7 @@ class ProblemCloneView(APIView):
             bulk = []
             for tc in tcs:
                 bulk.append(Test_cases(
-                    subtask_id=new_st,
+                    subtask_id_id=new_st.id,
                     idx=tc.idx,
                     input_path=tc.input_path,
                     output_path=tc.output_path,
