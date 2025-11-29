@@ -18,6 +18,7 @@ from .grade import (
     CourseGradeUpdateSerializer,
 )
 from .invite import CourseInviteCodeSerializer
+from .scoreboard import CourseScoreboardSerializer
 
 __all__ = [
     "TeacherSerializer",
@@ -34,4 +35,5 @@ __all__ = [
     "CourseGradeDeleteSerializer",
     "CourseGradeUpdateSerializer",
     "CourseInviteCodeSerializer",
+    "CourseScoreboardSerializer",
 ]
