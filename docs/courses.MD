@@ -518,3 +518,68 @@ curl -X DELETE http://127.0.0.1:8000/course/ \
 | ------- | ---- | ----------------------------------------- |
 | 未登入     | 401  | `{ "detail": "Authentication credentials were not provided." }` |
 | 非管理員   | 403  | `{ "detail": "只有管理員可以查看課程統計。" }` |
+
+---
+
+## 課程計分板 API
+
+**路徑**：`GET /course/<course_id>/scoreboard/`
+
+**說明**：查看課程內指定題目的計分板。需登入且具評分權限（教師、助教或管理員）。
+
+**查詢參數**
+
+| 參數名   | 型別   | 必填 | 說明                                |
+| -------- | ------ | ---- | ----------------------------------- |
+| `pids`   | string | ✅   | 題目 ID 逗號串，如 `1,2,3`            |
+| `start`  | float  | ⭕   | 開始時間戳（秒），過濾 >= 該時間的提交 |
+| `end`    | float  | ⭕   | 結束時間戳（秒），過濾 <= 該時間的提交 |
+
+**成功回應 (200 OK)**：
+
+```json
+{
+  "message": "Success.",
+  "data": {
+    "courseId": 24,
+    "problemIds": [101, 102],
+    "timeRange": { "start": 1735708800.0, "end": null },
+    "students": [
+      {
+        "userId": "d4b8f260-8dcd-4dd2-8c07-8bd6e3c0f001",
+        "username": "student01",
+        "realName": "學生甲",
+        "scores": { "101": 90, "102": 70 },
+        "totalScore": 160,
+        "submittedCount": 2
+      }
+    ],
+    "problemStats": [
+      {
+        "problemId": 101,
+        "maxScore": 100,
+        "averageScore": 95.0,
+        "submissionCount": 3,
+        "submitterCount": 2,
+        "fullScore": 100
+      }
+    ]
+  }
+}
+```
+
+**失敗回應**
+
+| 狀況                   | HTTP | 範例訊息                                    |
+| ---------------------- | ---- | ------------------------------------------- |
+| 未登入                 | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 無評分權限             | 403  | `{ "message": "Permission denied" }`        |
+| `pids` 解析錯誤        | 400  | `{ "message": "Error occurred when parsing \`pids\`." }` |
+| `start`/`end` 型別錯誤 | 400  | `{ "message": "Type of \`start\` should be float." }` |
+
+**cURL 測試**
+
+```bash
+curl "http://127.0.0.1:8000/course/24/scoreboard/?pids=101,102&start=1735708800.0" \
+  -H "Authorization: Bearer <access_token>"
+```
