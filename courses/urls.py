@@ -12,6 +12,10 @@ urlpatterns = [
         include((f"{__package__}.urls.grade", "grade"), namespace="grade"),
     ),
     path(
+        "<course_id>/scoreboard/",
+        include((f"{__package__}.urls.scoreboard", "scoreboard"), namespace="scoreboard"),
+    ),
+    path(
         "summary/",
         include((f"{__package__}.urls.summary", "summary"), namespace="summary"),
     ),
