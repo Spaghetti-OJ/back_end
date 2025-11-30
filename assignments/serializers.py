@@ -170,7 +170,7 @@ class HomeworkDeadlineSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     markdown = serializers.CharField(allow_blank=True)
-    course_id = serializers.IntegerField()
+    course_id = serializers.UUIDField()
     start = serializers.DateTimeField(allow_null=True)
     end = serializers.DateTimeField(allow_null=True)
     is_overdue = serializers.BooleanField()
