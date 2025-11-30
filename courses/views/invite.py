@@ -58,7 +58,7 @@ class CourseInviteCodeView(APIView):
 
         if identity == "teacher" and course.teacher_id != user:
             return api_response(
-                message="You are not in this course.",
+                message="You are not the teacher of this course.",
                 status_code=status.HTTP_403_FORBIDDEN,
             )
 
