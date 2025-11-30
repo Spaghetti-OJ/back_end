@@ -16,7 +16,11 @@ urlpatterns = [
         include((f"{__package__}.urls.summary", "summary"), namespace="summary"),
     ),
     path(
-        "",
+        "<course_id>/join/",
+        include((f"{__package__}.urls.join", "join"), namespace="join"),
+    ),
+    path(
+        "<course_id>/",
         include(
             (f"{__package__}.urls.course_courseid", "course_courseid"),
             namespace="course_courseid",
