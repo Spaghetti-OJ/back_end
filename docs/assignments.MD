@@ -192,4 +192,201 @@ cURL 測試範例：
     curl -X DELETE "http://127.0.0.1:8000/homework/<HW_ID>/" ^
       -H "Authorization: Bearer <ACCESS_TOKEN>"
 
+## 取得作業統計資訊 API
 
+**路徑：**
+
+`GET /homework/<homework_id>/stats/`
+
+**說明：**  
+回傳指定作業的整體統計資訊（overview）與各題目的解題統計（problems）。
+
+**權限：**  
+需登入，且必須為該課程的老師或助教。
+
+---
+
+## 回傳資料結構（data）
+
+以下為 `data` 的完整結構：
+
+```json
+{
+  "homework_id": 1,
+  "course_id": "469e303a-6d9e-4dda-831d-afe4c1ffdab5",
+  "title": "HW1 - Intro",
+  "description": "第一份作業內容",
+  "start_time": "2025-11-01T00:00:00Z",
+  "due_time": "2025-11-10T23:59:59Z",
+  "problem_count": 3,
+  "overview": { ... },
+  "problems": [ ... ]
+}
+```
+
+---
+
+## data：作業基本資訊欄位
+
+| 欄位           | 型別      | 說明                                   |
+| -------------- | --------- | -------------------------------------- |
+| homework_id    | int       | 作業 ID                                |
+| course_id      | uuid      | 所屬課程 ID                            |
+| title          | string    | 作業標題                               |
+| description    | string    | 作業說明                               |
+| start_time     | string    | 開始時間（ISO 8601）                   |
+| due_time       | string    | 截止時間（ISO 8601）                   |
+| problem_count  | int       | 題目數                                 |
+| overview       | object    | 作業整體統計                           |
+| problems       | array     | 各題目的統計資訊                       |
+
+---
+
+## overview：作業整體統計
+
+```json
+"overview": {
+  "participant_count": 25,
+  "total_submission_count": 120,
+  "avg_submissions_per_user": 4.8,
+  "avg_total_score": 230.5,
+  "max_total_score": 300,
+  "solved_all_problem_user_count": 8,
+  "partially_solved_user_count": 12,
+  "unsolved_all_problem_user_count": 5
+}
+```
+
+| 欄位                               | 型別   | 說明                                                         |
+| ---------------------------------- | ------ | ------------------------------------------------------------ |
+| participant_count                  | int    | 至少提交過一次作業內任一題的學生數                          |
+| total_submission_count             | int    | 全作業 submission 數總和                                    |
+| avg_submissions_per_user          | float  | 平均每人提交筆數                                             |
+| avg_total_score                    | float  | 平均每位學生（所有題目的 best_score 相加）之總分           |
+| max_total_score                    | int    | 作業最大可能得分（題目數 × 100）                            |
+| solved_all_problem_user_count      | int    | 全題 AC 的使用者數                                           |
+| partially_solved_user_count        | int    | 部分 AC 的使用者數                                           |
+| unsolved_all_problem_user_count    | int    | 全部未 AC 的使用者數                                         |
+
+---
+
+## problems：各題統計
+
+每個陣列元素代表一題：
+
+```json
+{
+  "problem_id": 101,
+  "order_index": 1,
+  "weight": "1.00",
+  "title": "A - Two Sum",
+  "participant_count": 20,
+  "total_submission_count": 80,
+  "avg_attempts_per_user": 4.0,
+  "avg_score": 75.5,
+  "ac_user_count": 10,
+  "partial_user_count": 5,
+  "unsolved_user_count": 5,
+  "first_ac_time": "2025-11-02T12:34:56Z"
+}
+```
+
+| 欄位                    | 型別        | 說明                                                         |
+| ----------------------- | ----------- | ------------------------------------------------------------ |
+| problem_id              | int         | 題目 ID                                                     |
+| order_index             | int         | 題目排序                                                    |
+| weight                  | string      | 作業內題目權重（Decimal）                                   |
+| title                   | string      | 題目名稱                                                    |
+| participant_count       | int         | 對此題有提交紀錄的使用者數                                  |
+| total_submission_count  | int         | 此題 submission 數總和                                      |
+| avg_attempts_per_user   | float       | 平均提交次數                                                |
+| avg_score               | float       | best_score 平均值                                           |
+| ac_user_count           | int         | AC 的使用者數                                               |
+| partial_user_count      | int         | 部分通過（partial）的使用者數                               |
+| unsolved_user_count     | int         | 未通過的使用者數                                            |
+| first_ac_time           | string/null | 最早 AC 時間（無人 AC 則 null）                             |
+
+---
+
+## 成功回應（200 OK）
+
+```json
+{
+  "data": {
+    "homework_id": 1,
+    "course_id": "469e303a-6d9e-4dda-831dafe4c1ffdab5",
+    "title": "HW1 - Intro",
+    "description": "第一份作業內容",
+    "start_time": "2025-11-01T00:00:00Z",
+    "due_time": "2025-11-10T23:59:59Z",
+    "problem_count": 3,
+    "overview": {
+      "participant_count": 25,
+      "total_submission_count": 120,
+      "avg_submissions_per_user": 4.8,
+      "avg_total_score": 230.5,
+      "max_total_score": 300,
+      "solved_all_problem_user_count": 8,
+      "partially_solved_user_count": 12,
+      "unsolved_all_problem_user_count": 5
+    },
+    "problems": [
+      {
+        "problem_id": 101,
+        "order_index": 1,
+        "weight": "1.00",
+        "title": "A - Two Sum",
+        "participant_count": 20,
+        "total_submission_count": 80,
+        "avg_attempts_per_user": 4.0,
+        "avg_score": 75.5,
+        "ac_user_count": 10,
+        "partial_user_count": 5,
+        "unsolved_user_count": 5,
+        "first_ac_time": "2025-11-02T12:34:56Z"
+      }
+    ]
+  },
+  "message": "取得作業統計成功",
+  "status": "ok"
+}
+```
+
+---
+
+## 錯誤回應
+
+### 403 – 權限不足（非老師或助教）
+
+```json
+{
+  "data": null,
+  "message": "user must be the teacher or ta of this course",
+  "status": "error"
+}
+```
+
+### 404 – 作業不存在
+
+```json
+{
+  "data": null,
+  "message": "homework not exists",
+  "status": "error"
+}
+```
+
+---
+
+## cURL 測試（Windows CMD）
+
+```cmd
+curl -X GET "http://127.0.0.1:8000/homework/<HW_ID>/stats/" ^
+  -H "Authorization: Bearer <ACCESS_TOKEN>" ^
+  -H "Accept: application/json"
+```
+
+請將：
+
+- `<HW_ID>` 替換為實際作業 ID  
+- `<ACCESS_TOKEN>` 替換為登入後取得的 JWT access token

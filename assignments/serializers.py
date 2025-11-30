@@ -165,3 +165,34 @@ class AddProblemsInSerializer(serializers.Serializer):
         if not data.get("problems") and not data.get("problem_ids"):
             raise serializers.ValidationError("problem_ids or problems is required")
         return data
+    
+class HomeworkProblemStatsSerializer(serializers.Serializer):
+    problem_id = serializers.IntegerField()
+    order_index = serializers.IntegerField()
+    weight = serializers.DecimalField(max_digits=5, decimal_places=2)
+    title = serializers.CharField()
+
+    participant_count = serializers.IntegerField()
+    total_submission_count = serializers.IntegerField()
+    avg_attempts_per_user = serializers.FloatField()
+    avg_score = serializers.FloatField()
+
+    ac_user_count = serializers.IntegerField()
+    partial_user_count = serializers.IntegerField()
+    unsolved_user_count = serializers.IntegerField()
+
+    first_ac_time = serializers.DateTimeField(allow_null=True)
+
+
+class HomeworkStatsSerializer(serializers.Serializer):
+    homework_id = serializers.IntegerField()
+    course_id = serializers.UUIDField()
+
+    title = serializers.CharField()
+    description = serializers.CharField(allow_blank=True, allow_null=True)
+    start_time = serializers.DateTimeField(allow_null=True)
+    due_time = serializers.DateTimeField(allow_null=True)
+    problem_count = serializers.IntegerField()
+
+    overview = serializers.DictField()
+    problems = HomeworkProblemStatsSerializer(many=True)
