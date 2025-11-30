@@ -191,3 +191,119 @@
 
 **路徑**：`GET /auth/suspicious-activities/`
 **用途**：列出所有登入失敗 (密碼錯誤、帳號不存在) 的紀錄，用於資安審計。
+
+## 3\. 抄襲檢測 (Copycat - MOSS)
+
+**基礎路徑**：`/copycat/`
+
+> **權限說明**：此模組僅限 **管理員 (Admin, `is_staff=True`)** 使用。一般使用者呼叫會收到 `403 Forbidden`。
+> **驗證方式**：使用 Session Cookie。**POST 請求務必附帶 `X-CSRFToken` Header。**
+
+### 3.1 請求生成檢測報告 (Trigger)
+
+**路徑**：`POST /copycat/`
+**說明**：觸發後端程式，將指定題目的所有學生程式碼打包並上傳至史丹佛 MOSS 伺服器進行比對。此過程為**非同步執行**。
+
+**請求 Body (JSON)**：
+
+```json
+{
+    "problem_id": 101,       // (必填) 要檢測的題目 ID
+    "language": "python"     // (選填) 程式語言，預設為 "python"。支援: c, cpp, java, python
+}
+```
+
+**成功回應 (202 Accepted)**：
+代表任務已接收並開始在背景執行。
+
+```json
+{
+    "data": {
+        "report_id": 15,
+        "status": "pending"
+    },
+    "message": "已開始進行抄襲比對，請稍後查詢結果",
+    "status": "ok"
+}
+```
+
+**失敗回應 (400 Bad Request)**：
+
+  * 缺少 `problem_id`。
+  * (若已實作) 該題目已有正在進行中的任務。
+
+-----
+
+### 3.2 查詢檢測報告 (Query)
+
+**路徑**：`GET /copycat/`
+**說明**：查詢指定題目的**最新**一份 MOSS 檢測報告結果。
+
+**URL 參數 (Query Params)**：
+
+  * `problem_id` (必填)：題目 ID。
+
+**範例**：`GET /copycat/?problem_id=101`
+
+**成功回應 (200 OK)**：
+
+  * **情況 A：處理中 (Pending)**
+
+    ```json
+    {
+        "data": {
+            "id": 15,
+            "status": "pending",
+            "moss_url": null,
+            "created_at": "2025-11-28T10:00:00Z",
+            "error_message": ""
+        },
+        "message": "報告狀態：處理中",
+        "status": "ok"
+    }
+    ```
+
+  * **情況 B：成功 (Success)**
+    前端可直接使用 `moss_url` 在 iframe 或新視窗中顯示結果。
+
+    ```json
+    {
+        "data": {
+            "id": 15,
+            "status": "success",
+            "moss_url": "http://moss.stanford.edu/results/9/8894923489/",
+            "created_at": "2025-11-28T10:05:00Z",
+            "error_message": ""
+        },
+        "message": "成功取得報告",
+        "status": "ok"
+    }
+    ```
+
+  * **情況 C：失敗 (Failed)**
+    可能是 MOSS 伺服器連線超時或無效的程式碼。
+
+    ```json
+    {
+        "data": {
+            "id": 15,
+            "status": "failed",
+            "moss_url": null,
+            "created_at": "2025-11-28T10:05:00Z",
+            "error_message": "Connection to MOSS server timed out."
+        },
+        "message": "報告狀態：失敗",
+        "status": "ok"
+    }
+    ```
+
+**失敗回應 (404 Not Found)**：
+
+  * 該題目從未進行過抄襲檢測。
+    ```json
+    {
+        "data": null,
+        "message": "此題目尚未進行過抄襲比對",
+        "status": "error"
+    }
+    ```
