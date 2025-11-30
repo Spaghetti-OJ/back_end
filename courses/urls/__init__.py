@@ -5,6 +5,7 @@ from . import courses as course_urls
 from . import summary as summary_urls
 from . import grade as grade_urls
 from . import join as join_urls
+from . import invite as invite_urls
 
 app_name = "courses"
 
@@ -16,6 +17,10 @@ urlpatterns = [
     path(
         "<course_id>/grade/",
         include((grade_urls.urlpatterns, "grade"), namespace="grade"),
+    ),
+    path(
+        "<course_id>/invite-code/",
+        include((invite_urls.urlpatterns, "invite"), namespace="invite"),
     ),
     path(
         "summary/",

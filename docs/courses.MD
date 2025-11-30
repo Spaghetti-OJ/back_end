@@ -23,7 +23,7 @@
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "teacher01",
         "real_name": "王小明",
-        "identity": "teacher"
+        "role": "teacher"
       }
     }
   ]
@@ -72,14 +72,14 @@ curl http://127.0.0.1:8000/course/ \
     "id": "c1234f56-789a-4bde-b123-456789abcd12",
     "username": "teacher01",
     "real_name": "王小明",
-    "identity": "teacher"
+    "role": "teacher"
   },
   "TAs": [
     {
       "id": "24242424-aaaa-bbbb-cccc-123456789000",
       "username": "ta_user",
       "real_name": "助教 A",
-      "identity": "student"
+      "role": "student"
     }
   ],
   "students": [
@@ -87,7 +87,7 @@ curl http://127.0.0.1:8000/course/ \
       "id": "65656565-aaaa-bbbb-cccc-123456789000",
       "username": "student01",
       "real_name": "學生 A",
-      "identity": "student"
+      "role": "student"
     }
   ]
 }
@@ -144,6 +144,32 @@ curl -X POST http://127.0.0.1:8000/course/42/join/ \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer <access>" \
     -d '{"joinCode": "ABC1234"}'
+{
+  "message": "Success.",
+  "data": { "joinCode": "XYZ12AB" },
+  "status_code": 200
+}
+```
+
+## 課程邀請代碼產生 API
+
+**路徑**：`POST /course/<course_id>/invite-code/`
+
+**說明**：產生指定課程的邀請代碼。僅課程教師本人或系統管理員可執行。
+
+**失敗回應**
+
+| 狀況                     | HTTP | 範例訊息                                            |
+| ------------------------ | ---- | --------------------------------------------------- |
+| 未登入                   | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 非教師/管理員            | 403  | `{ "message": "Forbidden." }`                       |
+| 非授課教師操作他人課程   | 403  | `{ "message": "You are not in this course." }`      |
+| 課程不存在               | 404  | `{ "message": "Course not found." }`                |
+
+**cURL 測試**：
+```bash
+curl -X POST http://127.0.0.1:8000/course/42/invite-code/ \
+    -H "Authorization: Bearer <access>"
 ```
 
 ---
