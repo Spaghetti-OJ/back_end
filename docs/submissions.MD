@@ -422,6 +422,63 @@ curl -X GET http://localhost:8000/submission/a1b2c3d4-5678-90ab-cdef-1234567890a
 
 ---
 
+### 6.1 獲取單一測資輸出
+
+取得指定提交在某個 subtask 的單一測資（test case）的執行結果與輸出預覽。
+
+**端點**: `GET /submission/{submissionId}/output/{task_no}/{case_no}/`
+
+**認證**: 必須（Bearer Token）
+
+**成功響應**: HTTP 200
+```json
+{
+    "data": {
+        "submission_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+        "task_no": 1,
+        "case_no": 3,
+        "status": "accepted",
+        "score": 10,
+        "max_score": 10,
+        "execution_time": 34,
+        "memory_usage": 2048,
+        "output": "Hello world\n",
+        "error_message": "",
+        "judge_message": ""
+    },
+    "message": "ok",
+    "status": "ok"
+}
+```
+
+**響應欄位說明**:
+- `submission_id`: 提交 UUID（字串）
+- `task_no`: subtask 編號（整數）
+- `case_no`: 測資編號（整數）
+- `status`: 該測資狀態（例如 'accepted', 'wrong_answer', 'time_limit_exceeded'）
+- `score`: 該測資的得分
+- `max_score`: 該測資滿分
+- `execution_time`: 執行時間（毫秒，若無則為 null 或 -1）
+- `memory_usage`: 記憶體使用（KB，若無則為 null 或 -1）
+- `output`: 輸出預覽（可能為部分內容或空字串）
+- `error_message`: 判題錯誤訊息（如編譯錯誤等）
+- `judge_message`: 判題器回傳之附加訊息（前端顯示前請注意隱私）
+
+**錯誤響應**:
+- `401 Unauthorized`: 未提供或無效 token
+- `403 Forbidden`: `"no permission"` - 無權查看該提交
+- `404 Not Found`: `"submission not found"` / `"task_no not found"` / `"case_no not found"` / `"output not found"`
+- `500 Internal Server Error`: 伺服器錯誤
+
+**範例**:
+```bash
+# 取得 submission 的 subtask=1 case=3 的輸出
+curl -X GET \
+  "http://localhost:8000/submission/a1b2c3d4-5678-90ab-cdef-1234567890ab/output/1/3/" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+
 ### 7. 重新判題
 
 重新判題已提交的程式（僅限教師/助教/管理員）。
