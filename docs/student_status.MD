@@ -41,6 +41,7 @@
 - first_ac_time: 該使用者第一次 AC 的 timestamp（若無則為 null）
 - last_submission_time: 最後一次提交時間
 - acceptance_rate: 接受率（若後端計算）
+- accept_percent: 接受率（百分比，0-100，若後端計算）
 - other (可選): top_languages, solved_problem_list（視實作與隱私決定）
 
 
@@ -64,7 +65,7 @@
       "average_score": 78.5,
       "first_ac_time": "2024-03-10T12:00:00",
       "last_submission_time": "2025-11-30T23:59:59",
-      "acceptance_rate": 0.365
+      "accept_percent": 36.5
     }
   },
   "message": "user stats fetched",
