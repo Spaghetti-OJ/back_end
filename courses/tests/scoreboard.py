@@ -33,6 +33,20 @@ class CourseScoreboardAPITestCase(APITestCase):
             real_name="TA Scoreboard",
             identity="student",
         )
+        self.admin = User.objects.create_user(
+            username="sb_admin",
+            email="sb_admin@example.com",
+            password="pass1234",
+            real_name="Admin Scoreboard",
+            identity="admin",
+        )
+        self.other_teacher = User.objects.create_user(
+            username="sb_other_teacher",
+            email="sb_other_teacher@example.com",
+            password="pass1234",
+            real_name="Other Teacher",
+            identity="teacher",
+        )
         self.student_one = User.objects.create_user(
             username="sb_student_one",
             email="sb_student_one@example.com",
@@ -180,6 +194,36 @@ class CourseScoreboardAPITestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(response.data["message"], "Permission denied")
+
+    def test_permission_denied_for_teacher_not_in_course(self):
+        self.client.force_authenticate(self.other_teacher)
+
+        response = self.client.get(
+            self._url(self.course.id, pids=[self.problem1.id, self.problem2.id])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["message"], "Permission denied")
+
+    def test_ta_can_view_scoreboard(self):
+        self.client.force_authenticate(self.ta_user)
+
+        response = self.client.get(
+            self._url(self.course.id, pids=[self.problem1.id, self.problem2.id])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["message"], "Success.")
+
+    def test_admin_can_view_scoreboard(self):
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.get(
+            self._url(self.course.id, pids=[self.problem1.id, self.problem2.id])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["message"], "Success.")
 
     def test_invalid_pids_returns_400(self):
         self.client.force_authenticate(self.teacher)
