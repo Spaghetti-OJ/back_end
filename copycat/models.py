@@ -16,7 +16,7 @@ class CopycatReport(models.Model):
     
     requester = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
     
-    moss_url = models.URLField(max_length=255, blank=True, null=True, verbose_name="MOSS 報告網址")
+    moss_url = models.URLField(max_length=500, blank=True, null=True, verbose_name="MOSS 報告網址")
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     
@@ -28,4 +28,7 @@ class CopycatReport(models.Model):
 
     class Meta:
         db_table = 'copycat_reports'
-        ordering = ['-created_at'] 
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['problem_id', 'status']),
+        ] 
