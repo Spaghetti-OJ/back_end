@@ -144,11 +144,6 @@ curl -X POST http://127.0.0.1:8000/course/42/join/ \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer <access>" \
     -d '{"joinCode": "ABC1234"}'
-{
-  "message": "Success.",
-  "data": { "joinCode": "XYZ12AB" },
-  "status_code": 200
-}
 ```
 
 ## 課程邀請代碼產生 API
@@ -156,6 +151,16 @@ curl -X POST http://127.0.0.1:8000/course/42/join/ \
 **路徑**：`POST /course/<course_id>/invite-code/`
 
 **說明**：產生指定課程的邀請代碼。僅課程教師本人或系統管理員可執行。
+
+**成功回應 (200 OK)**：
+
+```json
+{
+  "message": "Success.",
+  "data": { "joinCode": "XYZ12AB" },
+  "status_code": 200
+}
+```
 
 **失敗回應**
 
