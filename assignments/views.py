@@ -445,9 +445,9 @@ class HomeworkScoreboardView(APIView):
 
         # 7. 組成 payload -> serializer -> api_response
         payload = {
-            "homeworkId": assignment.id,
-            "homeworkTitle": assignment.title,
-            "courseId": assignment.course_id,
+            "assignment_id": assignment.id,
+            "title": assignment.title,
+            "course_id": assignment.course_id,
             "items": items,
         }
         serializer = HomeworkScoreboardSerializer(payload)
