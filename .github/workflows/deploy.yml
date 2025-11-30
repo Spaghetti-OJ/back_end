@@ -9,20 +9,22 @@ on:
 concurrency: deploy-dev
 
 env:
-  # 改用 runner 家目錄（絕對路徑），避免巢狀與 sudo
-  APP_DIR: ${{ runner.home }}/back_end_deploy
-  VENV_PATH: ${{ runner.home }}/back_end_deploy/.venv
   PYTHONUNBUFFERED: "1"
 
 jobs:
   deploy:
-    runs-on: self-hosted            # 需要在要部署的機器上安裝 self-hosted runner
+    runs-on: self-hosted
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
+      - name: Set deploy paths
+        run: |
+          echo "APP_DIR=$HOME/back_end_deploy" >> "$GITHUB_ENV"
+          echo "VENV_PATH=$HOME/back_end_deploy/.venv" >> "$GITHUB_ENV"
 
       - name: Ensure app directory exists
         run: |
