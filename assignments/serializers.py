@@ -200,7 +200,7 @@ class HomeworkScoreboardSerializer(serializers.Serializer):
     """
     整份作業的排行榜
     """
-    homeworkId = serializers.IntegerField()
-    homeworkTitle = serializers.CharField()
-    courseId = serializers.UUIDField()
+    homework_id = serializers.IntegerField()
+    homework_title = serializers.CharField()
+    course_id = serializers.UUIDField()
     items = HomeworkScoreboardItemSerializer(many=True)
