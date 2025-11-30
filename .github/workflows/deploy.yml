@@ -9,9 +9,9 @@ on:
 concurrency: deploy-dev
 
 env:
-  # 改用 runner 帳號家目錄下的固定目錄，避免 back_end/back_end 巢狀與 sudo
-  APP_DIR: $HOME/back_end_deploy
-  VENV_PATH: $HOME/back_end_deploy/.venv
+  # 改用 runner 家目錄（絕對路徑），避免巢狀與 sudo
+  APP_DIR: ${{ runner.home }}/back_end_deploy
+  VENV_PATH: ${{ runner.home }}/back_end_deploy/.venv
   PYTHONUNBUFFERED: "1"
 
 jobs:
@@ -30,7 +30,8 @@ jobs:
 
       - name: Ensure venv exists
         run: |
-          if [ ! -d "${VENV_PATH}" ]; then
+          if [ ! -f "${VENV_PATH}/bin/activate" ]; then
+            rm -rf "${VENV_PATH}"
             python3 -m venv "${VENV_PATH}"
           fi
 
