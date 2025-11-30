@@ -7,4 +7,4 @@ class AuthsConfig(AppConfig):
     verbose_name = 'Authentication'
     
     def ready(self):
-        import auths.signals 
+        import auths.signals # noqa: F401
