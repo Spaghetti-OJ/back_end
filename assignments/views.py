@@ -8,6 +8,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status, permissions
 from django.db.models import Max
 from decimal import Decimal
+from django.shortcuts import get_object_or_404
+from django.utils.dateparse import parse_datetime
 
 from assignments.models import Assignments, Assignment_problems
 from courses.models import Courses, Course_members
@@ -32,6 +34,14 @@ def collect_problem_ids(hw: Assignments) -> List[int]:
     return list(
         hw.assignment_problems.order_by("order_index").values_list("problem_id", flat=True)
     )
+
+def api_response(data=None, message="OK", status_code=200):
+    status_str = "ok" if 200 <= status_code < 400 else "error"
+    return Response({
+        "data": data,
+        "message": message,
+        "status": status_str,
+    }, status=status_code)
 
 # --------- POST /homework/ ---------
 class HomeworkCreateView(APIView):
@@ -283,3 +293,73 @@ class AddProblemsToHomeworkView(APIView):
 
         # 9) 回傳結果
         return Response("Add problems Success", status=status.HTTP_200_OK)
+
+class HomeworkDeadlineUpdateAPIView(APIView):
+    """
+    PUT /homework/<homework_id>/deadline/
+    功能：只更新作業截止時間（due_time）
+    權限：需為該課程老師或 TA
+    請求格式(JSON)：
+      {
+        "end": "2025-12-31T23:59:59Z"  # ISO 8601, 或 null
+      }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request, homework_id: int):
+        # 1) 先把作業抓出來，連同 course 一次 select_related
+        homework = get_object_or_404(
+            Assignments.objects.select_related("course"),
+            pk=homework_id,
+        )
+
+        course = homework.course  # 和其他 API 一樣的寫法
+
+        # 2) 權限檢查
+        if not is_teacher_or_ta(request.user, course):
+            return Response(
+                "user must be the teacher or ta of this course",
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # 3) 檢查 end 是否有給
+        if "end" not in request.data:
+            return Response(
+                "end is required",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        end_value = request.data.get("end", None)
+
+        # 4) end = null → 清掉 deadline
+        if end_value is None:
+            homework.due_time = None
+            homework.save(update_fields=["due_time"])
+            return Response(
+                "Update homework deadline Success",
+                status=status.HTTP_200_OK,
+            )
+
+        # 5) end 有值 → 解析成 datetime
+        dt = parse_datetime(end_value)
+        if dt is None:
+            return Response(
+                "end must be ISO 8601 datetime string or null",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 6) 如果有 start_time，避免 end < start
+        if homework.start_time and dt < homework.start_time:
+            return Response(
+                "end must be greater than or equal to start",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 7) 實際更新 due_time
+        homework.due_time = dt
+        homework.save(update_fields=["due_time"])
+
+        return Response(
+            "Update homework deadline Success",
+            status=status.HTTP_200_OK,
+        )
