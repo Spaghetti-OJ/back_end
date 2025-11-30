@@ -225,6 +225,68 @@ curl -X PUT "http://127.0.0.1:8000/course/<course_id>/?student=<student_id>" \
 
 ---
 
+## CSV 批次匯入學生 API
+
+**路徑**：`POST /course/<course_id>/import-csv/`
+
+**說明**：以 CSV 檔批次匯入學生帳號並加入指定課程。僅管理員或授課教師可操作；教師只能匯入自己的課程；檔案大小上限 5MB。
+
+**CSV 欄位**
+
+| 欄位名       | 必填 | 說明                                               |
+| ------------ | ---- | -------------------------------------------------- |
+| `username`   | ✅   | 學生帳號（全域唯一）                               |
+| `email`      | ✅   | 學生 Email（全域唯一）                             |
+| `real_name`  | ✅   | 學生姓名                                           |
+| `student_id` | ⭕   | 學號，若提供會寫入 `UserProfile.student_id`         |
+| `password`   | ⭕   | 初始密碼，未填時會自動產生隨機密碼                 |
+
+**成功回應 (200 OK)**：
+
+```json
+{
+  "message": "Success.",
+  "status_code": 200,
+  "data": {
+    "import": {
+      "id": "1c9d48e0-7c8d-4f5e-9e6a-12ab34cd56ef",
+      "status": "completed",
+      "fileName": "students.csv",
+      "fileSize": 1240,
+      "importResult": true,
+      "createdUsers": 2,
+      "newMembers": 2,
+      "skippedExistingMembers": 0,
+      "errorCount": 0,
+      "errors": []
+    }
+  }
+}
+```
+
+> 備註：若部分列有問題（例如重複帳號、身分非學生、課程人數已滿等），`importResult` 會是 `false`，`errors` 會列出失敗的列號與原因，已通過的列仍會成功匯入。
+
+**失敗回應**
+
+| 狀況                     | HTTP | 範例訊息                                           |
+| ------------------------ | ---- | -------------------------------------------------- |
+| 未登入                   | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 權限不足                 | 403  | `{ "message": "Forbidden." }`                      |
+| 非授課教師操作他人課程   | 403  | `{ "message": "You are not in this course." }`     |
+| 課程已達學生上限         | 403  | `{ "message": "Course is full." }`                 |
+| 課程不存在               | 404  | `{ "message": "Course not found." }`               |
+| 檔案格式錯誤或缺少欄位   | 400  | `{ "message": "Missing required columns: ..." }`   |
+
+**cURL 測試**
+
+```bash
+curl -X POST http://127.0.0.1:8000/course/42/import-csv/ \
+    -H "Authorization: Bearer <access>" \
+    -F "file=@./students.csv"
+```
+
+---
+
 ## 課程建立 API
 
 **路徑**：`POST /course/`
