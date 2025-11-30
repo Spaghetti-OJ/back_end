@@ -38,6 +38,7 @@ urlpatterns = [
     path('editorials/', include('submissions.editorial_urls')),
     path('submission/', include('submissions.urls')),
     path('ranking/', submission_views.ranking_view, name='ranking'),
+    path('stats/user/<uuid:user_id>/', submission_views.user_stats_view, name='user-stats-root'),
     path('api-tokens/', include('api_tokens.urls')),
     path('profile/', include('profiles.urls')),
     path('homework/',include('assignments.urls')),
