@@ -6,6 +6,7 @@ from . import summary as summary_urls
 from . import grade as grade_urls
 from . import join as join_urls
 from . import invite as invite_urls
+from . import import_csv as import_csv_urls
 
 app_name = "courses"
 
@@ -21,6 +22,10 @@ urlpatterns = [
     path(
         "<course_id>/invite-code/",
         include((invite_urls.urlpatterns, "invite"), namespace="invite"),
+    ),
+    path(
+        "<course_id>/import-csv/",
+        include((import_csv_urls.urlpatterns, "import_csv"), namespace="import_csv"),
     ),
     path(
         "summary/",
