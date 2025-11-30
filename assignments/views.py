@@ -39,25 +39,6 @@ def collect_problem_ids(hw: Assignments) -> List[int]:
         hw.assignment_problems.order_by("order_index").values_list("problem_id", flat=True)
     )
 
-def api_response(data=None, message="OK", status_code=status.HTTP_200_OK):
-    """
-    統一 API 回傳格式：
-    {
-      "data": <payload>,
-      "message": "給人看的訊息",
-      "status": "ok" | "error"
-    }
-    """
-    status_str = "ok" if 200 <= status_code < 400 else "error"
-    return Response(
-        {
-            "data": data,
-            "message": message,
-            "status": status_str,
-        },
-        status=status_code,
-    )
-
 # --------- POST /homework/ ---------
 class HomeworkCreateView(APIView):
     permission_classes = [IsAuthenticated]
