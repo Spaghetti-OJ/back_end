@@ -10,6 +10,8 @@ from django.db.models import Sum, Count, Max, Q
 from decimal import Decimal
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from collections import defaultdict
+import datetime
 
 from assignments.models import Assignments, Assignment_problems
 from courses.models import Courses, Course_members
@@ -310,42 +312,86 @@ class AddProblemsToHomeworkView(APIView):
 # --------- GET /homework/<id>/scoreboard ---------
 class HomeworkScoreboardView(APIView):
     """
-    GET /homework/{id}/scoreboard
-    回傳作業排行榜，欄位名稱對齊 DB spec：
-    - assignment_id, title, course_id
-    - items[]:
-        - rank, user_id, username, real_name
-        - total_score, max_total_score, is_late
-        - first_ac_time, last_submission_time
-        - problems[]: problem_id, best_score, max_possible_score, solve_status
+    GET /homework/<homework_id>/scoreboard/
+    取得某份作業的排行榜
     """
     permission_classes = [IsAuthenticated]
 
-    def _get_assignment(self, homework_id: int) -> Assignments:
+    def get_assignment(self, homework_id: int) -> Assignments:
+        from django.shortcuts import get_object_or_404
         return get_object_or_404(
-            Assignments.objects.select_related("course"),
-            pk=homework_id,
+            Assignments.objects.select_related("course"), pk=homework_id
         )
 
-    def get(self, request, homework_id: int):
-        assignment = self._get_assignment(homework_id)
+    def check_permission(self, request, assignment: Assignments):
+        """
+        檢查使用者是否為課程成員（student / ta / teacher）
+        """
+        user = request.user
+        course = assignment.course
 
-        # 1. 取出這份作業的所有題目統計 (UserProblemStats)
+        # 1. 如果課程有 teacher 欄位，先檢查是不是教師
+        is_teacher = getattr(course, "teacher_id", None) == user.id
+
+        # 2. 再檢查 Course_members（student / ta / teacher）
+        is_member = Course_members.objects.filter(
+            course_id=course,   
+            user_id=user,       
+        ).exists()
+
+        if not (is_teacher or is_member):
+            return api_response(
+                data=None,
+                message="permission denied: user is not a member of this course",
+                status_code=403,
+            )
+
+        return None
+
+    def get(self, request, homework_id: int):
+        # 1. 取出作業
+        assignment = self.get_assignment(homework_id)
+
+        # 2. 權限檢查
+        resp = self.check_permission(request, assignment)
+        if resp is not None:
+            return resp
+
+        # 3. 取出這份作業底下所有 UserProblemStats
         stats_qs = (
             UserProblemStats.objects
             .filter(assignment_id=assignment.id)
             .select_related("user")
-            .order_by("user__username", "problem_id")
+            .order_by("user_id", "problem_id")
         )
 
-        # 2. 依 user 聚合
-        per_user = {}
+        # 如果完全沒有統計資料，直接回空排行榜
+        if not stats_qs.exists():
+            payload = {
+                "homeworkId": assignment.id,
+                "homeworkTitle": assignment.title,
+                "courseId": assignment.course_id,
+                "items": [],
+            }
+            serializer = HomeworkScoreboardSerializer(payload)
+            return api_response(
+                data=serializer.data,
+                message="get homework scoreboard",
+                status_code=200,
+            )
+
+        # 4. 以 user 分組，累計成績 & 題目資訊
+        user_map = {}  # user_id -> dict
 
         for s in stats_qs:
             uid = s.user_id
-            if uid not in per_user:
-                per_user[uid] = {
-                    "user": s.user,
+            if uid not in user_map:
+                user_obj = s.user
+                user_map[uid] = {
+                    "user_id": user_obj.id,
+                    "username": user_obj.username,
+                    "real_name": getattr(user_obj, "real_name", None),
+
                     "total_score": 0,
                     "max_total_score": 0,
                     "is_late": False,
@@ -354,91 +400,78 @@ class HomeworkScoreboardView(APIView):
                     "problems": [],
                 }
 
-            row = per_user[uid]
+            entry = user_map[uid]
 
-            # 累積作業總分 / 總滿分
-            row["total_score"] += s.best_score
-            row["max_total_score"] += s.max_possible_score
+            # 累加題目資訊
+            entry["problems"].append({
+                "problem_id": s.problem_id,
+                "best_score": s.best_score,
+                "max_possible_score": s.max_possible_score,
+                "solve_status": s.solve_status,
+            })
 
-            # 是否曾經晚交
-            row["is_late"] = row["is_late"] or s.is_late
+            # 累加總分
+            entry["total_score"] += s.best_score
+            entry["max_total_score"] += s.max_possible_score
 
-            # 最早 AC 時間
+            # 是否有遲交
+            entry["is_late"] = entry["is_late"] or bool(s.is_late)
+
+            # 最早 AC 時間（取最小）
             if s.first_ac_time:
                 if (
-                    row["first_ac_time"] is None
-                    or s.first_ac_time < row["first_ac_time"]
+                    entry["first_ac_time"] is None
+                    or s.first_ac_time < entry["first_ac_time"]
                 ):
-                    row["first_ac_time"] = s.first_ac_time
+                    entry["first_ac_time"] = s.first_ac_time
 
-            # 最晚提交時間
+            # 最後提交時間（取最大）
             if s.last_submission_time:
                 if (
-                    row["last_submission_time"] is None
-                    or s.last_submission_time > row["last_submission_time"]
+                    entry["last_submission_time"] is None
+                    or s.last_submission_time > entry["last_submission_time"]
                 ):
-                    row["last_submission_time"] = s.last_submission_time
+                    entry["last_submission_time"] = s.last_submission_time
 
-            # 單題資訊
-            row["problems"].append(
-                {
-                    "problem_id": s.problem_id,
-                    "best_score": s.best_score,
-                    "max_possible_score": s.max_possible_score,
-                    "solve_status": s.solve_status,
-                }
+        # 5. 轉成 list 並排序
+        items = list(user_map.values())
+
+        # 為了排序用的「最大時間」(避免 timezone.datetime.max 在某些平台出錯)
+        dummy_max = datetime.datetime(9999, 12, 31, tzinfo=datetime.timezone.utc)
+
+        def sort_key(item):
+            total = item["total_score"]
+            first_ac = item["first_ac_time"] or dummy_max
+            last_sub = item["last_submission_time"] or dummy_max
+            username = item["username"] or ""
+            # 分數降冪、AC 時間升冪、最後提交時間升冪、username 升冪
+            return (-total, first_ac, last_sub, username)
+
+        items.sort(key=sort_key)
+
+        # 6. 指定名次（同分同 AC 時間的人名次一樣）
+        current_rank = 0
+        prev_key = None
+
+        for index, item in enumerate(items, start=1):
+            key = (
+                item["total_score"],
+                item["first_ac_time"] or dummy_max,
             )
+            if key != prev_key:
+                current_rank = index
+                prev_key = key
+            item["rank"] = current_rank
 
-        # 3. 變成 list，並排序 + 計算 rank
-        rows = []
-        for uid, agg in per_user.items():
-            user: User = agg["user"]
-            rows.append(
-                {
-                    # user 資訊：對齊 Users table
-                    "user_id": user.id,
-                    "username": user.username,
-                    "real_name": getattr(user, "real_name", ""),
-
-                    # scoreboard 統計欄位
-                    "total_score": agg["total_score"],
-                    "max_total_score": agg["max_total_score"],
-                    "is_late": agg["is_late"],
-                    "first_ac_time": agg["first_ac_time"],
-                    "last_submission_time": agg["last_submission_time"],
-                    "problems": agg["problems"],
-                }
-            )
-
-        # 排序：總分 ↓，再最早 AC ↑，再 username
-        def sort_key(r):
-            # 沒有 first_ac_time 的當成「很晚」
-            max_dt = timezone.datetime.max.replace(tzinfo=timezone.utc)
-            first_ac = r["first_ac_time"] or max_dt
-            return (-r["total_score"], first_ac, r["username"])
-
-        rows.sort(key=sort_key)
-
-        # 加 rank
-        current_rank = 1
-        last_score = None
-        last_rank = 1
-        for row in rows:
-            if last_score is None or row["total_score"] != last_score:
-                last_rank = current_rank
-                last_score = row["total_score"]
-            row["rank"] = last_rank
-            current_rank += 1
-
-        # 4. 組 payload：欄位名稱對齊 Assignments / Courses
+        # 7. 組成 payload -> serializer -> api_response
         payload = {
-            "assignment_id": assignment.id,
-            "title": assignment.title,
-            "course_id": assignment.course_id,  # 這裡會是 UUID(primary key)
-            "items": rows,
+            "homeworkId": assignment.id,
+            "homeworkTitle": assignment.title,
+            "courseId": assignment.course_id,
+            "items": items,
         }
-
         serializer = HomeworkScoreboardSerializer(payload)
+
         return api_response(
             data=serializer.data,
             message="get homework scoreboard",

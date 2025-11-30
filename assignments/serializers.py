@@ -166,18 +166,41 @@ class AddProblemsInSerializer(serializers.Serializer):
             raise serializers.ValidationError("problem_ids or problems is required")
         return data
 
+class HomeworkScoreboardProblemSerializer(serializers.Serializer):
+    """
+    單一學生在某一題的成績資訊
+    """
+    problem_id = serializers.IntegerField()
+    best_score = serializers.IntegerField()
+    max_possible_score = serializers.IntegerField()
+    solve_status = serializers.CharField()
+
+
 class HomeworkScoreboardItemSerializer(serializers.Serializer):
     """
-    單一使用者在某作業的排行資訊
+    單一學生在整份作業的排行資訊
     """
+    rank = serializers.IntegerField()
+
     user_id = serializers.UUIDField()
     username = serializers.CharField()
-    real_name = serializers.CharField(allow_null=True, required=False)
-    student_id = serializers.CharField(allow_null=True, required=False)
+    real_name = serializers.CharField(allow_null=True)
 
     total_score = serializers.IntegerField()
-    accepted_count = serializers.IntegerField()
-    submission_count = serializers.IntegerField()
+    max_total_score = serializers.IntegerField()
+    is_late = serializers.BooleanField()
+
+    first_ac_time = serializers.DateTimeField(allow_null=True)
     last_submission_time = serializers.DateTimeField(allow_null=True)
 
-    rank = serializers.IntegerField()
+    problems = HomeworkScoreboardProblemSerializer(many=True)
+
+
+class HomeworkScoreboardSerializer(serializers.Serializer):
+    """
+    整份作業的排行榜
+    """
+    homeworkId = serializers.IntegerField()
+    homeworkTitle = serializers.CharField()
+    courseId = serializers.UUIDField()
+    items = HomeworkScoreboardItemSerializer(many=True)

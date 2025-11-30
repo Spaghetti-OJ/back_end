@@ -17,8 +17,7 @@ urlpatterns = [
     path("<int:homework_id>/problems/", views.AddProblemsToHomeworkView.as_view(), name="homework-add-problems-slash"),
 
     # GET /homework/<id>/scoreboard
-    path("<int:homework_id>/scoreboard",views.HomeworkScoreboardView.as_view(),name="homework-scoreboard",),
-    path("<int:homework_id>/scoreboard/",views.HomeworkScoreboardView.as_view(),name="homework-scoreboard-slash",),
+    path("<int:homework_id>/scoreboard/",views.HomeworkScoreboardView.as_view(),name="homework-scoreboard",),
 
     # GET /homework/course/<course_id>  (course_id 為 UUID)
     #path("course/<uuid:course_id>", views.CourseHomeworkListView.as_view(), name="course-homework-list"),
