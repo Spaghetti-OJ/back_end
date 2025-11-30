@@ -165,3 +165,13 @@ class AddProblemsInSerializer(serializers.Serializer):
         if not data.get("problems") and not data.get("problem_ids"):
             raise serializers.ValidationError("problem_ids or problems is required")
         return data
+
+class HomeworkDeadlineSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    markdown = serializers.CharField(allow_blank=True)
+    course_id = serializers.IntegerField()
+    start = serializers.DateTimeField(allow_null=True)
+    end = serializers.DateTimeField(allow_null=True)
+    is_overdue = serializers.BooleanField()
+    server_time = serializers.DateTimeField()

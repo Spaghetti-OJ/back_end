@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status, permissions
 from django.db.models import Max
 from decimal import Decimal
+from django.utils import timezone
 
 from assignments.models import Assignments, Assignment_problems
 from courses.models import Courses, Course_members
@@ -18,6 +19,7 @@ from .serializers import (
     HomeworkUpdateSerializer,
     AddProblemsInSerializer,
     make_list_item_from_instance,
+    HomeworkDeadlineSerializer,
 )
 
 # --------- 權限 & 工具 ---------
@@ -32,6 +34,18 @@ def collect_problem_ids(hw: Assignments) -> List[int]:
     return list(
         hw.assignment_problems.order_by("order_index").values_list("problem_id", flat=True)
     )
+def is_course_member(user, course) -> bool:
+    """
+    判斷使用者是否為該課程成員（學生 / TA / 老師都算）
+    """
+    return Course_members.objects.filter(course_id=course, user_id=user).exists()
+def api_response(data=None, message="OK", status_code=200):
+    status_str = "ok" if 200 <= status_code < 400 else "error"
+    return Response({
+        "data": data,
+        "message": message,
+        "status": status_str,
+    }, status=status_code)
 
 # --------- POST /homework/ ---------
 class HomeworkCreateView(APIView):
@@ -283,3 +297,68 @@ class AddProblemsToHomeworkView(APIView):
 
         # 9) 回傳結果
         return Response("Add problems Success", status=status.HTTP_200_OK)
+
+class HomeworkDeadlineView(APIView):
+    """
+    GET /homework/<homework_id>/deadline — 取得作業截止時間
+
+    權限：
+      - 老師 / TA：可查看自己課程的所有作業
+      - 其他登入使用者：必須是該課程成員（學生）才能查看
+
+    命名規則：
+      - 舊 API 已存在的欄位名：沿用（name, markdown, start, end）
+      - 其餘欄位：沿用 Assignments table（id, course_id）
+      - 新增欄位：is_overdue, server_time
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, homework_id: int):
+        # 1) 找作業
+        try:
+            hw = Assignments.objects.select_related("course").get(pk=homework_id)
+        except Assignments.DoesNotExist:
+            return api_response(
+                data=None,
+                message="homework not exists",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+
+        course = hw.course
+
+        # 2) 權限檢查
+        if not is_teacher_or_ta(request.user, course):
+            if not is_course_member(request.user, course):
+                return api_response(
+                    data=None,
+                    message="user not in this course",
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+
+        # 3) 計算是否逾期
+        now = timezone.now()
+        due = hw.due_time
+        if due is None:
+            is_overdue = False
+        else:
+            is_overdue = now > due
+
+        # 4) 組 payload（舊欄位優先，其餘用 table 名稱）
+        raw_payload = {
+            "id": hw.id,                        # Assignments.id
+            "name": hw.title,                   # 舊 API: name
+            "markdown": hw.description or "",   # 舊 API: markdown
+            "course_id": hw.course_id,          # Table: course_id
+            "start": hw.start_time,             # 舊 API: start
+            "end": hw.due_time,                 # 舊 API: end
+            "is_overdue": is_overdue,           # 新增欄位
+            "server_time": now,                 # 新增欄位
+        }
+
+        ser = HomeworkDeadlineSerializer(raw_payload)
+        return api_response(
+            data=ser.data,
+            message="get homework deadline",
+            status_code=status.HTTP_200_OK,
+        )
