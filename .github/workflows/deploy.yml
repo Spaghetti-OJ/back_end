@@ -62,11 +62,11 @@ jobs:
           python manage.py makemigrations
           python manage.py migrate --noinput
 
-      - name: Collect static files
-        run: |
-          cd "${APP_DIR}"
-          source "${VENV_PATH}/bin/activate"
-          python manage.py collectstatic --noinput
+      # - name: Collect static files
+      #   run: |
+      #     cd "${APP_DIR}"
+      #     source "${VENV_PATH}/bin/activate"
+      #     python manage.py collectstatic --noinput
 
       - name: Restart application (dev runserver)
         run: |
