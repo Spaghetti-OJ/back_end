@@ -6,6 +6,7 @@ from . import summary as summary_urls
 from . import grade as grade_urls
 from . import join as join_urls
 from . import invite as invite_urls
+from . import assign_ta as assign_ta_urls
 
 app_name = "courses"
 
@@ -29,6 +30,10 @@ urlpatterns = [
     path(
         "<course_id>/join/",
         include((join_urls.urlpatterns, "join"), namespace="join"),
+    ),
+    path(
+        "<course_id>/assign-ta/",
+        include((assign_ta_urls.urlpatterns, "assign_ta"), namespace="assign_ta"),
     ),
     path(
         "<course_id>/",

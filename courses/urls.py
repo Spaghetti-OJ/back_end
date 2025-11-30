@@ -24,6 +24,10 @@ urlpatterns = [
         include((f"{__package__}.urls.join", "join"), namespace="join"),
     ),
     path(
+        "<course_id>/assign-ta/",
+        include((f"{__package__}.urls.assign_ta", "assign_ta"), namespace="assign_ta"),
+    ),
+    path(
         "<course_id>/",
         include(
             (f"{__package__}.urls.course_courseid", "course_courseid"),
