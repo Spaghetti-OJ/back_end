@@ -23,7 +23,7 @@
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "teacher01",
         "real_name": "王小明",
-        "identity": "teacher"
+        "role": "teacher"
       }
     }
   ]
@@ -72,14 +72,14 @@ curl http://127.0.0.1:8000/course/ \
     "id": "c1234f56-789a-4bde-b123-456789abcd12",
     "username": "teacher01",
     "real_name": "王小明",
-    "identity": "teacher"
+    "role": "teacher"
   },
   "TAs": [
     {
       "id": "24242424-aaaa-bbbb-cccc-123456789000",
       "username": "ta_user",
       "real_name": "助教 A",
-      "identity": "student"
+      "role": "student"
     }
   ],
   "students": [
@@ -87,7 +87,7 @@ curl http://127.0.0.1:8000/course/ \
       "id": "65656565-aaaa-bbbb-cccc-123456789000",
       "username": "student01",
       "real_name": "學生 A",
-      "identity": "student"
+      "role": "student"
     }
   ]
 }
