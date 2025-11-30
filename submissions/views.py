@@ -6,6 +6,8 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied, NotFound, ValidationError
 from django.utils import timezone
+from django.db.models import Count
+from rest_framework.views import APIView
 import uuid
 
 # 統一的 API 響應格式
@@ -26,11 +28,12 @@ def api_response(data=None, message="OK", status_code=200):
         "status": status_str,
     }, status=status_code)
 
-from .models import Editorial, EditorialLike
+from .models import Editorial, EditorialLike, UserProblemSolveStatus
 from .serializers import (
     EditorialSerializer, 
     EditorialCreateSerializer, 
-    EditorialLikeSerializer
+    EditorialLikeSerializer,
+    UserStatusSerializer
 )
 from problems.models import Problems
 from courses.models import Courses, Course_members
@@ -843,3 +846,95 @@ def ranking_view(request):
     
     except Exception as e:
         return api_response(data=None, message="Some error occurred, please contact the admin", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def user_stats_view(request, user_id):
+    """
+    GET /stats/user/{userId} - 使用者統計
+    回傳使用者解題數、提交數、難度分布、接受率、Beats 百分比
+    """
+    from user.models import User
+
+    # 1. 找 user
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return api_response(
+            data=None,
+            message="User not found",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+
+    # 2. 提交統計
+    user_submissions = Submission.objects.filter(user=user)
+    total_submissions = user_submissions.count()
+
+    
+    ac_submissions = user_submissions.filter(status='0').count()
+
+    if total_submissions > 0:
+        acceptance_percent = ac_submissions / total_submissions * 100.0
+    else:
+        acceptance_percent = 0.0
+
+    # 3. 解題數 + 難度分布
+    solved_qs = UserProblemSolveStatus.objects.filter(
+        user_id=user.id,
+        solve_status='fully_solved',  # 對應 schema 裡的 enum 值
+    )
+    total_solved = solved_qs.count()
+
+    solved_problem_ids = solved_qs.values_list('problem_id', flat=True)
+
+    difficulty_counts = (
+        Problems.objects.filter(id__in=solved_problem_ids)
+        .values('difficulty')
+        .annotate(cnt=Count('id'))
+    )
+
+    def get_diff_count(name):
+        for row in difficulty_counts:
+            if row['difficulty'] == name:
+                return row['cnt']
+        return 0
+
+    easy_cnt = get_diff_count('easy')
+    medium_cnt = get_diff_count('medium')
+    hard_cnt = get_diff_count('hard')
+
+    # 4. Beats：以 fully_solved 題數當基準
+    all_user_solved = (
+        UserProblemSolveStatus.objects.filter(solve_status='fully_solved')
+        .values('user_id')
+        .annotate(solved_count=Count('problem_id'))
+    )
+
+    total_users = all_user_solved.count()
+    if total_users > 0:
+        lower_users = all_user_solved.filter(
+            solved_count__lt=total_solved
+        ).count()
+        beats_percent = lower_users / total_users * 100.0
+    else:
+        beats_percent = 0.0
+
+    payload = {
+        "user_id": user.id,
+        "username": user.username,
+        "total_solved": total_solved,
+        "total_submissions": total_submissions,
+        "accept_percent": round(acceptance_percent, 2),
+        "difficulty": {
+            "easy": easy_cnt,
+            "medium": medium_cnt,
+            "hard": hard_cnt,
+        },
+        "beats_percent": round(beats_percent, 2),
+    }
+
+    serializer = UserStatusSerializer(payload)
+    return api_response(
+        data=serializer.data,
+        message="here you are, bro",
+        status_code=status.HTTP_200_OK
+    )
