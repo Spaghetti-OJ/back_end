@@ -4,7 +4,11 @@ from .courses import (
     CourseListSerializer,
     CourseUpdateSerializer,
 )
-from .course_courseid import CourseInfoSerializer, CourseDetailSerializer
+from .course_courseid import (
+    CourseInfoSerializer,
+    CourseDetailSerializer,
+)
+from .join import CourseJoinSerializer
 from .summary import CourseSummarySerializer
 from .grade import (
     CourseGradeListSerializer,
@@ -22,6 +26,7 @@ __all__ = [
     "CourseUpdateSerializer",
     "CourseInfoSerializer",
     "CourseDetailSerializer",
+    "CourseJoinSerializer",
     "CourseSummarySerializer",
     "CourseGradeListSerializer",
     "CourseGradeItemSerializer",
