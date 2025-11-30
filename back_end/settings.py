@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "announcements",
     "profiles",
     "editor",
+    "search",
 ]
 
 AUTH_USER_MODEL = 'user.User'
