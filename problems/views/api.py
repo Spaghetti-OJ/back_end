@@ -513,66 +513,168 @@ class ProblemListView(APIView):
 
 
 class ProblemDetailView(APIView):
+    """GET /problem/<id> — 題目詳情（依產品需求格式）
+
+    需求格式（回傳 data 內）：
+      problemName: 題目名稱
+      description: 聚合描述（description, input_description, output_description, hint, sample_input, sample_output）
+      owner: { id, username, real_name }
+      tags: [{ id, name, usage_count }]
+      allowedLanguage: 位元遮罩（c=1, cpp=2, java=4, python=8，其餘延伸可再擴充）
+      courses: [{ id, name }]
+      quota: total_quota
+      defaultCode: { language: code }（目前無資料以空字串占位）
+      status: is_public
+      type: 題目類型（目前模型無，預設 0；後續若加欄位可替換）
+      testCase: 測試案例任務列表（若存在 zip：[{ no, stem, in, out }]）
+      fillInTemplate: 僅 type=1 時提供，否則 null
+      submitCount: 個人提交次數（若 submissions table 缺失或未登入則 null）
+      highScore: 個人最高分（同上）
+
+    權限：需求書標示需登入；故此處強制 IsAuthenticated。針對非公開題目沿用既有權限檢查。
     """
-    GET /api/problem/<id> — 題目詳情（學生視角）
-    權限：公開題目所有人可見；私有題目只有 creator、課程成員、admin 可見
-    回傳：簡化版測試案例 + 個人化資訊（submitCount, highScore）
-    """
-    permission_classes = []
+    permission_classes = [IsAuthenticated]
+
+    LANGUAGE_BIT_MAP = {
+        'c': 1,
+        'cpp': 2,
+        'java': 4,
+        'python': 8,
+    }
+
+    def _language_mask(self, langs):
+        mask = 0
+        for l in langs or []:
+            mask |= self.LANGUAGE_BIT_MAP.get(l, 0)
+        return mask
+
+    def _build_testcase_tasks(self, problem):
+        from ..services.storage import _storage
+        rel = os.path.join('testcases', f'p{problem.id}', 'problem.zip')
+        if not _storage.exists(rel):
+            return []
+        try:
+            with _storage.open(rel, 'rb') as fh:
+                data = fh.read()
+            from io import BytesIO
+            import zipfile, os as _os
+            buf = BytesIO(data)
+            tasks = []
+            with zipfile.ZipFile(buf) as zf:
+                names = zf.namelist()
+                ins = [n for n in names if n.endswith('.in')]
+                outs = [n for n in names if n.endswith('.out')]
+                def stem(n):
+                    b = _os.path.basename(n)
+                    return _os.path.splitext(b)[0]
+                in_map = {stem(n): n for n in ins}
+                out_map = {stem(n): n for n in outs}
+                all_stems = sorted(set(list(in_map.keys()) + list(out_map.keys())))
+                for idx, s in enumerate(all_stems, start=1):
+                    tasks.append({
+                        'no': idx,
+                        'stem': s,
+                        'in': in_map.get(s),
+                        'out': out_map.get(s),
+                    })
+            return tasks
+        except Exception:
+            return []
 
     def get(self, request, pk):
         try:
-            problem = Problems.objects.select_related('creator_id', 'course_id').prefetch_related(
-                'tags', 'subtasks__test_cases'
-            ).get(pk=pk)
+            problem = Problems.objects.select_related('creator_id', 'course_id').prefetch_related('tags').get(pk=pk)
         except Problems.DoesNotExist:
             return api_response(None, "Problem not found.", status_code=404)
-        
-        # 權限檢查
+
         user = request.user
+
+        # 權限：公開題目開放；course/hidden 需符合既有規則
         visibility = getattr(problem, 'is_public', 'hidden')
-        # Treat legacy boolean True as public, False as hidden
         legacy_public = visibility in (True, 1)
         visibility_normalized = 'public' if legacy_public else visibility
         if visibility_normalized not in ('public'):
-            # not public -> need auth
-            if not user.is_authenticated:
-                return api_response(None, "Authentication required.", status_code=401)
-            # admin/teacher
-            if user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher']:
-                pass
-            elif problem.creator_id == user:
-                pass
-            elif visibility_normalized == 'course' and problem.course_id:
-                from courses.models import Course_members
-                is_course_member = Course_members.objects.filter(
-                    course_id=problem.course_id,
-                    user_id=user
-                ).exists()
-                if not is_course_member:
-                    return api_response(None, "You do not have permission to view this problem.", status_code=403)
-            else:
-                return api_response(None, "You do not have permission to view this problem.", status_code=403)
-        
-        # 序列化
-        serializer = ProblemStudentSerializer(problem)
-        data = serializer.data
-        
-        
-        # A: 簡單實作：若使用者已登入，直接從 Submission 聚合該 user 在此題的次數與最高分
-        # 未登入則回傳 null（前端可解讀為需登入才會看到個人化資訊）
-        if user.is_authenticated:
-            stats = Submission.objects.filter(problem_id=problem.id, user=user).aggregate(
-                submit_count=Count('id'),
-                high_score=Max('score'),
-            )
-            data['submit_count'] = stats.get('submit_count') or 0
-            data['high_score'] = stats.get('high_score') or 0
-        else:
-            data['submit_count'] = None
-            data['high_score'] = None
-        
-        return api_response(data, "取得題目成功", status_code=200)
+            if not (user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher'] or problem.creator_id == user):
+                if visibility_normalized == 'course' and problem.course_id:
+                    from courses.models import Course_members
+                    is_course_member = Course_members.objects.filter(course_id=problem.course_id, user_id=user).exists()
+                    if not is_course_member:
+                        return api_response(None, "Not enough permission", status_code=403)
+                else:
+                    return api_response(None, "Not enough permission", status_code=403)
+
+        # 聚合描述
+        description_block = {
+            'description': problem.description,
+            'input': getattr(problem, 'input_description', ''),
+            'output': getattr(problem, 'output_description', ''),
+            'hint': getattr(problem, 'hint', ''),
+            'sampleInput': getattr(problem, 'sample_input', ''),
+            'sampleOutput': getattr(problem, 'sample_output', ''),
+        }
+
+        # 語言遮罩
+        allowed_lang_mask = self._language_mask(getattr(problem, 'supported_languages', []))
+
+        # tags
+        tags_data = [
+            {'id': t.id, 'name': t.name, 'usage_count': getattr(t, 'usage_count', 0)}
+            for t in problem.tags.all()
+        ]
+
+        # course list（目前單一課程，仍以陣列呈現）
+        courses_data = []
+        if problem.course_id:
+            courses_data.append({'id': problem.course_id_id, 'name': getattr(problem.course_id, 'name', '')})
+
+        # 預設程式碼（占位）
+        default_code = {lang: '' for lang in getattr(problem, 'supported_languages', [])}
+
+        # 題目類型（尚未有欄位，先給 0）
+        problem_type = getattr(problem, 'problem_type', 0) or 0
+        fill_in_template = None if problem_type != 1 else getattr(problem, 'fill_in_template', '')
+
+        # 測試案例（若 zip 存在）
+        test_case_tasks = self._build_testcase_tasks(problem)
+
+        # 個人統計（若 Submission table 存在）
+        submit_count = None
+        high_score = None
+        from django.db.utils import OperationalError
+        try:
+            if user.is_authenticated:
+                from submissions.models import Submission  # Lazy import 防止遷移缺失崩潰
+                agg = Submission.objects.filter(problem_id=problem.id, user=user).aggregate(
+                    submit_count=Count('id'), high_score=Max('score')
+                )
+                submit_count = agg.get('submit_count') or 0
+                high_score = agg.get('high_score') or 0
+        except OperationalError:
+            # 資料表缺失時保持 null，避免 500
+            pass
+
+        data = {
+            'problemName': problem.title,
+            'description': description_block,
+            'owner': {
+                'id': problem.creator_id_id,
+                'username': getattr(problem.creator_id, 'username', ''),
+                'real_name': getattr(problem.creator_id, 'real_name', ''),
+            },
+            'tags': tags_data,
+            'allowedLanguage': allowed_lang_mask,
+            'courses': courses_data,
+            'quota': getattr(problem, 'total_quota', -1),
+            'defaultCode': default_code,
+            'status': visibility_normalized,
+            'type': problem_type,
+            'testCase': test_case_tasks,
+            'fillInTemplate': fill_in_template,
+            'submitCount': submit_count,
+            'highScore': high_score,
+        }
+
+        return api_response(data, "Problem can view.", status_code=200)
 
 
 import math
