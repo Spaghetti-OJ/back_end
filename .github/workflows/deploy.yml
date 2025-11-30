@@ -51,6 +51,8 @@ jobs:
         run: |
           cd "${APP_DIR}"
           source "${VENV_PATH}/bin/activate"
+          # 避免在 runtime 備份資料夾上遞迴刪檔
+          rm -rf backups || true
           bash reset_migrations.sh
 
       - name: Make and apply migrations
