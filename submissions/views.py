@@ -8,6 +8,7 @@ from rest_framework.exceptions import PermissionDenied, NotFound, ValidationErro
 from django.utils import timezone
 from django.db.models import Count
 from rest_framework.views import APIView
+from problems.models import Problems, Problem_subtasks, Test_cases
 import uuid
 
 # 統一的 API 響應格式
@@ -604,6 +605,68 @@ class SubmissionRetrieveUpdateView(BasePermissionMixin, generics.RetrieveUpdateA
         
         except Exception as e:
             return api_response(data=None, message="can not find the source file", status_code=status.HTTP_400_BAD_REQUEST)
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def submission_output_view(request, id, task_no, case_no):
+    """
+    GET /submission/{id}/output/{task_no}/{case_no}
+    """
+
+    # 1. 找 submission
+    try:
+        submission = Submission.objects.get(id=id)
+    except Submission.DoesNotExist:
+        return api_response(None, "submission not found", 404)
+
+    # 2. 權限檢查
+    mixin = BasePermissionMixin()
+    if not mixin.check_submission_view_permission(request.user, submission):
+        return api_response(None, "no permission", 403)
+
+    # 3. 找 subtask
+    try:
+        subtask = Problem_subtasks.objects.get(
+            problem_id=submission.problem_id,
+            subtask_no=task_no
+        )
+    except Problem_subtasks.DoesNotExist:
+        return api_response(None, "task_no not found", 404)
+
+    # 4. 找 test_case（task_no + case_no）
+    try:
+        test_case = Test_cases.objects.get(
+            subtask_id=subtask.id,
+            idx=case_no
+        )
+    except Test_cases.DoesNotExist:
+        return api_response(None, "case_no not found", 404)
+
+    # 5. 找結果
+    try:
+        result = SubmissionResult.objects.get(
+            submission_id=submission.id,
+            test_case_id=test_case.id
+        )
+    except SubmissionResult.DoesNotExist:
+        return api_response(None, "output not found", 404)
+
+    # 6. 回傳
+    payload = {
+        "submission_id": str(submission.id),
+        "task_no": task_no,
+        "case_no": case_no,
+        "status": result.status,
+        "score": result.score,
+        "max_score": result.max_score,
+        "execution_time": result.execution_time,
+        "memory_usage": result.memory_usage,
+        "output": result.output_preview or "",
+        "error_message": result.error_message or "",
+        "judge_message": result.judge_message or "",
+    }
+
+    return api_response(payload, "ok", 200)
 
 
 # 保留原來的個別 view 類以便需要時使用
