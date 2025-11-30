@@ -12,6 +12,10 @@ urlpatterns = [
         include((f"{__package__}.urls.grade", "grade"), namespace="grade"),
     ),
     path(
+        "<course_id>/invite-code/",
+        include((f"{__package__}.urls.invite", "invite"), namespace="invite"),
+    ),
+    path(
         "summary/",
         include((f"{__package__}.urls.summary", "summary"), namespace="summary"),
     ),
