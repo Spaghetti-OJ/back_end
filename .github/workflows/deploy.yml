@@ -1,0 +1,62 @@
+name: Deploy to dev
+
+on:
+  push:
+    branches:
+      - dev
+      - chore/deploy-workflow
+
+concurrency: deploy-dev
+
+env:
+  APP_DIR: /opt/back_end            # 這台機器上實際放置專案的目錄
+  VENV_PATH: /opt/back_end/.venv    # 你的 venv 位置
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  deploy:
+    runs-on: self-hosted            # 需要在要部署的機器上安裝 self-hosted runner
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Sync repository to target directory
+        run: |
+          rsync -a --delete --exclude '.git' --exclude '.venv' ./ "${APP_DIR}/"
+
+      - name: Install dependencies
+        run: |
+          cd "${APP_DIR}"
+          source "${VENV_PATH}/bin/activate"
+          pip install -r requirements.txt
+
+      - name: Reset migrations
+        run: |
+          cd "${APP_DIR}"
+          source "${VENV_PATH}/bin/activate"
+          bash reset_migrations.sh
+
+      - name: Make and apply migrations
+        run: |
+          cd "${APP_DIR}"
+          source "${VENV_PATH}/bin/activate"
+          python manage.py makemigrations
+          python manage.py migrate --noinput
+
+      - name: Collect static files
+        run: |
+          cd "${APP_DIR}"
+          source "${VENV_PATH}/bin/activate"
+          python manage.py collectstatic --noinput
+
+      - name: Restart application (dev runserver)
+        run: |
+          cd "${APP_DIR}"
+          source "${VENV_PATH}/bin/activate"
+          # 停掉先前的 runserver（如果有）
+          pkill -f "manage.py runserver" || true
+          # 背景啟動 runserver；依需求調整 host/port
+          nohup python manage.py runserver 0.0.0.0:8000 --noreload --insecure >/tmp/django.log 2>&1 &
