@@ -23,6 +23,11 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Ensure app directory exists
+        run: |
+          sudo mkdir -p "${APP_DIR}"
+          sudo chown -R "$(whoami)":"$(whoami)" "${APP_DIR}"
+
       - name: Sync repository to target directory
         run: |
           rsync -a --delete --exclude '.git' --exclude '.venv' ./ "${APP_DIR}/"
