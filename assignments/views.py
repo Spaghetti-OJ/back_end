@@ -299,7 +299,6 @@ class HomeworkScoreboardView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get_assignment(self, homework_id: int) -> Assignments:
-        from django.shortcuts import get_object_or_404
         return get_object_or_404(
             Assignments.objects.select_related("course"), pk=homework_id
         )
