@@ -9,8 +9,9 @@ on:
 concurrency: deploy-dev
 
 env:
-  APP_DIR: /opt/back_end            # 這台機器上實際放置專案的目錄
-  VENV_PATH: /opt/back_end/.venv    # 你的 venv 位置
+  # 使用 runner 可寫的路徑，避免 sudo 密碼需求；必要時自行改成固定路徑
+  APP_DIR: ${{ github.workspace }}/../back_end
+  VENV_PATH: ${{ github.workspace }}/../back_end/.venv
   PYTHONUNBUFFERED: "1"
 
 jobs:
@@ -25,8 +26,7 @@ jobs:
 
       - name: Ensure app directory exists
         run: |
-          sudo mkdir -p "${APP_DIR}"
-          sudo chown -R "$(whoami)":"$(whoami)" "${APP_DIR}"
+          mkdir -p "${APP_DIR}"
 
       - name: Sync repository to target directory
         run: |
