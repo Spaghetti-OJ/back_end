@@ -70,9 +70,15 @@ jobs:
 
       - name: Restart application (dev runserver)
         run: |
+          # 只需要一行指令重啟服務，Systemd 會負責在背景跑
+          sudo systemctl restart django-dev
+      
+      - name: Create superuser
+        env:
+          DJANGO_SUPERUSER_USERNAME: test
+          DJANGO_SUPERUSER_PASSWORD: "abc12345"
+          DJANGO_SUPERUSER_EMAIL: test@gmail.com
+        run: |
           cd "${APP_DIR}"
           source "${VENV_PATH}/bin/activate"
-          # 停掉先前的 runserver（如果有）
-          pkill -f "manage.py runserver" || true
-          # 背景啟動 runserver；依需求調整 host/port
-          nohup python manage.py runserver 0.0.0.0:8000 --noreload --insecure >/tmp/django.log 2>&1 &
+          python manage.py createsuperuser --noinput || true
