@@ -179,6 +179,45 @@ curl -X POST http://127.0.0.1:8000/course/42/invite-code/ \
 
 ---
 
+## 課程助教分配 API
+
+**路徑**：`POST /course/<course_id>/assign-ta/`
+
+**說明**：將指定學生設為該課程的助教。僅課程教師本人或系統管理員可操作；教師只能操作自己的課程。
+
+**請求格式 (JSON)**
+
+| 欄位名     | 型別   | 必填 | 說明                           |
+| ---------- | ------ | ---- | ------------------------------ |
+| `username` | string | ✅   | 要升為助教的學生帳號           |
+
+**成功回應 (200 OK)**
+
+```json
+{ "message": "Success.", "status_code": 200 }
+```
+
+**失敗回應**
+
+| 狀況                     | HTTP | 範例訊息                                            |
+| ------------------------ | ---- | --------------------------------------------------- |
+| 未登入                   | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 權限不足（非教師/管理員）| 403  | `{ "message": "Forbidden." }`                       |
+| 非授課教師操作他人課程   | 403  | `{ "message": "You are not in this course." }`      |
+| 課程不存在               | 404  | `{ "message": "Course not found." }`                |
+| 指定帳號不存在           | 404  | `{ "message": "User not found." }`                  |
+| 指定帳號不是學生         | 400  | `{ "message": "User is not a student." }`           |
+
+**cURL 測試**：
+```bash
+curl -X POST http://127.0.0.1:8000/course/42/assign-ta/ \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer <access>" \
+    -d '{"username": "student01"}'
+```
+
+---
+
 ## 課程成員調整 API
 
 **路徑**：`PUT /course/<course_id>/`
