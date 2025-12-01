@@ -114,32 +114,3 @@ async function fetchUserStats(userId, accessToken) {
   return payload.data.user_stats; // 使用者統計物件
 }
 ```
-
-
-## 後端計算建議（給後端工程師參考）
-前端只需顯示摘要時，建議後端在一個查詢/聚合中計算好：
-
-- 使用 single-query aggregation（Django ORM 的 annotate/aggregate）計算 total_submissions、ac_submissions、ac_problems，避免對每個使用者做多次查詢。
-- 若需歷史資料（例如每日統計），考慮額外的統計表或定期 job 預計算。
-- 隱私考量：若要限制老師能看到學生的某些欄位（email、real_name），請在後端過濾或返回視圖層級不同的欄位集合。
-
-SQL/ORM 範例（概念）：
-```sql
-SELECT
-  u.id, u.username, u.email,
-  COUNT(s.id) AS total_submissions,
-  SUM(CASE WHEN s.status = 'accepted' THEN 1 ELSE 0 END) AS ac_submissions,
-  COUNT(DISTINCT CASE WHEN s.status = 'accepted' THEN s.problem_id END) AS ac_problems,
-  MIN(CASE WHEN s.status = 'accepted' THEN s.judged_at END) AS first_ac_time,
-  MAX(s.created_at) AS last_submission_time
-FROM users u
-LEFT JOIN submissions s ON s.user_id = u.id
-WHERE u.id = '<userId>'
-GROUP BY u.id;
-```
-
-
-## 建議的前端展示
-- 頁首顯示使用者名稱與加入時間。
-- KPI 卡片展示：Total submissions / AC problems / Acceptance rate / Best score。
-- Timeline（可選）：第一個 AC 與最近提交時間。
