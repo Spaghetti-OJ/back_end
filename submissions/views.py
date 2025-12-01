@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.db.models import Count
 from rest_framework.views import APIView
 from problems.models import Problems, Problem_subtasks, Test_cases
+from user.models import User
 import uuid
 
 # 統一的 API 響應格式
@@ -862,7 +863,6 @@ def ranking_view(request):
         # 遍歷系統中所有用戶並返回統計資料，不進行排序（由前端處理）
         
         from django.db.models import Count, Q
-        from user.models import User  # 使用自定義的 User 模型
         
         # 獲取所有用戶的提交統計
         users = User.objects.all()
@@ -903,7 +903,7 @@ def ranking_view(request):
         # NOJ 格式：返回所有用戶資料，不進行排序（由前端處理）
         return api_response(
             data={'ranking': ranking_data},
-            message='here you are, bro',
+            message='Ranking data retrieved successfully',
             status_code=status.HTTP_200_OK
         )
     
@@ -916,7 +916,6 @@ def user_stats_view(request, user_id):
     GET /stats/user/{userId} - 使用者統計
     回傳使用者解題數、提交數、難度分布、接受率、Beats 百分比
     """
-    from user.models import User
 
     # 1. 找 user
     try:
@@ -965,18 +964,26 @@ def user_stats_view(request, user_id):
     medium_cnt = get_diff_count('medium')
     hard_cnt = get_diff_count('hard')
 
-    # 4. Beats：以 fully_solved 題數當基準
-    all_user_solved = (
-        UserProblemSolveStatus.objects.filter(solve_status='fully_solved')
+    # 4. Beats：以 fully_solved 題數當基準（優化版：直接在 DB 層過濾）
+    # 先計算所有有解題的使用者總數
+    total_users = (
+        UserProblemSolveStatus.objects
+        .filter(solve_status='fully_solved')
         .values('user_id')
-        .annotate(solved_count=Count('problem_id'))
+        .distinct()
+        .count()
     )
-
-    total_users = all_user_solved.count()
+    
     if total_users > 0:
-        lower_users = all_user_solved.filter(
-            solved_count__lt=total_solved
-        ).count()
+        # 只計算 solved_count < total_solved 的使用者數量（在 DB 層級過濾）
+        lower_users = (
+            UserProblemSolveStatus.objects
+            .filter(solve_status='fully_solved')
+            .values('user_id')
+            .annotate(solved_count=Count('problem_id'))
+            .filter(solved_count__lt=total_solved)
+            .count()
+        )
         beats_percent = lower_users / total_users * 100.0
     else:
         beats_percent = 0.0
