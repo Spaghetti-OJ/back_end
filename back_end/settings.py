@@ -203,4 +203,3 @@ SPECTACULAR_SETTINGS = {
 
 # MOSS User ID(環境變數讀取)
 MOSS_USER_ID = int(os.getenv('MOSS_USER_ID', 0))
-#MOSS_USER_ID = 525795500
