@@ -871,3 +871,157 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/likes" | jq
 
 
 
+
+
+## 子題（Subtasks）API
+
+提供四個操作，皆採統一回傳包裝（`data/message/status`）：
+
+1. 取得子題列表：`GET /problem/<problem_id>/subtasks`
+2. 新增子題：`POST /problem/<problem_id>/subtasks`
+3. 修改子題：`PUT /problem/<problem_id>/subtasks/<subtask_id>`
+4. 刪除子題：`DELETE /problem/<problem_id>/subtasks/<subtask_id>`
+
+權限說明：
+- GET：公開題可匿名；若為 `course`/`hidden` 題目則需具備觀看權限（課程成員/擁有者/教師/管理員）。
+- POST/PUT/DELETE：題目擁有者、課程 TA、教師、管理員。
+
+資料結構（`SubtaskSerializer`）：
+```json
+{
+  "id": 12,
+  "problem_id": 30,
+  "subtask_no": 1,
+  "weight": 20,
+  "time_limit_ms": 1000,
+  "memory_limit_mb": 256,
+  "created_at": "2025-11-28T01:23:45Z",
+  "updated_at": "2025-11-28T01:23:45Z",
+  "test_cases": [
+    {
+      "id": 101,
+      "subtask_id": 12,
+      "idx": 1,
+      "input_path": "...",
+      "output_path": "...",
+      "input_size": 123,
+      "output_size": 45,
+      "checksum_in": "...",
+      "checksum_out": "...",
+      "status": "ready",
+      "created_at": "2025-11-28T01:23:45Z"
+    }
+  ]
+}
+```
+
+### 1) 取得子題列表
+- 路徑：`GET /problem/<problem_id>/subtasks`
+
+成功回應（200 OK）：
+```json
+{
+  "data": [ { /* SubtaskSerializer */ } ],
+  "message": "OK",
+  "status": "200"
+}
+```
+
+**cURL**
+```bash
+curl "http://127.0.0.1:8000/problem/30/subtasks" | jq
+```
+
+### 2) 新增子題
+- 路徑：`POST /problem/<problem_id>/subtasks`
+- 權限：題目擁有者 / 課程 TA / 教師 / 管理員
+- Body 範例：
+```json
+{
+  "subtask_no": 2,
+  "weight": 30,
+  "time_limit_ms": 1500,
+  "memory_limit_mb": 256
+}
+```
+
+成功回應（201 Created）：
+```json
+{
+  "data": { /* SubtaskSerializer */ },
+  "message": "Subtask created",
+  "status": "201"
+}
+```
+
+**cURL**
+```bash
+curl -X POST "http://127.0.0.1:8000/problem/30/subtasks" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subtask_no": 2,
+    "weight": 30,
+    "time_limit_ms": 1500,
+    "memory_limit_mb": 256
+  }'
+```
+
+### 3) 修改子題
+- 路徑：`PUT /problem/<problem_id>/subtasks/<subtask_id>`
+- 權限：題目擁有者 / 課程 TA / 教師 / 管理員
+- Body（部分欄位即可）：
+```json
+{
+  "weight": 25,
+  "time_limit_ms": 1200
+}
+```
+
+成功回應（200 OK）：
+```json
+{
+  "data": { /* SubtaskSerializer */ },
+  "message": "Subtask updated",
+  "status": "200"
+}
+```
+
+**cURL**
+```bash
+curl -X PUT "http://127.0.0.1:8000/problem/30/subtasks/12" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "weight": 25,
+    "time_limit_ms": 1200
+  }'
+```
+
+### 4) 刪除子題
+- 路徑：`DELETE /problem/<problem_id>/subtasks/<subtask_id>`
+- 權限：題目擁有者 / 課程 TA / 教師 / 管理員
+
+成功回應（204 No Content）：
+```json
+{
+  "data": null,
+  "message": "Subtask deleted",
+  "status": "204"
+}
+```
+
+**cURL**
+```bash
+curl -X DELETE "http://127.0.0.1:8000/problem/30/subtasks/12" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+
+
+
+
+
+
+
+
