@@ -199,7 +199,14 @@ class ProblemSearchView(APIView):
         # === 5) tag 篩選 ===
         tag_id = request.query_params.get("tag_id")
         if tag_id:
-            qs = qs.filter(tags__id=tag_id)
+            if tag_id.isdigit():
+                qs = qs.filter(tags__id=int(tag_id))
+            else:
+                return api_response(
+                    data={"items": [], "total": 0},
+                    message="invalid tag_id format (expect integer id for now)",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
 
         qs = qs.order_by("id").distinct()
         items = [serialize_problem(p) for p in qs]
