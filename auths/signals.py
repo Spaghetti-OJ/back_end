@@ -27,7 +27,7 @@ def get_client_ip(request):
         ipaddress.ip_address(ip)
         return ip
     except Exception:
-        return None
+        return '0.0.0.0' # 預設 IP
 
 @receiver(user_logged_in)
 def log_user_login(sender, request, user, **kwargs):

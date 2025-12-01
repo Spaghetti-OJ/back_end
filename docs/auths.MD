@@ -191,3 +191,28 @@
 
 **路徑**：`GET /auth/suspicious-activities/`
 **用途**：列出所有登入失敗 (密碼錯誤、帳號不存在) 的紀錄，用於資安審計。
+**權限**：僅限管理員。
+
+**查詢參數 (Query Params)**：
+* `page` (int, 選填)：頁碼，預設為 1。
+
+**成功回應 (200 OK) - 含分頁資訊**：
+```json
+{
+  "data": {
+    "count": 42,
+    "next": "http://.../?page=2",
+    "previous": null,
+    "results": [
+      {
+        "id": 123,
+        "username": "hacker",
+        "login_status": "failed_credentials",
+        "ip_address": "192.168.1.100",
+        "created_at": "2025-11-28T12:00:00Z"
+      }
+    ]
+  },
+  "message": "成功取得異常登入紀錄列表",
+  "status": "ok"
+}
