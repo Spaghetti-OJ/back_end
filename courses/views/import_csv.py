@@ -288,12 +288,9 @@ class CourseImportCSVView(generics.GenericAPIView):
         if user.identity != User.Identity.STUDENT:
             raise ValueError("User is not a student.")
 
-        updated_fields = []
         if user.real_name != real_name:
             user.real_name = real_name
-            updated_fields.append("real_name")
-        if updated_fields:
-            user.save(update_fields=updated_fields)
+            user.save(update_fields=["real_name"])
 
         profile, _ = UserProfile.objects.get_or_create(user=user)
         if student_id:
