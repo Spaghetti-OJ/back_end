@@ -30,6 +30,10 @@ DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-change-me")
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost, noj-backend-dev.little7.pp.ua").split(",") if h.strip()]
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://noj-backend-dev.little7.pp.ua/",
+]
+
 # Application definition
 
 INSTALLED_APPS = [
