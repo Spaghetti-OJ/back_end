@@ -695,13 +695,19 @@ class ProblemDetailView(APIView):
                     return api_response(None, "Not enough permission", status_code=403)
 
         # 聚合描述
+        # 將 sampleInput / sampleOutput 轉成陣列：依換行分割，空白行略過；若原始為空字串返回 []
+        def _to_list(text: str):
+            if not text or not str(text).strip():
+                return []
+            return [line for line in str(text).splitlines() if line.strip()]
+
         description_block = {
             'description': problem.description,
             'input': getattr(problem, 'input_description', ''),
             'output': getattr(problem, 'output_description', ''),
             'hint': getattr(problem, 'hint', ''),
-            'sampleInput': getattr(problem, 'sample_input', ''),
-            'sampleOutput': getattr(problem, 'sample_output', ''),
+            'sampleInput': _to_list(getattr(problem, 'sample_input', '')),
+            'sampleOutput': _to_list(getattr(problem, 'sample_output', '')),
         }
 
         # 語言遮罩
