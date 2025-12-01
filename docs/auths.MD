@@ -191,15 +191,40 @@
 
 **路徑**：`GET /auth/suspicious-activities/`
 **用途**：列出所有登入失敗 (密碼錯誤、帳號不存在) 的紀錄，用於資安審計。
+**權限**：僅限管理員。
 
-## 3\. 抄襲檢測 (Copycat - MOSS)
+**查詢參數 (Query Params)**：
+* `page` (int, 選填)：頁碼，預設為 1。
+
+**成功回應 (200 OK) - 含分頁資訊**：
+```json
+{
+  "data": {
+    "count": 42,
+    "next": "http://.../?page=2",
+    "previous": null,
+    "results": [
+      {
+        "id": 123,
+        "username": "hacker",
+        "login_status": "failed_credentials",
+        "ip_address": "192.168.1.100",
+        "created_at": "2025-11-28T12:00:00Z"
+      }
+    ]
+  },
+  "message": "成功取得異常登入紀錄列表",
+  "status": "ok"
+}
+
+## 4\. 抄襲檢測 (Copycat - MOSS)
 
 **基礎路徑**：`/copycat/`
 
 > **權限說明**：此模組僅限 **管理員 (Admin, `is_staff=True`)** 使用。一般使用者呼叫會收到 `403 Forbidden`。
 > **驗證方式**：使用 Session Cookie。**POST 請求務必附帶 `X-CSRFToken` Header。**
 
-### 3.1 請求生成檢測報告 (Trigger)
+### 4.1 請求生成檢測報告 (Trigger)
 
 **路徑**：`POST /copycat/`
 **說明**：觸發後端程式，將指定題目的所有學生程式碼打包並上傳至史丹佛 MOSS 伺服器進行比對。此過程為**非同步執行**。
@@ -234,7 +259,7 @@
 
 -----
 
-### 3.2 查詢檢測報告 (Query)
+### 4.2 查詢檢測報告 (Query)
 
 **路徑**：`GET /copycat/`
 **說明**：查詢指定題目的**最新**一份 MOSS 檢測報告結果。
@@ -293,7 +318,7 @@
             "error_message": "Connection to MOSS server timed out."
         },
         "message": "報告狀態：失敗",
-        "status": "ok"
+        "status": "error"
     }
     ```
 

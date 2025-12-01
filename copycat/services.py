@@ -11,7 +11,6 @@ try:
 except AttributeError:
     raise ImproperlyConfigured("MOSS_USER_ID must be set in Django settings.")
 
-MOSS_USER_ID = getattr(settings, 'MOSS_USER_ID', 123456789)
 
 # 1. 語言映射表 (API 字串 -> 資料庫 Integer)
 # 參考 Submission.LANGUAGE_CHOICES: 0=C, 1=C++, 2=Python, 3=Java, 4=JS
@@ -103,7 +102,11 @@ def run_moss_check(report_id, problem_id, language='python'):
 
     except Exception as e:
         print(f"[Copycat] 失敗: {e}")
-        #report = CopycatReport.objects.get(id=report_id)
-        report.status = 'failed'
-        report.error_message = str(e)
-        report.save()
+        # report = CopycatReport.objects.get(id=report_id) 
+        #try-except以防report物件失效
+        try:
+            report.status = 'failed'
+            report.error_message = str(e)
+            report.save()
+        except Exception as db_error:
+            print(f"[Copycat] 無法更新報告狀態: {db_error}")
