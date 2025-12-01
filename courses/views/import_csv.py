@@ -85,7 +85,10 @@ class CourseImportCSVView(generics.GenericAPIView):
             )
         except Exception:
             self._mark_batch_failed(batch, [{"message": "Unexpected error during import."}])
-            raise
+            return api_response(
+                message="An unexpected error occurred during import.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
         self._mark_batch_completed(batch, import_result["errors"])
 
