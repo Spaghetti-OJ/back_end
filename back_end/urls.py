@@ -41,6 +41,7 @@ urlpatterns = [
     path('api-tokens/', include('api_tokens.urls')),
     path('profile/', include('profiles.urls')),
     path('homework/',include('assignments.urls')),
+    path('schema-viewer/', include('schema_viewer.urls')),
     path('editor/', include('editor.urls')),
     path('api-auth/', include('rest_framework.urls')),
     
