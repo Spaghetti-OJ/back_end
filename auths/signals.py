@@ -26,7 +26,7 @@ def get_client_ip(request):
     try:
         ipaddress.ip_address(ip)
         return ip
-    except Exception:
+    except ValueError:
         return '0.0.0.0' # 預設 IP
 
 @receiver(user_logged_in)
