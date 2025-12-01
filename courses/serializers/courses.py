@@ -12,9 +12,11 @@ COURSE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9._\- ]+$")
 
 
 class TeacherSerializer(serializers.ModelSerializer):
+    role = serializers.CharField(source="identity")
+
     class Meta:
         model = User
-        fields = ("id", "username", "real_name", "identity")
+        fields = ("id", "username", "real_name", "role")
 
 
 class CourseCreateSerializer(serializers.Serializer):

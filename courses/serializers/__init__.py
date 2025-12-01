@@ -4,7 +4,11 @@ from .courses import (
     CourseListSerializer,
     CourseUpdateSerializer,
 )
-from .course_courseid import CourseInfoSerializer, CourseDetailSerializer
+from .course_courseid import (
+    CourseInfoSerializer,
+    CourseDetailSerializer,
+)
+from .join import CourseJoinSerializer
 from .summary import CourseSummarySerializer
 from .grade import (
     CourseGradeListSerializer,
@@ -13,6 +17,8 @@ from .grade import (
     CourseGradeDeleteSerializer,
     CourseGradeUpdateSerializer,
 )
+from .invite import CourseInviteCodeSerializer
+from .scoreboard import CourseScoreboardSerializer
 
 __all__ = [
     "TeacherSerializer",
@@ -21,10 +27,13 @@ __all__ = [
     "CourseUpdateSerializer",
     "CourseInfoSerializer",
     "CourseDetailSerializer",
+    "CourseJoinSerializer",
     "CourseSummarySerializer",
     "CourseGradeListSerializer",
     "CourseGradeItemSerializer",
     "CourseGradeCreateSerializer",
     "CourseGradeDeleteSerializer",
     "CourseGradeUpdateSerializer",
+    "CourseInviteCodeSerializer",
+    "CourseScoreboardSerializer",
 ]

@@ -7,9 +7,11 @@ User = get_user_model()
 
 
 class AnnouncementUserSerializer(serializers.ModelSerializer):
+    role = serializers.CharField(source="identity")
+
     class Meta:
         model = User
-        fields = ("id", "username", "real_name", "identity")
+        fields = ("id", "username", "real_name", "role")
 
 
 class SystemAnnouncementSerializer(serializers.ModelSerializer):

@@ -67,6 +67,7 @@ class UserLoginLogListView(APIView):
 class SuspiciousLoginListView(APIView):
     """
     列出所有「異常」的登入日誌。
+    (API: GET /auth/suspicious-activities/)
     """
     authentication_classes = [SessionAuthentication]
     permission_classes = [IsAdminUser] 
