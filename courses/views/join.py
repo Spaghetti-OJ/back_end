@@ -47,17 +47,22 @@ class CourseJoinView(generics.GenericAPIView):
                 message="Invalid join code.", status_code=status.HTTP_400_BAD_REQUEST
             )
 
-        is_member = course.teacher_id_id == getattr(user, "id", None) or Course_members.objects.filter(
-            course_id=course,
-            user_id=user,
-        ).exists()
-        if is_member:
+        if course.teacher_id_id == getattr(user, "id", None):
             return api_response(
                 message="You are already in this course.",
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
         with transaction.atomic():
+            is_member = Course_members.objects.select_for_update().filter(
+                course_id=course,
+                user_id=user,
+            ).exists()
+            if is_member:
+                return api_response(
+                    message="You are already in this course.",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
             student_members = Course_members.objects.select_for_update().filter(
                 course_id=course, role=Course_members.Role.STUDENT
             )

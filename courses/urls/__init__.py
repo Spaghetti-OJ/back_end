@@ -7,6 +7,7 @@ from . import grade as grade_urls
 from . import join as join_urls
 from . import invite as invite_urls
 from . import assign_ta as assign_ta_urls
+from . import scoreboard as scoreboard_urls
 
 app_name = "courses"
 
@@ -18,6 +19,10 @@ urlpatterns = [
     path(
         "<course_id>/grade/",
         include((grade_urls.urlpatterns, "grade"), namespace="grade"),
+    ),
+    path(
+        "<course_id>/scoreboard/",
+        include((scoreboard_urls.urlpatterns, "scoreboard"), namespace="scoreboard"),
     ),
     path(
         "<course_id>/invite-code/",
