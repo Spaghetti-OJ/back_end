@@ -1,164 +1,218 @@
 # 後端 API 說明（提供給前端）
 
-本專案後端使用 **Django + Django REST Framework + Simple JWT**，所有 API 採 **JSON** 傳輸。
+本專案後端使用 **Django + Django REST Framework**。
 
-> 本文件僅涵蓋「使用者認證」端點；**目前不啟用 reCAPTCHA**。
+## ⚠️ 全域回應格式 (Global Response Format)
 
----
-
-## Auths API 文件
-
-### **通用設定**
-
-所有 `Auths` 相關的 API 都需要使用者處於登入狀態。在測試時，請先透過瀏覽器登入網站後台 (`/admin/`) 以取得有效的 `sessionid` cookie，並在 cURL 或其他工具的請求中附帶此 cookie。
-
----
-
-## 列出 API Tokens API
-
-**路徑**：`GET /auth/me/api-tokens/`
-
-**說明**：取得當前登入使用者的所有 API Tokens 的元數據。
-
-**權限**：使用者必須為登入狀態 (Authenticated)。
-
-### 請求格式
-
-此請求無需附帶任何 Body。
-
-### 回應格式
-
-**成功回應（200, JSON）**
-
-回應一個包含多個 Token 物件的陣列。`is_expired` 為後端根據 `expires_at` 動態計算的布林值。
-
-```json
-[
-    {
-        "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-        "name": "我的筆電 CLI Token",
-        "prefix": "ctp_aBcD",
-        "permissions": ["submission:create", "problem:read"],
-        "usage_count": 42,
-        "last_used_at": "2025-10-18T10:30:00Z",
-        "last_used_ip": "192.168.1.100",
-        "created_at": "2025-10-10T08:00:00Z",
-        "expires_at": "2026-10-10T08:00:00Z",
-        "is_active": true,
-        "is_expired": false
-    },
-    {
-        "id": "f1e2d3c4-b5a6-9876-5432-10fedcba9876",
-        "name": "CI/CD 專用 Token",
-        "prefix": "ctp_xYzW",
-        "permissions": [],
-        "usage_count": 108,
-        "last_used_at": "2025-10-17T05:00:00Z",
-        "last_used_ip": "10.0.0.5",
-        "created_at": "2025-09-01T00:00:00Z",
-        "expires_at": null,
-        "is_active": true,
-        "is_expired": false
-    }
-]
-```
-
-**失敗回應（403 Forbidden, JSON）**
-
-*   使用者未登入：
-    ```json
-    {
-        "detail": "Authentication credentials were not provided."
-    }
-    ```
-
-### cURL 測試
-
-**注意**：請先登入網站，然後從瀏覽器的開發者工具中找到 `sessionid` cookie 的值，替換掉下面的 `your_session_id_here`。
-
-```bash
-curl -X GET http://127.0.0.1:8000/auth/me/api-tokens/ \
-  -H "Cookie: sessionid=your_session_id_here"
-```
-
----
-
-## 建立 API Token API
-
-**路徑**：`POST /auth/me/api-tokens/`
-
-**說明**：為當前登入的使用者建立一個新的 API Token。
-
-**權限**：使用者必須為登入狀態 (Authenticated)。
-
-### 請求格式（JSON）
-
-| 欄位名         | 型別               |  必填 | 說明                                                                 |
-| -------------- | ------------------ | :-: | -------------------------------------------------------------------- |
-| `name`         | string             |  ✅  | Token 的自訂名稱，最多 100 字元，方便使用者識別。                           |
-| `permissions`  | array (of strings) |  ❌  | Token 的權限範圍 (Scopes)，例如 `["submission:create"]`。目前為保留欄位。 |
-| `expires_at`   | string             |  ❌  | Token 的過期時間，ISO 8601 格式 (例如 `YYYY-MM-DDTHH:MM:SSZ`)。         |
-
-**請求範例**：
-
-*   基本請求：
-    ```json
-    {
-      "name": "我的 VS Code 開發工具"
-    }
-    ```
-*   帶有選填欄位的請求：
-    ```json
-    {
-      "name": "自動化部署腳本",
-      "permissions": ["submission:create", "problem:read"],
-      "expires_at": "2026-12-31T23:59:59Z"
-    }
-    ```
-
-### 回應格式
-
-**成功回應（201, JSON）**
-
-**極度重要**：`full_token` 只會在此次建立成功時回傳**一次**，後端不會儲存完整 Token，前端務必提示使用者妥善保存。
+為了統一前後端溝通，**所有 API**（無論成功或失敗）的回應 JSON 都會遵循以下結構：
 
 ```json
 {
-    "message": "API Token created successfully. Please save it securely, as it will not be shown again.",
-    "full_token": "ctp_aBcDeFgHiJkLmNoPqRsTuvWxyZ1234567890abcdef"
+  "data": <實際資料 Payload (Object 或 Array)>,
+  "message": "給使用者看的操作訊息 (例如：建立成功)",
+  "status": "ok" | "error"
 }
 ```
 
-**失敗回應（400, JSON）**
+  * **成功 (2xx)**：`status` 為 `"ok"`，`data` 包含請求的資源。
+  * **失敗 (4xx/5xx)**：`status` 為 `"error"`，`message` 包含錯誤原因，`data` 可能包含詳細欄位錯誤資訊。
 
-*   `name` 欄位未填：
-    ```json
-    {
-        "name": [
-            "此為必需欄位。"
-        ]
-    }
+-----
+
+## 🔐 認證機制 (Authentication)
+
+本系統支援兩種認證方式，前端可視情境選擇：
+
+### 1\. Session 認證 (瀏覽器/前端 Web)
+
+  * **適用對象**：一般使用者在瀏覽器操作。
+  * **機制**：登入後取得 `sessionid` Cookie。
+  * **CSRF 保護**：所有 **POST/PUT/DELETE** 請求必須在 Header 附帶 `X-CSRFToken`。
+      * 值請從 `csrftoken` Cookie 讀取。
+
+### 2\. API Token 認證 (腳本/第三方工具)
+
+  * **適用對象**：CLI 工具、CI/CD、自動化腳本。
+  * **機制**：在 HTTP Header 中帶入 Token。
+  * **Header 格式**：
     ```
-*   `expires_at` 格式錯誤：
-    ```json
-    {
-        "expires_at": [
-            "日期時間格式錯誤。請使用ISO 8601格式。"
-        ]
-    }
+    Authorization: Bearer noj_pat_xxxxxxxx...
     ```
+    *(注意：`Bearer` 後面有一個空格)*
 
-### cURL 測試
+-----
 
-```bash
-curl -X POST http://127.0.0.1:8000/auth/me/api-tokens/ \
-  -H "Content-Type: application/json" \
-  -H "Cookie: sessionid=your_session_id_here" \
-  -H "X-CSRFToken: your_csrf_token_here" \
-  -d '{
-    "name": "我的 cURL 測試 Token"
-  }'
+## 1\. API Tokens (管理 API 金鑰)
+
+**基礎路徑**：`/api-tokens/`
+
+### 1.1 列出 API Tokens
+
+**路徑**：`GET /api-tokens/`
+**權限**：登入使用者。
+
+**成功回應 (200 OK)**：
+
+```json
+{
+    "data": [
+        {
+            "id": "a1b2c3d4-...",
+            "name": "我的筆電 CLI Token",
+            "prefix": "noj_pat_aBcD", 
+            "permissions": ["read:user", "read:problems"],
+            "usage_count": 42,
+            "last_used_at": "2025-10-18T10:30:00Z",
+            "last_used_ip": "192.168.1.100",
+            "created_at": "2025-10-10T08:00:00Z",
+            "expires_at": null,
+            "is_active": true,
+            "is_expired": false
+        }
+    ],
+    "message": "成功取得 Token 列表",
+    "status": "ok"
+}
 ```
 
-**關於 `X-CSRFToken`**：
-由於我們使用 `SessionAuthentication`，DRF 的可瀏覽 API 會自動處理 CSRF Token。但若前端是從不同來源（網域）的腳本呼叫 API，則需要從 `csrftoken` cookie 中獲取此值，並將其放入 `X-CSRFToken` 請求標頭中。這是 Django 的標準安全機制。
+### 1.2 建立 API Token
+
+**路徑**：`POST /api-tokens/`
+**權限**：登入使用者。
+
+**請求 Body**：
+
+```json
+{
+    "name": "我的測試 Token", 
+    "permissions": ["read:user"],  // (選填) 限制權限範圍
+    "expires_at": "2026-12-31T23:59:59Z" // (選填)
+}
+```
+
+**成功回應 (201 Created)**：
+⚠️ **注意**：`full_token` 只會顯示這一次，請提示使用者立刻儲存。
+
+```json
+{
+    "data": {
+        "full_token": "noj_pat_aBcDeFgHiJkLmNoPqRsTuvWxyZ1234567890abcdef"
+    },
+    "message": "API Token 已建立，請妥善保存",
+    "status": "ok"
+}
+```
+
+### 1.3 刪除 API Token
+
+**路徑**：`DELETE /api-tokens/<uuid:id>/`
+**權限**：登入使用者 (只能刪除自己的)。
+
+**成功回應 (200 OK)**：
+
+```json
+{
+    "data": {},
+    "message": "Token 已成功刪除",
+    "status": "ok"
+}
+```
+
+-----
+
+## 2\. Auths (日誌與活動)
+
+**基礎路徑**：`/auth/`
+
+### 2.1 取得個人登入日誌
+
+**路徑**：`GET /auth/login-logs/`
+**權限**：登入使用者 (查看自己的)。
+
+**回應範例**：
+
+```json
+{
+    "data": [
+        {
+            "id": 1,
+            "login_status": "成功",
+            "ip_address": "127.0.0.1",
+            "user_agent": "Mozilla/5.0 ...",
+            "created_at": "2025-11-25T12:00:00Z"
+        }
+    ],
+    "message": "成功取得使用者登入日誌",
+    "status": "ok"
+}
+```
+
+### 2.2 紀錄使用者活動 (Frontend Tracking)
+
+**路徑**：`POST /auth/activity/`
+**權限**：登入使用者。
+**用途**：前端可以用此 API 記錄使用者的行為 (例如：進入題目頁面、點擊下載)。
+
+**請求 Body**：
+
+```json
+{
+    "activity_type": "view_problem", // 必填，須符合後端定義
+    "description": "User viewed Problem 101",
+    "metadata": { "problem_id": 101 }
+}
+```
+
+**成功回應 (201 Created)**：
+
+```json
+{
+    "data": { ...新建立的活動物件... },
+    "message": "活動記錄成功",
+    "status": "ok"
+}
+```
+
+-----
+
+## 3\. 管理員專用 API (Admin Only)
+
+**權限**：僅限管理員 (`is_staff=True`)。一般使用者呼叫會收到 403 Forbidden。
+
+### 3.1 查看特定使用者的登入日誌
+
+**路徑**：`GET /auth/login-logs/<uuid:user_id>/`
+
+### 3.2 查看特定使用者的活動紀錄
+
+**路徑**：`GET /auth/activity/<uuid:user_id>/`
+
+### 3.3 查看異常登入活動 (Suspicious)
+
+**路徑**：`GET /auth/suspicious-activities/`
+**用途**：列出所有登入失敗 (密碼錯誤、帳號不存在) 的紀錄，用於資安審計。
+**權限**：僅限管理員。
+
+**查詢參數 (Query Params)**：
+* `page` (int, 選填)：頁碼，預設為 1。
+
+**成功回應 (200 OK) - 含分頁資訊**：
+```json
+{
+  "data": {
+    "count": 42,
+    "next": "http://.../?page=2",
+    "previous": null,
+    "results": [
+      {
+        "id": 123,
+        "username": "hacker",
+        "login_status": "failed_credentials",
+        "ip_address": "192.168.1.100",
+        "created_at": "2025-11-28T12:00:00Z"
+      }
+    ]
+  },
+  "message": "成功取得異常登入紀錄列表",
+  "status": "ok"
+}

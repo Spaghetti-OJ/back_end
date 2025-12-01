@@ -72,8 +72,12 @@ class CourseListCreateView(generics.GenericAPIView):
                 message="Forbidden.", status_code=status.HTTP_403_FORBIDDEN
             )
 
-        serializer.save()
-        return api_response(message="Success.", status_code=status.HTTP_200_OK)
+        course = serializer.save()
+        return api_response(
+            data={"course": {"id": course.id}},
+            message="Success.",
+            status_code=status.HTTP_200_OK,
+        )
 
     def put(self, request, *args, **kwargs):
         user = request.user
@@ -82,8 +86,13 @@ class CourseListCreateView(generics.GenericAPIView):
                 message="Forbidden.", status_code=status.HTTP_403_FORBIDDEN
             )
 
-        course_id = request.data.get("course_id", "")
-        course_id = course_id.strip() if isinstance(course_id, str) else ""
+        raw_course_id = request.data.get("course_id")
+        if isinstance(raw_course_id, str):
+            course_id = raw_course_id.strip()
+        elif raw_course_id is not None:
+            course_id = str(raw_course_id).strip()
+        else:
+            course_id = ""
         if not course_id:
             return api_response(
                 message="Course not found.", status_code=status.HTTP_404_NOT_FOUND
@@ -127,8 +136,13 @@ class CourseListCreateView(generics.GenericAPIView):
                 message="Forbidden.", status_code=status.HTTP_403_FORBIDDEN
             )
 
-        course_id = request.data.get("course_id", "")
-        course_id = course_id.strip() if isinstance(course_id, str) else ""
+        raw_course_id = request.data.get("course_id")
+        if isinstance(raw_course_id, str):
+            course_id = raw_course_id.strip()
+        elif raw_course_id is not None:
+            course_id = str(raw_course_id).strip()
+        else:
+            course_id = ""
         if not course_id:
             return api_response(
                 message="Course not found.", status_code=status.HTTP_404_NOT_FOUND

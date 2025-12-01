@@ -83,12 +83,19 @@ class EditorialPermissionTests(TestCase):
             course_id=self.course
         )
         
-        # 創建沒有課程的問題
+        # 創建一個單獨的課程作為 "孤兒" 題目的歸屬（因為 course_id 不能為 NULL）
+        self.orphan_course = Courses.objects.create(
+            name=f'孤兒題目課程_{unique_id}',
+            description='專門用於孤兒題目的課程',
+            teacher_id=self.course_teacher
+        )
+        
+        # 創建 "孤兒" 問題（實際上關聯到 orphan_course，但沒有成員）
         self.no_course_problem = Problems.objects.create(
             title=f'無課程問題_{unique_id}',
             description='無課程問題',
             creator_id=self.course_teacher,
-            course_id=None
+            course_id=self.orphan_course  # 修改：使用 orphan_course 代替 None
         )
     
     def test_course_main_teacher_has_permission(self):
@@ -155,17 +162,22 @@ class EditorialPermissionTests(TestCase):
             mixin.check_teacher_permission(self.course_teacher, 99999)
     
     def test_problem_without_course_permission(self):
-        """測試沒有關聯課程的問題權限檢查"""
+        """測試沒有關聯課程的問題權限檢查（現在關聯到 orphan_course）"""
         from ..views import BasePermissionMixin as EditorialPermissionMixin
         from rest_framework.exceptions import PermissionDenied
         
         mixin = EditorialPermissionMixin()
         
-        # 沒有關聯課程的問題應該拋出 PermissionDenied
-        with pytest.raises(PermissionDenied) as exc_info:
+        # no_course_problem 現在關聯到 orphan_course，course_teacher 是該課程的老師
+        # 所以應該有權限，不拋出異常
+        try:
             mixin.check_teacher_permission(self.course_teacher, self.no_course_problem.id)
+        except PermissionDenied:
+            pytest.fail("course_teacher 應該對 orphan_course 的題目有權限")
         
-        assert '未關聯到任何課程' in str(exc_info.value)
+        # 但其他老師（outsider）沒有權限
+        with pytest.raises(PermissionDenied):
+            mixin.check_teacher_permission(self.outsider, self.no_course_problem.id)
 
 
 class CoursePermissionHypothesisTests(HypothesisTestCase):

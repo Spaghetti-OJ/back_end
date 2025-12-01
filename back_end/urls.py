@@ -22,6 +22,12 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from submissions import views as submission_views
 
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('course/', include(('courses.urls', 'courses'), namespace='courses')),
@@ -36,6 +42,22 @@ urlpatterns = [
     path('profile/', include('profiles.urls')),
     path('homework/',include('assignments.urls')),
     path('schema-viewer/', include('schema_viewer.urls')),
+    path('editor/', include('editor.urls')),
+    path('api-auth/', include('rest_framework.urls')),
+    
+    ## Swagger API Documentation URLs
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path(
+        "api/schema/swagger-ui/",
+        SpectacularSwaggerView.as_view(url_name="schema"),
+        name="swagger-ui",
+    ),
+    path(
+        "api/schema/redoc/",
+        SpectacularRedocView.as_view(url_name="schema"),
+        name="redoc",
+    ),
+    path("search/", include("search.urls")),
 ]
 
 if settings.DEBUG:

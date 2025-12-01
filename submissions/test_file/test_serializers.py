@@ -9,11 +9,11 @@ from hypothesis import given, strategies as st, settings, assume
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 
 from ..models import (
-    Submission, CustomTest, CodeDraft, Editorial, EditorialLike
+    Submission, CustomTest, Editorial, EditorialLike
 )
 from ..serializers import (
     SubmissionCreateSerializer, SubmissionSerializer,
-    CustomTestCreateSerializer, CodeDraftCreateSerializer, 
+    CustomTestCreateSerializer,
     EditorialCreateSerializer, EditorialSerializer, EditorialLikeSerializer
 )
 
@@ -31,12 +31,21 @@ class SubmissionSerializerHypothesisTests(HypothesisTestCase):
             password='testpass123'
         )
         
+        # 創建測試課程（因為 Problems.course_id 不能為 NULL）
+        from courses.models import Courses
+        self.test_course = Courses.objects.create(
+            name=f'Test Course {unique_id}',
+            description='Test Course for Serializer',
+            teacher_id=self.user
+        )
+        
         # 創建測試用的問題
         from problems.models import Problems
         self.test_problem = Problems.objects.create(
             title='Test Problem',
             description='Test Description',
             creator_id=self.user,  # User instance, not UUID
+            course_id=self.test_course,  # 添加必需的 course_id
             difficulty='easy',
             max_score=100
         )
@@ -225,7 +234,7 @@ class EditorialSerializerHypothesisTests(HypothesisTestCase):
         
         assert editorial.problem_id == 1
         assert editorial.title == title.strip()  # title 會被 strip
-        assert editorial.content == content      # content 保持原樣
+        assert editorial.content == content.strip()  # content 也會被 strip
         # 使用 Decimal 比較以避免精度問題
         if difficulty_rating is not None:
             from decimal import Decimal
@@ -372,55 +381,6 @@ class CustomTestSerializerHypothesisTests(HypothesisTestCase):
         assert custom_test.user == self.user
 
 
-class CodeDraftSerializerHypothesisTests(HypothesisTestCase):
-    """測試 CodeDraft Serializer"""
-    
-    def setUp(self):
-        unique_id = str(uuid.uuid4())[:8]
-        self.user = User.objects.create_user(
-            username=f'codedraftuser_{unique_id}',
-            email=f'codedraft_{unique_id}@example.com',
-            password='testpass123'
-        )
-    
-    @given(
-        problem_id=st.integers(min_value=1, max_value=9999),
-        language_type=st.sampled_from([0, 1, 2, 3, 4]),  # 使用整數語言類型
-        source_code=st.text(min_size=1, max_size=500).filter(lambda x: x.strip() and '\x00' not in x),
-        title=st.one_of(st.none(), st.text(min_size=1, max_size=50).filter(lambda x: '\x00' not in x)),
-        auto_saved=st.booleans()
-    )
-    @settings(max_examples=10)
-    def test_code_draft_create_serializer(
-        self, problem_id, language_type, source_code, title, auto_saved
-    ):
-        """測試 CodeDraftCreateSerializer 處理各種資料"""
-        assume(source_code.strip())
-        
-        data = {
-            'problem_id': problem_id,
-            'language_type': language_type,
-            'source_code': source_code,
-            'title': title,
-            'auto_saved': auto_saved
-        }
-        
-        request = Mock()
-        request.user = self.user
-        
-        serializer = CodeDraftCreateSerializer(data=data, context={'request': request})
-        
-        assert serializer.is_valid(), f"Errors: {serializer.errors}"
-        
-        code_draft = serializer.save()
-        
-        assert code_draft.problem_id == problem_id
-        assert code_draft.language_type == language_type
-        assert code_draft.source_code == source_code.strip()
-        # Django CharField 會自動處理空白字符,包括 \r, \n 等
-        assert code_draft.title == (title.strip() if title else title)
-        assert code_draft.auto_saved == auto_saved
-        assert code_draft.user == self.user
 
 
 class SecuritySerializerTests(TestCase):

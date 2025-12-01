@@ -1,5 +1,3 @@
-import uuid
-
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
@@ -163,7 +161,7 @@ class CourseAPITestCase(APITestCase):
         course = self._create_course(name="Algorithms2024", teacher=self.teacher)
         self.client.force_authenticate(user=self.teacher)
         payload = {
-            "course_id": str(course.id),
+            "course_id": course.id,
             "new_course": "Algorithms2025",
             "teacher": self.another_teacher.username,
         }
@@ -180,7 +178,7 @@ class CourseAPITestCase(APITestCase):
         course = self._create_course(name="DataStructures", teacher=self.teacher)
         self.client.force_authenticate(user=self.admin)
         payload = {
-            "course_id": str(course.id),
+            "course_id": course.id,
             "new_course": "AdvancedDS",
             "teacher": self.another_teacher.username,
         }
@@ -196,7 +194,7 @@ class CourseAPITestCase(APITestCase):
         course = self._create_course(name="Physics101", teacher=self.another_teacher)
         self.client.force_authenticate(user=self.teacher)
         payload = {
-            "course_id": str(course.id),
+            "course_id": course.id,
             "new_course": "Physics102",
             "teacher": self.teacher.username,
         }
@@ -210,7 +208,7 @@ class CourseAPITestCase(APITestCase):
         course = self._create_course(name="Chemistry101", teacher=self.teacher)
         self.client.force_authenticate(user=self.student)
         payload = {
-            "course_id": str(course.id),
+            "course_id": course.id,
             "new_course": "Chemistry102",
             "teacher": self.teacher.username,
         }
@@ -224,7 +222,7 @@ class CourseAPITestCase(APITestCase):
         course = self._create_course(name="Math101", teacher=self.teacher)
         self.client.force_authenticate(user=self.teacher)
         payload = {
-            "course_id": str(course.id),
+            "course_id": course.id,
             "new_course": "Invalid Name!",
             "teacher": self.teacher.username,
         }
@@ -239,7 +237,7 @@ class CourseAPITestCase(APITestCase):
         course = self._create_course(name="OriginalCourse", teacher=self.teacher)
         self.client.force_authenticate(user=self.teacher)
         payload = {
-            "course_id": str(course.id),
+            "course_id": course.id,
             "new_course": "existingcourse",
             "teacher": self.teacher.username,
         }
@@ -255,7 +253,7 @@ class CourseAPITestCase(APITestCase):
         course = self._create_course(name="History101", teacher=self.teacher)
         self.client.force_authenticate(user=self.teacher)
         payload = {
-            "course_id": str(course.id),
+            "course_id": course.id,
             "new_course": "History102",
             "teacher": "unknown_teacher",
         }
@@ -268,7 +266,7 @@ class CourseAPITestCase(APITestCase):
     def test_update_with_missing_course_returns_not_found(self):
         self.client.force_authenticate(user=self.teacher)
         payload = {
-            "course_id": str(uuid.uuid4()),
+            "course_id": 999999,
             "new_course": "AnyCourse",
             "teacher": self.teacher.username,
         }
@@ -283,7 +281,7 @@ class CourseAPITestCase(APITestCase):
         self.client.force_authenticate(user=self.teacher)
 
         response = self.client.delete(
-            self.url, {"course_id": str(course.id)}, format="json"
+            self.url, {"course_id": course.id}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -295,7 +293,7 @@ class CourseAPITestCase(APITestCase):
         self.client.force_authenticate(user=self.admin)
 
         response = self.client.delete(
-            self.url, {"course_id": str(course.id)}, format="json"
+            self.url, {"course_id": course.id}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -307,7 +305,7 @@ class CourseAPITestCase(APITestCase):
         self.client.force_authenticate(user=self.teacher)
 
         response = self.client.delete(
-            self.url, {"course_id": str(course.id)}, format="json"
+            self.url, {"course_id": course.id}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -319,7 +317,7 @@ class CourseAPITestCase(APITestCase):
         self.client.force_authenticate(user=self.student)
 
         response = self.client.delete(
-            self.url, {"course_id": str(course.id)}, format="json"
+            self.url, {"course_id": course.id}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -330,7 +328,7 @@ class CourseAPITestCase(APITestCase):
         self.client.force_authenticate(user=self.teacher)
 
         response = self.client.delete(
-            self.url, {"course_id": str(uuid.uuid4())}, format="json"
+            self.url, {"course_id": 999999}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

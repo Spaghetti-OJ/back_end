@@ -1,7 +1,7 @@
 # Submission API 文檔
 
-**更新日期**: 2025年11月9日  
-**API 版本**: v1  
+**更新日期**: 2025年11月23日  
+**API 版本**: v2  
 **基礎路徑**: `/submission/`
 
 ---
@@ -69,21 +69,29 @@ API 設計遵循 NOJ (Nanjing Online Judge) 的格式標準，確保前後端兼
 - 需要在 Header 中攜帶認證 Token
 
 #### 響應格式
-所有 API 響應遵循 NOJ 格式標準：
+所有 API 響應遵循統一的響應格式：
 
 **成功響應**:
 ```json
 {
-    "message": "here you are, bro",
-    "results": [...],
-    "count": 100
+    "data": {
+        /* 實際數據內容 */
+    },
+    "message": "操作成功訊息",
+    "status": "ok"
 }
 ```
 
-**錯誤響應**（字串格式）:
+**錯誤響應**:
+```json
+{
+    "data": null,
+    "message": "錯誤訊息",
+    "status": "error"
+}
 ```
-"error message here"
-```
+
+**注意**: 部分端點（如創建提交、上傳代碼）仍保留 NOJ 兼容的字串響應格式。
 
 ### 語言類型編碼
 
@@ -234,26 +242,29 @@ curl -X PUT http://localhost:8000/submission/a1b2c3d4-5678-90ab-cdef-1234567890a
 **成功響應**: HTTP 200
 ```json
 {
+    "data": {
+        "results": [
+            {
+                "submissionId": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+                "problemId": 123,
+                "user": {
+                    "id": "user-uuid",
+                    "username": "student01",
+                    "real_name": "張三"
+                },
+                "status": "0",
+                "score": 100,
+                "runTime": 123,
+                "memoryUsage": 2048,
+                "languageType": "2",
+                "timestamp": "2025-11-09T10:30:00Z",
+                "ipAddr": "192.168.1.100"
+            }
+        ],
+        "count": 150
+    },
     "message": "here you are, bro",
-    "results": [
-        {
-            "submissionId": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
-            "problemId": 123,
-            "user": {
-                "id": "user-uuid",
-                "username": "student01",
-                "real_name": "張三"
-            },
-            "status": "0",
-            "score": 100,
-            "runTime": 123,
-            "memoryUsage": 2048,
-            "languageType": "2",
-            "timestamp": "2025-11-09T10:30:00Z",
-            "ipAddr": "192.168.1.100"
-        }
-    ],
-    "count": 150
+    "status": "ok"
 }
 ```
 
@@ -292,22 +303,25 @@ curl -X GET http://localhost:8000/submission/?page=1&page_size=20 \
 **成功響應**: HTTP 200
 ```json
 {
-    "message": "here you are, bro",
-    "submissionId": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
-    "problemId": 123,
-    "user": {
-        "id": "user-uuid",
-        "username": "student01",
-        "real_name": "張三"
+    "data": {
+        "submissionId": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+        "problemId": 123,
+        "user": {
+            "id": "user-uuid",
+            "username": "student01",
+            "real_name": "張三"
+        },
+        "timestamp": "2025-11-09T10:30:00Z",
+        "lastSend": "2025-11-09T10:30:15Z",
+        "status": "0",
+        "score": 100,
+        "runTime": 123,
+        "memoryUsage": 2048,
+        "languageType": "2",
+        "ipAddr": "192.168.1.100"
     },
-    "timestamp": "2025-11-09T10:30:00Z",
-    "lastSend": "2025-11-09T10:30:15Z",
-    "status": "0",
-    "score": 100,
-    "runTime": 123,
-    "memoryUsage": 2048,
-    "languageType": "2",
-    "ipAddr": "192.168.1.100"
+    "message": "here you are, bro",
+    "status": "ok"
 }
 ```
 
@@ -338,11 +352,14 @@ curl -X GET http://localhost:8000/submission/a1b2c3d4-5678-90ab-cdef-1234567890a
 **成功響應**: HTTP 200
 ```json
 {
+    "data": {
+        "id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+        "source_code": "def solve():\n    print('Hello')\nsolve()",
+        "language_type": 2,
+        "created_at": "2025-11-09T10:30:00Z"
+    },
     "message": "here you are, bro",
-    "id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
-    "source_code": "def solve():\n    print('Hello')\nsolve()",
-    "language_type": 2,
-    "created_at": "2025-11-09T10:30:00Z"
+    "status": "ok"
 }
 ```
 
@@ -377,10 +394,13 @@ curl -X GET http://localhost:8000/submission/a1b2c3d4-5678-90ab-cdef-1234567890a
 **成功響應**: HTTP 200
 ```json
 {
+    "data": {
+        "stdout": "Test Case 1:\nHello, World!\n\nTest Case 2:\nWelcome\n",
+        "submission_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+        "status": "0"
+    },
     "message": "here you are, bro",
-    "stdout": "Test Case 1:\nHello, World!\n\nTest Case 2:\nWelcome\n",
-    "submission_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
-    "status": "0"
+    "status": "ok"
 }
 ```
 
@@ -456,6 +476,34 @@ curl -X GET http://localhost:8000/submission/a1b2c3d4-5678-90ab-cdef-1234567890a
 7. **錯誤訊息**: 完全使用 NOJ 的原始訊息格式
 
 ### 與 NOJ 的主要差異
+
+#### 0. 響應格式（重要）
+**NOJ**: 數據直接返回在根層級
+```json
+{
+    "message": "here you are, bro",
+    "submissionId": "...",
+    "problemId": 123
+}
+```
+
+**我們**: 數據包裝在 `data` 欄位中
+```json
+{
+    "data": {
+        "submissionId": "...",
+        "problemId": 123
+    },
+    "message": "here you are, bro",
+    "status": "ok"
+}
+```
+
+**影響**: 
+- 前端需要從 `response.data.data` 獲取實際數據
+- 錯誤時 `data` 為 `null`，錯誤訊息在 `message` 中
+- 新增 `status` 欄位指示 "ok" 或 "error"
+- **例外**: 創建提交（POST）和上傳代碼（PUT）仍返回字串格式以保持 NOJ 兼容
 
 #### 1. 認證方式
 **NOJ**: 使用 Session Cookie  

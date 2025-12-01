@@ -26,13 +26,13 @@
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "admin01",
         "real_name": "系統管理員",
-        "identity": "admin"
+        "role": "admin"
       },
       "updater": {
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "admin01",
         "real_name": "系統管理員",
-        "identity": "admin"
+        "role": "admin"
       },
       "markdown": "### 系統維護\n今晚 23:00 ~ 23:30 將進行資料庫維護。",
       "pinned": true
@@ -75,7 +75,7 @@ curl http://127.0.0.1:8000/ann/<course_id>/ann \
 | ----------- | ------ | ---- | ------------------------ |
 | `title`     | string | ✅   | 公告標題，最長 200 字    |
 | `content`   | string | ✅   | 公告內容（Markdown）     |
-| `course_id` | UUID   | ✅   | 目標課程 ID              |
+| `course_id` | int   | ✅   | 目標課程 ID（整數）              |
 | `is_pinned` | bool   | ❌   | 是否置頂，預設為 `false` |
 
 **成功回應 (201 Created)**
@@ -214,13 +214,13 @@ curl -X DELETE http://127.0.0.1:8000/ann/ \
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "admin01",
         "real_name": "系統管理員",
-        "identity": "admin"
+        "role": "admin"
       },
       "updater": {
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "admin01",
         "real_name": "系統管理員",
-        "identity": "admin"
+        "role": "admin"
       },
       "markdown": "### 系統維護\n今晚 23:00 ~ 23:30 將進行資料庫維護。",
       "pinned": true
@@ -245,7 +245,7 @@ curl -X POST http://127.0.0.1:8000/ann/ \
     -d '{
       "title": "標題",
       "content": "內容",
-      "course_id": "課程UUID",
+      "course_id": 42,
       "is_pinned": true
     }'
 curl http://127.0.0.1:8000/ann/<course_id>/<ann_id> \

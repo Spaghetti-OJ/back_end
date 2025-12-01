@@ -103,6 +103,24 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
         return client
     
+    def get_api_message(self, response):
+        """從 api_response 格式的響應中提取 message"""
+        if isinstance(response.data, dict) and 'message' in response.data:
+            return response.data['message']
+        return response.data
+    
+    def get_api_data(self, response):
+        """從 api_response 格式的響應中提取 data"""
+        if isinstance(response.data, dict) and 'data' in response.data:
+            return response.data['data']
+        return response.data
+    
+    def get_api_status(self, response):
+        """從 api_response 格式的響應中提取 status"""
+        if isinstance(response.data, dict) and 'status' in response.data:
+            return response.data['status']
+        return "ok" if 200 <= response.status_code < 400 else "error"
+    
     @given(
         title=st.text(min_size=10, max_size=100, alphabet=st.characters(
             blacklist_categories=['Cc', 'Cs'],
@@ -207,7 +225,8 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         
         # 應該權限不足
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert '沒有權限' in response.data['error']
+        # 使用 api_response 格式提取 message
+        assert '沒有權限' in self.get_api_message(response)
     
     def test_other_course_teacher_cannot_create_editorial(self):
         """測試其他課程的老師無法創建題解"""
@@ -227,7 +246,8 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         
         # 應該權限不足
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert '沒有權限' in response.data['error']
+        # 使用 api_response 格式提取 message
+        assert '沒有權限' in self.get_api_message(response)
     
     def test_ta_can_create_editorial(self):
         """測試 TA 可以創建題解"""
@@ -461,8 +481,10 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         response = client.post(url)
         
         assert response.status_code == status.HTTP_201_CREATED
-        assert response.data['is_liked'] == True
-        assert response.data['likes_count'] == like_count + 1
+        # 使用 api_response 格式提取 data
+        data = self.get_api_data(response)
+        assert data['is_liked'] == True
+        assert data['likes_count'] == like_count + 1
         
         # 驗證資料庫
         assert EditorialLike.objects.filter(
@@ -477,8 +499,10 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         response = client.delete(url)
         
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['is_liked'] == False
-        assert response.data['likes_count'] == like_count
+        # 使用 api_response 格式提取 data
+        data = self.get_api_data(response)
+        assert data['is_liked'] == False
+        assert data['likes_count'] == like_count
         
         # 驗證資料庫
         assert not EditorialLike.objects.filter(
@@ -512,7 +536,8 @@ class EditorialAPIHypothesisTests(HypothesisTestCase):
         response = client.post(url)
         
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert '已經對這篇題解按過讚了' in response.data['detail']
+        # 使用 api_response 格式提取 message
+        assert '已經對這篇題解按過讚了' in self.get_api_message(response)
     
     def test_editorial_ordering(self):
         """測試題解排序（官方 > 按讚數 > 創建時間）"""
