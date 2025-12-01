@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "profiles",
     "editor",
     "copycat",
+    "search",
 ]
 
 AUTH_USER_MODEL = 'user.User'

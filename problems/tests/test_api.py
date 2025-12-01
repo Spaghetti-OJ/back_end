@@ -4,6 +4,11 @@ from problems.models import Problems
 from courses.models import Courses, Course_members
 from submissions.models import Submission
 from django.utils import timezone
+from django.conf import settings
+import os
+import zipfile
+from io import BytesIO
+from problems.services.storage import _storage
 
 
 @pytest.fixture
@@ -140,3 +145,50 @@ def test_manage_create_requires_teacher(api_client, teacher, student, course):
     created = Problems.objects.get(pk=body["data"]["problem_id"]) 
     assert created.title == "New Problem"
     assert created.course_id_id == course.id
+
+
+@pytest.mark.django_db
+def test_sandbox_checksum_and_meta(api_client, teacher, course, settings):
+    # 設定 sandbox token
+    settings.SANDBOX_TOKEN = "sandbox-token"
+    p = Problems.objects.create(
+        title="SandboxTC",
+        description="desc",
+        difficulty="easy",
+        is_public=True,
+        creator_id=teacher,
+        course_id=course,
+    )
+    # 建立 zip 測資 (0001.in/out, 0002.in/out)
+    mem = BytesIO()
+    with zipfile.ZipFile(mem, 'w') as zf:
+        zf.writestr('0001.in', 'input1')
+        zf.writestr('0001.out', 'output1')
+        zf.writestr('0002.in', 'input2')
+        zf.writestr('0002.out', 'output2')
+    mem.seek(0)
+    rel = os.path.join('testcases', f'p{p.id}', 'problem.zip')
+    _storage.save(rel, mem)
+
+    # checksum 正確 token
+    res = api_client.get(f"/problem/{p.id}/checksum", {'token': settings.SANDBOX_TOKEN})
+    assert res.status_code == 200
+    body = res.json()
+    assert 'checksum' in body['data'] and len(body['data']['checksum']) == 32
+
+    # checksum 錯誤 token
+    res_bad = api_client.get(f"/problem/{p.id}/checksum", {'token': 'wrong'})
+    assert res_bad.status_code == 401
+
+    # meta 正確 token
+    res_meta = api_client.get(f"/problem/{p.id}/meta", {'token': settings.SANDBOX_TOKEN})
+    assert res_meta.status_code == 200
+    meta = res_meta.json()['data']
+    assert meta['task_count'] == 2
+    assert meta['missing_pairs'] == []
+    assert len(meta['tasks']) == 2
+    assert meta['tasks'][0]['in'].endswith('.in') and meta['tasks'][0]['out'].endswith('.out')
+
+    # meta 錯誤 token
+    res_meta_bad = api_client.get(f"/problem/{p.id}/meta", {'token': 'wrong'})
+    assert res_meta_bad.status_code == 401
