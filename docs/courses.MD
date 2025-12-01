@@ -23,7 +23,7 @@
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "teacher01",
         "real_name": "王小明",
-        "identity": "teacher"
+        "role": "teacher"
       }
     }
   ]
@@ -72,14 +72,14 @@ curl http://127.0.0.1:8000/course/ \
     "id": "c1234f56-789a-4bde-b123-456789abcd12",
     "username": "teacher01",
     "real_name": "王小明",
-    "identity": "teacher"
+    "role": "teacher"
   },
   "TAs": [
     {
       "id": "24242424-aaaa-bbbb-cccc-123456789000",
       "username": "ta_user",
       "real_name": "助教 A",
-      "identity": "student"
+      "role": "student"
     }
   ],
   "students": [
@@ -87,7 +87,7 @@ curl http://127.0.0.1:8000/course/ \
       "id": "65656565-aaaa-bbbb-cccc-123456789000",
       "username": "student01",
       "real_name": "學生 A",
-      "identity": "student"
+      "role": "student"
     }
   ]
 }
@@ -104,6 +104,76 @@ curl http://127.0.0.1:8000/course/ \
 **cURL 測試**：
 ```bash
 curl http://127.0.0.1:8000/course/42/ \
+    -H "Authorization: Bearer <access>"
+```
+
+---
+
+## 課程邀請加入 API
+
+**路徑**：`POST /course/<course_id>/join`
+
+**說明**：學生以邀請代碼加入課程。僅學生身分可使用，代碼不分大小寫。
+
+**請求格式 (JSON)**
+
+| 欄位名    | 型別   | 必填 | 說明                 |
+| --------- | ------ | ---- | -------------------- |
+| `joinCode` | string | ✅   | 7 碼英數邀請代碼 |
+
+**成功回應 (200 OK)**：
+
+```json
+{ "message": "Success.", "data": { "course": { "id": 42 } }, "status_code": 200 }
+```
+
+**失敗回應**
+
+| 狀況                 | HTTP | 範例訊息                                   |
+| -------------------- | ---- | ------------------------------------------ |
+| 未登入               | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 非學生身分           | 403  | `{ "message": "Forbidden." }`              |
+| 課程不存在           | 404  | `{ "message": "Course not found." }`       |
+| 邀請代碼錯誤/失效    | 400  | `{ "message": "Invalid join code." }`      |
+| 已在課程內           | 400  | `{ "message": "You are already in this course." }` |
+| 已達人數上限         | 403  | `{ "message": "Course is full." }`         |
+
+**cURL 測試**：
+```bash
+curl -X POST http://127.0.0.1:8000/course/42/join/ \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer <access>" \
+    -d '{"joinCode": "ABC1234"}'
+```
+
+## 課程邀請代碼產生 API
+
+**路徑**：`POST /course/<course_id>/invite-code/`
+
+**說明**：產生指定課程的邀請代碼。僅課程教師本人或系統管理員可執行。
+
+**成功回應 (200 OK)**：
+
+```json
+{
+  "message": "Success.",
+  "data": { "joinCode": "XYZ12AB" },
+  "status_code": 200
+}
+```
+
+**失敗回應**
+
+| 狀況                     | HTTP | 範例訊息                                            |
+| ------------------------ | ---- | --------------------------------------------------- |
+| 未登入                   | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 非教師/管理員            | 403  | `{ "message": "Forbidden." }`                       |
+| 非授課教師操作他人課程   | 403  | `{ "message": "You are not in this course." }`      |
+| 課程不存在               | 404  | `{ "message": "Course not found." }`                |
+
+**cURL 測試**：
+```bash
+curl -X POST http://127.0.0.1:8000/course/42/invite-code/ \
     -H "Authorization: Bearer <access>"
 ```
 
@@ -518,3 +588,68 @@ curl -X DELETE http://127.0.0.1:8000/course/ \
 | ------- | ---- | ----------------------------------------- |
 | 未登入     | 401  | `{ "detail": "Authentication credentials were not provided." }` |
 | 非管理員   | 403  | `{ "detail": "只有管理員可以查看課程統計。" }` |
+
+---
+
+## 課程計分板 API
+
+**路徑**：`GET /course/<course_id>/scoreboard/`
+
+**說明**：查看課程內指定題目的計分板。需登入且具評分權限（教師、助教或管理員）。
+
+**查詢參數**
+
+| 參數名   | 型別   | 必填 | 說明                                |
+| -------- | ------ | ---- | ----------------------------------- |
+| `pids`   | string | ✅   | 題目 ID 逗號串，如 `1,2,3`            |
+| `start`  | float  | ⭕   | 開始時間戳（秒），過濾 >= 該時間的提交 |
+| `end`    | float  | ⭕   | 結束時間戳（秒），過濾 <= 該時間的提交 |
+
+**成功回應 (200 OK)**：
+
+```json
+{
+  "message": "Success.",
+  "data": {
+    "courseId": 24,
+    "problemIds": [101, 102],
+    "timeRange": { "start": 1735708800.0, "end": null },
+    "students": [
+      {
+        "userId": "d4b8f260-8dcd-4dd2-8c07-8bd6e3c0f001",
+        "username": "student01",
+        "realName": "學生甲",
+        "scores": { "101": 90, "102": 70 },
+        "totalScore": 160,
+        "submittedCount": 2
+      }
+    ],
+    "problemStats": [
+      {
+        "problemId": 101,
+        "maxScore": 100,
+        "averageScore": 95.0,
+        "submissionCount": 3,
+        "submitterCount": 2,
+        "fullScore": 100
+      }
+    ]
+  }
+}
+```
+
+**失敗回應**
+
+| 狀況                   | HTTP | 範例訊息                                    |
+| ---------------------- | ---- | ------------------------------------------- |
+| 未登入                 | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 無評分權限             | 403  | `{ "message": "Permission denied" }`        |
+| `pids` 解析錯誤        | 400  | `{ "message": "Error occurred when parsing \`pids\`." }` |
+| `start`/`end` 型別錯誤 | 400  | `{ "message": "Type of \`start\` should be float." }` |
+
+**cURL 測試**
+
+```bash
+curl "http://127.0.0.1:8000/course/24/scoreboard/?pids=101,102&start=1735708800.0" \
+  -H "Authorization: Bearer <access_token>"
+```

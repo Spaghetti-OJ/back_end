@@ -26,13 +26,13 @@
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "admin01",
         "real_name": "系統管理員",
-        "identity": "admin"
+        "role": "admin"
       },
       "updater": {
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "admin01",
         "real_name": "系統管理員",
-        "identity": "admin"
+        "role": "admin"
       },
       "markdown": "### 系統維護\n今晚 23:00 ~ 23:30 將進行資料庫維護。",
       "pinned": true
@@ -214,13 +214,13 @@ curl -X DELETE http://127.0.0.1:8000/ann/ \
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "admin01",
         "real_name": "系統管理員",
-        "identity": "admin"
+        "role": "admin"
       },
       "updater": {
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "admin01",
         "real_name": "系統管理員",
-        "identity": "admin"
+        "role": "admin"
       },
       "markdown": "### 系統維護\n今晚 23:00 ~ 23:30 將進行資料庫維護。",
       "pinned": true
