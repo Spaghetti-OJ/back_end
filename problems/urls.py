@@ -1,16 +1,20 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import ProblemsViewSet, SubtasksViewSet, TestCasesViewSet, ProblemManageView, ProblemManageDetailView, ProblemListView, ProblemDetailView, ProblemHighScoreView, ProblemStatsView, problem_like_toggle, problem_likes_count, UserLikedProblemsView, TagListCreateView, ProblemTagAddView, ProblemTagRemoveView
+from .views import ProblemsViewSet, SubtasksViewSet, TestCasesViewSet, ProblemManageView, ProblemManageDetailView, ProblemListView, ProblemDetailView, ProblemHighScoreView, ProblemStatsView, problem_like_toggle, problem_likes_count, UserLikedProblemsView, TagListCreateView, ProblemTagAddView, ProblemTagRemoveView, ProblemCloneView, ProblemSubtaskListCreateView, ProblemSubtaskDetailView
 
 router = DefaultRouter()
 router.register(r"problems", ProblemsViewSet, basename="problems")
-router.register(r"subtasks", SubtasksViewSet, basename="subtasks")
+# 已改用 problem-scoped 子題路徑，避免重複與混淆，移除舊 router subtasks
 router.register(r"test-cases", TestCasesViewSet, basename="test-cases")
 # 移除舊 tags ViewSet：改用統一 APIViews (GET/POST /tags, POST/DELETE /problem/<id>/tags)
 
 urlpatterns = [
     path("manage", ProblemManageView.as_view(), name="problem-manage"),
     path("manage/<int:pk>", ProblemManageDetailView.as_view(), name="problem-manage-detail"),
+    path("clone", ProblemCloneView.as_view(), name="problem-clone"),
+    # Subtasks under specific problem
+    path("<int:pk>/subtasks", ProblemSubtaskListCreateView.as_view(), name="problem-subtasks"),
+    path("<int:pk>/subtasks/<int:subtask_id>", ProblemSubtaskDetailView.as_view(), name="problem-subtask-detail"),
     path("<int:pk>/high-score", ProblemHighScoreView.as_view(), name="problem-high-score"),
     path("<int:pk>/stats", ProblemStatsView.as_view(), name="problem-stats"),
     path("<int:pk>/like", problem_like_toggle, name="problem-like-toggle"),

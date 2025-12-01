@@ -25,6 +25,7 @@ from ..responses import api_response
 from django.shortcuts import get_object_or_404
 
 from ..models import Problems, Problem_subtasks, Test_cases, Tags, Problem_tags
+from courses.models import Courses, Course_members
 from ..serializers import (
     ProblemSerializer, ProblemDetailSerializer, ProblemStudentSerializer,
     SubtaskSerializer, TestCaseSerializer, TagSerializer
@@ -80,6 +81,97 @@ class SubtasksViewSet(viewsets.ModelViewSet):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Only the problem owner can delete its subtasks.")
         instance.delete()
+
+
+class ProblemSubtaskListCreateView(APIView):
+    """GET /problem/<problemId>/subtasks — 取得子題列表
+    POST /problem/<problemId>/subtasks — 新增子題
+    權限：GET 可匿名（視題目可見性過濾）；POST 需為題目擁有者或課程 TA/教師/管理員。
+    """
+    permission_classes = []
+
+    def get(self, request, pk: int):
+        try:
+            problem = Problems.objects.get(pk=pk)
+        except Problems.DoesNotExist:
+            return api_response(None, "Problem not found.", status_code=404)
+
+        # 可見性過濾：非公開需檢查身份
+        user = request.user
+        visibility = getattr(problem, 'is_public', 'hidden')
+        legacy_public = visibility in (True, 1)
+        visibility_normalized = 'public' if legacy_public else visibility
+        if visibility_normalized not in ('public'):
+            if not user.is_authenticated:
+                return api_response(None, "Authentication required.", status_code=401)
+            if not (user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher'] or problem.creator_id == user):
+                if visibility_normalized == 'course' and problem.course_id:
+                    from courses.models import Course_members
+                    is_course_member = Course_members.objects.filter(course_id=problem.course_id, user_id=user).exists()
+                    if not is_course_member:
+                        return api_response(None, "You do not have permission to view this problem.", status_code=403)
+                else:
+                    return api_response(None, "You do not have permission to view this problem.", status_code=403)
+
+        subtasks = Problem_subtasks.objects.filter(problem_id=problem).order_by('subtask_no')
+        return api_response(SubtaskSerializer(subtasks, many=True).data, "OK", status_code=200)
+
+    def post(self, request, pk: int):
+        if not request.user.is_authenticated:
+            return api_response(None, "Authentication required.", status_code=401)
+        problem = get_object_or_404(Problems, pk=pk)
+        user = request.user
+
+        # 權限：owner/課程 TA/教師/管理員
+        if not (user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher'] or problem.creator_id == user):
+            from courses.models import Course_members
+            is_staff = Course_members.objects.filter(course_id=problem.course_id, user_id=user, role__in=['ta', 'teacher']).exists()
+            if not is_staff:
+                return api_response(None, "Not enough permission", status_code=403)
+
+        data = request.data.copy()
+        data['problem_id'] = problem.id
+        serializer = SubtaskSerializer(data=data)
+        if not serializer.is_valid():
+            return api_response({"errors": serializer.errors}, "Validation error", status_code=422)
+        subtask = serializer.save()
+        return api_response(SubtaskSerializer(subtask).data, "Subtask created", status_code=201)
+
+
+class ProblemSubtaskDetailView(APIView):
+    """PUT /problem/<problemId>/subtasks/<subtaskId> — 修改子題
+    DELETE /problem/<problemId>/subtasks/<subtaskId> — 刪除子題
+    權限：題目擁有者或課程 TA/教師/管理員。
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_subtask_with_permission(self, problem_id: int, subtask_id: int, user):
+        subtask = get_object_or_404(Problem_subtasks, pk=subtask_id)
+        if subtask.problem_id_id != problem_id:
+            from rest_framework.exceptions import NotFound
+            raise NotFound("Subtask does not belong to this problem")
+        problem = subtask.problem_id
+        if user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher'] or problem.creator_id == user:
+            return subtask
+        from courses.models import Course_members
+        is_staff = Course_members.objects.filter(course_id=problem.course_id, user_id=user, role__in=['ta', 'teacher']).exists()
+        if not is_staff:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Not enough permission")
+        return subtask
+
+    def put(self, request, pk: int, subtask_id: int):
+        subtask = self._get_subtask_with_permission(pk, subtask_id, request.user)
+        serializer = SubtaskSerializer(subtask, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return api_response({"errors": serializer.errors}, "Validation error", status_code=422)
+        serializer.save()
+        return api_response(SubtaskSerializer(subtask).data, "Subtask updated", status_code=200)
+
+    def delete(self, request, pk: int, subtask_id: int):
+        subtask = self._get_subtask_with_permission(pk, subtask_id, request.user)
+        subtask.delete()
+        return api_response(None, "Subtask deleted", status_code=204)
 
 class TestCasesViewSet(viewsets.ModelViewSet):
     queryset = Test_cases.objects.all().order_by("subtask_id", "idx")
@@ -529,6 +621,141 @@ class ProblemManageView(APIView):
             problem.tags.set(tags_qs)
 
         return api_response({"problem_id": problem.id}, "題目建立成功", status_code=201)
+
+
+class ProblemCloneView(APIView):
+    """POST /problem/clone - 複製題目
+
+    Body JSON:
+      - problem_id (int): 要複製的題目 ID
+      - target (string): 目標課程名稱
+      - status (optional int): 新題目狀態（0: hidden, 1: course, 2: public）
+
+    需要管理員或教師（含該課程 TA）權限。
+    回傳：
+      - 200: { message: "Success.", data: { problemId: 新題目ID } }
+      - 403: { message: "Problem can not view." }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        payload = request.data or {}
+        problem_id = payload.get("problem_id")
+        target_name = payload.get("target")
+        new_status_raw = payload.get("status")
+
+        if not problem_id or not target_name:
+            return api_response(None, "Missing required fields: problem_id, target", status_code=400)
+
+        try:
+            src = Problems.objects.select_related("course_id", "creator_id").get(pk=int(problem_id))
+        except (Problems.DoesNotExist, ValueError, TypeError):
+            return api_response(None, "Problem not found", status_code=404)
+
+        # 檢查是否有權限檢視來源題目
+        if user.is_staff or getattr(user, 'is_superuser', False):
+            can_view = True
+        else:
+            vis = src.is_public
+            if vis == Problems.Visibility.PUBLIC:
+                can_view = True
+            elif vis == Problems.Visibility.COURSE:
+                can_view = Course_members.objects.filter(course_id=src.course_id, user_id=user).exists()
+            else:
+                can_view = (src.creator_id_id == user.id)
+        if not can_view:
+            return api_response(None, "Problem can not view.", status_code=403)
+
+        # 目標課程查詢（以名稱）
+        try:
+            target_course = Courses.objects.get(name=target_name)
+        except Courses.DoesNotExist:
+            return api_response(None, "Target course not found", status_code=404)
+
+        # 權限：管理員或目標課程教師/TA
+        if not (user.is_staff or getattr(user, 'is_superuser', False)):
+            qs = Course_members.objects.filter(course_id=target_course, user_id=user)
+            is_teacher = qs.filter(role=Course_members.Role.TEACHER).exists() or (target_course.teacher_id_id == user.id)
+            is_ta = qs.filter(role=Course_members.Role.TA).exists()
+            if not (is_teacher or is_ta):
+                return api_response(None, "Permission denied", status_code=403)
+
+        # 狀態映射：接受數字 0/1/2 或字串 "hidden"/"course"/"public"
+        visibility_map_int = {0: Problems.Visibility.HIDDEN, 1: Problems.Visibility.COURSE, 2: Problems.Visibility.PUBLIC}
+        visibility_map_str = {
+            "hidden": Problems.Visibility.HIDDEN,
+            "course": Problems.Visibility.COURSE,
+            "public": Problems.Visibility.PUBLIC,
+        }
+        if new_status_raw is None:
+            new_visibility = src.is_public
+        else:
+            if isinstance(new_status_raw, str):
+                new_visibility = visibility_map_str.get(new_status_raw.lower(), src.is_public)
+            else:
+                try:
+                    new_visibility = visibility_map_int.get(int(new_status_raw), src.is_public)
+                except (ValueError, TypeError):
+                    new_visibility = src.is_public
+
+        # 建立新題目（統計歸零）
+        new_problem = Problems.objects.create(
+            title=src.title,
+            difficulty=src.difficulty,
+            max_score=src.max_score,
+            is_public=new_visibility,
+            total_submissions=0,
+            accepted_submissions=0,
+            acceptance_rate=0,
+            like_count=0,
+            view_count=0,
+            total_quota=src.total_quota,
+            description=src.description,
+            input_description=src.input_description,
+            output_description=src.output_description,
+            sample_input=src.sample_input,
+            sample_output=src.sample_output,
+            hint=src.hint,
+            subtask_description=src.subtask_description,
+            supported_languages=src.supported_languages,
+            creator_id=user,
+            course_id=target_course,
+        )
+
+        # 複製 tags
+        tag_ids = list(src.tags.values_list('id', flat=True))
+        for tid in tag_ids:
+            Problem_tags.objects.get_or_create(problem_id=new_problem, tag_id_id=tid, defaults={"added_by": user})
+
+        # 複製 subtasks + test cases
+        for st in Problem_subtasks.objects.filter(problem_id=src).order_by('subtask_no'):
+            new_st = Problem_subtasks.objects.create(
+                problem_id=new_problem,
+                subtask_no=st.subtask_no,
+                weight=st.weight,
+                time_limit_ms=st.time_limit_ms,
+                memory_limit_mb=st.memory_limit_mb,
+            )
+            tcs = Test_cases.objects.filter(subtask_id=st).order_by('idx')
+            bulk = []
+            for tc in tcs:
+                bulk.append(Test_cases(
+                    subtask_id=new_st,
+                    idx=tc.idx,
+                    input_path=tc.input_path,
+                    output_path=tc.output_path,
+                    input_size=tc.input_size,
+                    output_size=tc.output_size,
+                    checksum_in=tc.checksum_in,
+                    checksum_out=tc.checksum_out,
+                    status=tc.status,
+                ))
+            if bulk:
+                Test_cases.objects.bulk_create(bulk)
+
+        return api_response({"problemId": new_problem.id}, "Success.", status_code=200)
 
 
 @api_view(['POST', 'DELETE'])
