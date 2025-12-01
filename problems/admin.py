@@ -1,11 +1,18 @@
 from django.contrib import admin
 from .models import Problems, Problem_subtasks, Test_cases, Tags, Problem_tags
 
+class ProblemTagsInline(admin.TabularInline):
+    model = Problem_tags
+    extra = 0
+    autocomplete_fields = ['tag_id', 'added_by']
+
+
 @admin.register(Problems)
 class ProblemAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'difficulty', 'is_public', 'total_submissions', 'accepted_submissions', 'acceptance_rate')
     list_filter = ('difficulty', 'is_public')
     search_fields = ('title',)
+    inlines = [ProblemTagsInline]
 
 
 @admin.register(Problem_subtasks)
@@ -39,3 +46,4 @@ class ProblemTagAdmin(admin.ModelAdmin):
     list_filter = ('tag_id',)
     search_fields = ('problem_id__title', 'tag_id__name')
     ordering = ('problem_id', 'tag_id')
+    autocomplete_fields = ['problem_id', 'tag_id', 'added_by']

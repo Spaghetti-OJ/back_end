@@ -2,9 +2,175 @@
 
 本節說明目前可用的題目 API。後端採用 Django + DRF + Simple JWT，所有請求/回應皆為 JSON。
 
+## 查看題目詳情（學生/一般）
+
+- 路徑：`GET /problem/<problem_id>`
+- 未登入僅能看到 `public` 題目；`course` / `hidden` 需題目擁有者、課程成員或有管理權限。
+
+成功回應（200 OK 範例，部分欄位視登入與資料情況可能為 null）：
+```json
+{
+  "data": {
+    "id": 1,
+    "title": "Two Sum",
+    "difficulty": "easy",
+    "is_public": "public",
+    "course_id": "<uuid>",
+    "tags": [{"id":1, "name":"陣列", "usage_count": 10}],
+    "submit_count": 2,
+    "high_score": 80
+  },
+  "message": "取得題目成功",
+  "status": "200"
+}
+```
+未登入或無權限時可能回 404（隱藏不可見）或 403。
+
+**cURL**
+```bash
+curl "http://127.0.0.1:8000/problem/1" -H "Authorization: Bearer $TOKEN"
+```
+
 ---
 
-## 權限與可見性
+## 題目最高分資訊
+
+- 路徑：`GET /problem/<problem_id>/high-score`
+- 回傳目前使用者或全域的最高分（依後端邏輯）。未登入可能為 null。
+
+成功回應（200 OK）：
+```json
+{
+  "data": { "score": 85 },
+  "message": "OK",
+  "status": "200"
+}
+```
+
+**cURL**
+```bash
+curl "http://127.0.0.1:8000/problem/1/high-score" -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## 題目測資（Test Cases）上傳／下載（題目層級）
+
+後端採「三端點」模式（取消舊的分片 PUT 端點）：
+1. 初始化上傳：`POST /problem/<problem_id>/initiate-test-case-upload`
+2. 完成上傳：`POST /problem/<problem_id>/complete-test-case-upload`
+3. 下載測資：`GET /problem/<problem_id>/test-case`
+
+權限：題目擁有者 / 課程 TA / 教師 / 管理員（`_has_problem_manage_permission` 包含 TA）。
+
+檔名配對驗證：上傳的 zip 內容需包含四位數成對檔名，例如 `0001.in` 與 `0001.out`；若有缺失或不對稱回 400。
+
+### 1) 初始化上傳
+`POST /problem/<pid>/initiate-test-case-upload`
+
+Body 範例：
+```json
+{ "length": 123456, "part_size": 1048576 }
+```
+回傳一組 `upload_id` 與暫存 TTL。`part_endpoint` 為佔位（本地不使用實際分片上傳）。
+
+成功回應（200 OK）：
+```json
+{
+  "data": { "upload_id": "<uuid>", "ttl": 600, "part_endpoint": "/problem/1/test-case-upload-part" },
+  "message": "Upload initiated",
+  "status": "200"
+}
+```
+
+### 2) 完成上傳
+`POST /problem/<pid>/complete-test-case-upload`
+
+Body：
+```json
+{ "upload_id": "<uuid>", "parts": [ { "PartNumber": 1, "ETag": "..." } ] }
+```
+後端會拼合暫存分片并讀取 zip，驗證成對檔名。
+
+成功回應（201 Created）：
+```json
+{
+  "data": { "path": "testcases/p<pid>/problem.zip" },
+  "message": "Upload completed",
+  "status": "201"
+}
+```
+
+### 3) 下載測資
+`GET /problem/<pid>/test-case`
+
+成功：直接回傳二進位串流（`Content-Disposition: attachment`）。例外：測資不存在回 404；權限不足 403。
+
+**cURL（下載）**
+```bash
+curl "http://127.0.0.1:8000/problem/30/test-case" -H "Authorization: Bearer $TOKEN" -o problem-30-testcases.zip
+```
+
+### Sandbox 專用：測資校驗與結構
+
+沙盒在判題前會：
+1. 下載 zip 檔案。
+2. 呼叫 checksum 端點確認 MD5 是否一致（避免網路傳輸損毀）。
+3. 呼叫 meta 端點取得測資對列表（in/out）以便依序執行。
+
+安全驗證：使用 query string `token` 與後端設定的 `SANDBOX_TOKEN` 比對；不需一般登入權限。若 token 缺失或不符 → 401。
+
+#### 1) 取得 MD5 校驗和
+- 路徑：`GET /problem/<problem_id>/checksum?token=<sandbox_token>`
+- 成功回應：
+```json
+{
+  "data": { "checksum": "d41d8cd98f00b204e9800998ecf8427e" },
+  "message": "OK",
+  "status": "200"
+}
+```
+錯誤：401 Invalid sandbox token；404 題目或測資不存在。
+
+**cURL**
+```bash
+curl "http://127.0.0.1:8000/problem/30/checksum?token=$SANDBOX_TOKEN"
+```
+
+#### 2) 取得測資元資料
+- 路徑：`GET /problem/<problem_id>/meta?token=<sandbox_token>`
+- 回傳欄位：
+  - `checksum`: 與 /checksum 相同 MD5（方便比對）
+  - `task_count`: 總測試對數量
+  - `missing_pairs`: 缺失配對的 stem 列表（理想應為空）
+  - `tasks`: 陣列，每項包含 `no`, `stem`, `in`, `out`
+
+成功回應（範例）：
+```json
+{
+  "data": {
+    "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+    "task_count": 2,
+    "missing_pairs": [],
+    "tasks": [
+      { "no": 1, "stem": "0001", "in": "0001.in", "out": "0001.out" },
+      { "no": 2, "stem": "0002", "in": "0002.in", "out": "0002.out" }
+    ]
+  },
+  "message": "OK",
+  "status": "200"
+}
+```
+錯誤：401 Invalid sandbox token；404 測資不存在；500 zip 損毀。
+
+**cURL**
+```bash
+curl "http://127.0.0.1:8000/problem/30/meta?token=$SANDBOX_TOKEN" | jq
+```
+
+---
+
+## 建立題目（管理）
 
 題目有三種可見性（欄位 `is_public`）：
 - `public`：所有人可見
@@ -50,77 +216,6 @@
   "message": "OK",
   "status": "200"
 }
-```
-
-**cURL 測試**：
-```bash
-curl "http://127.0.0.1:8000/problem/" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
----
-
-## 查看題目詳情（學生視角）
-
-- 路徑：`GET /problem/<problem_id>`
-- 說明：回傳題目詳情；未登入僅能查看 `public` 題目。對於 `course`/`hidden` 依權限與課程成員資格判斷。
-
-成功回應（200 OK，部分欄位省略）：
-```json
-{
-  "data": {
-    "id": 1,
-    "title": "Two Sum",
-    "difficulty": "easy",
-    "is_public": "public",
-    "course_id": "<uuid>",
-    "tags": [{"id":1, "name":"陣列", "usage_count": 10}],
-    "submit_count": 2,
-    "high_score": 80
-  },
-  "message": "取得題目成功",
-  "status": "200"
-}
-```
-未登入時 `submit_count`/`high_score` 會為 `null`。
-
-**cURL 測試**：
-```bash
-curl "http://127.0.0.1:8000/problem/$PROBLEM_ID" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-可能錯誤：
-- 401 未登入（針對非公開題目）
-- 403 非課程成員/非擁有者/非教師管理員（當題目為 `course` 或 `hidden`）
-- 404 題目不存在
-
----
-
-## 取得題目最高分數
-
-- 路徑：`GET /problem/<problem_id>/high-score`
-- 權限：需要登入
-- 說明：回傳當前使用者在該題目的最高分數。若從未提交過則回傳 0。
-
-成功回應（200 OK）：
-```json
-{
-  "data": { "score": 85 },
-  "message": "OK",
-  "status": "200"
-}
-```
-
-可能錯誤：
-- 401 未登入
-- 404 題目不存在
-
-**cURL 測試**：
-```bash
-curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/high-score" \
-  -H "Authorization: Bearer $TOKEN"
-```
 
 ---
 
@@ -619,42 +714,57 @@ curl -X POST "http://127.0.0.1:8000/problem/tags" \
 ## 複製題目（管理）
 
 - 路徑：`POST /problem/clone`
-- 權限：系統管理員或目標課程教師/TA
-- 說明：將指定題目複製到目標課程，並複製其 tags、subtasks 與 test cases；統計欄位歸零。
+- 權限：系統管理員或目標課程教師 / TA
+- 功能：複製指定題目到目標課程，複製其 tags、subtasks、test cases；統計欄位（提交次數、讚數、瀏覽、AC 率等）會歸零。
+- 支援 `status` 欄位（可選）：接受 `0|1|2` 或 `hidden|course|public`；未提供則沿用原題目狀態。
+- 支援 `dry_run`（布林，可選）：若為 `true`，只建立題目本體，不複製關聯資料（用於除錯）。
 
-請求（JSON）：
+請求（JSON 範例）：
 ```json
 {
-  "problem_id": 30,
-  "target": "演算法(上)",
-  "status": "public" // 可選，接受 0/1/2 或 "hidden|course|public"
+  "problem_id": 2,
+  "target": "作業系統",
+  "status": "public"
 }
 ```
 
 成功回應（200 OK）：
 ```json
 {
-  "data": { "problemId": 31 },
+  "data": { "problemId": 99 },
   "message": "Success.",
+  "status": "200"
+}
+```
+
+`dry_run: true` 範例成功回應：
+```json
+{
+  "data": { "problemId": 100 },
+  "message": "Success (dry_run: only problem created).",
   "status": "200"
 }
 ```
 
 可能錯誤：
 - 400 缺少 `problem_id` 或 `target`
-- 403 `Problem can not view.`（無權檢視來源題目）或 `Permission denied`（無權在目標課程建立）
+- 403 `Problem can not view.`（來源題目不可視） / `Permission denied`（無權在目標課程建立）
 - 404 `Problem not found` / `Target course not found`
 
-**cURL 測試**：
+**cURL（一般複製）**
 ```bash
 curl -X POST "http://127.0.0.1:8000/problem/clone" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "problem_id": 30,
-    "target": "演算法(上)",
-    "status": "public"
-  }'
+  -d '{ "problem_id": 2, "target": "作業系統", "status": "public" }'
+```
+
+**cURL（dry_run 只建立題目本體(除錯用)）**
+```bash
+curl -X POST "http://127.0.0.1:8000/problem/clone" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "problem_id": 2, "target": "作業系統", "status": "public", "dry_run": true }'
 ```
 
 
