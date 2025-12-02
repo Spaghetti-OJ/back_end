@@ -74,9 +74,9 @@ jobs:
       
       - name: Create superuser
         env:
-          DJANGO_SUPERUSER_USERNAME: test
-          DJANGO_SUPERUSER_PASSWORD: "abc12345"
-          DJANGO_SUPERUSER_EMAIL: test@gmail.com
+          DJANGO_SUPERUSER_USERNAME: ${{ secrets.DEV_SUPERUSER_USERNAME }}
+          DJANGO_SUPERUSER_PASSWORD: ${{ secrets.DEV_SUPERUSER_PASSWORD }}
+          DJANGO_SUPERUSER_EMAIL: ${{ secrets.DEV_SUPERUSER_EMAIL }}
         run: |
           cd "${APP_DIR}"
           source "${VENV_PATH}/bin/activate"
