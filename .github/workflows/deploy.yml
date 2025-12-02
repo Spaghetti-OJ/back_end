@@ -45,8 +45,8 @@ jobs:
         run: |
           cd "${APP_DIR}"
           source "${VENV_PATH}/bin/activate"
-          pip install -r requirements.txt
-
+          pip install --upgrade pip
+          pip install -r requirements.txt --no-cache-dir
       - name: Reset migrations
         run: |
           cd "${APP_DIR}"
