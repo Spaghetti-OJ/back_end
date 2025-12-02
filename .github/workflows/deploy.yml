@@ -48,6 +48,23 @@ jobs:
           source "${VENV_PATH}/bin/activate"
           pip install --upgrade pip
           pip install -r requirements.txt --no-cache-dir
+
+      - name: Setup environment
+        env:
+          DJANGO_DEBUG: ${{ secrets.DJANGO_DEBUG }}
+          DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+          ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
+          CSRF_TRUSTED_ORIGINS: ${{ secrets.CSRF_TRUSTED_ORIGINS }}
+        run: |
+          cd "${APP_DIR}"
+          cat > .env <<EOF
+          DJANGO_DEBUG="${DJANGO_DEBUG}"
+          DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY}"
+          ALLOWED_HOSTS="${ALLOWED_HOSTS}"
+          CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS}"
+          EOF
+          sed -i 's/^[[:space:]]*//' .env
+
       - name: Reset migrations
         run: |
           cd "${APP_DIR}"
