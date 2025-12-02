@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     "announcements",
     "profiles",
     "editor",
+    "copycat",
     "search",
 ]
 
@@ -203,3 +204,6 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
 
 }
+
+# MOSS User ID(環境變數讀取)
+MOSS_USER_ID = int(os.getenv('MOSS_USER_ID', 0))
