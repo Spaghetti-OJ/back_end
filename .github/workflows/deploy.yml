@@ -40,8 +40,7 @@ jobs:
 
       - name: Sync repository to target directory
         run: |
-          rsync -a --delete --exclude '.git' --exclude '.venv' ./ "${APP_DIR}/" ".env"
-
+          rsync -a --delete --exclude '.git' --exclude '.venv' --exclude '.env' ./ "${APP_DIR}/"
       - name: Install dependencies
         run: |
           cd "${APP_DIR}"
