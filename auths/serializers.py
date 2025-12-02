@@ -65,7 +65,7 @@ class UserActivitySerializer(serializers.ModelSerializer):
     """
     # 為了讓輸出的 JSON 更易讀，我們把 ForeignKey 關聯的 user 物件換成它的字串表示 (username)
     user_id = serializers.UUIDField(source='user.id', read_only=True)
-    username = serializers.CharField(read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
     
     # 為了顯示中文名稱 ('登入') 而不是英文鍵 ('login')
     activity_type = serializers.CharField(source='get_activity_type_display', read_only=True)
