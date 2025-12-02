@@ -3,6 +3,7 @@ name: Deploy to dev
 on:
   push:
     branches:
+      - chore/deploychore/deploy-workflow
       - dev
 
 concurrency: deploy-dev
