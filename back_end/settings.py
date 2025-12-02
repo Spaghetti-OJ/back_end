@@ -28,7 +28,7 @@ load_dotenv(BASE_DIR / ".env")
 # SECRET_KEY = 'django-insecure-7!jjwbdim67bist@b4_y$1mhva8x=v(1h$yaqv2!@391)#ji^e'
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-change-me")
-ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost, noj-backend-dev.little7.pp.ua").split(",") if h.strip()]
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
 
 CSRF_TRUSTED_ORIGINS = [h.strip() for h in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if h.strip()]
 
