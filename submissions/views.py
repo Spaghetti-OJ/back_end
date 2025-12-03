@@ -1004,7 +1004,7 @@ def user_stats_view(request, user_id):
 
     serializer = UserStatusSerializer(payload)
     return api_response(
-        data=serializer.data,
+        data={"user_stats": serializer.data},
         message="here you are, bro",
         status_code=status.HTTP_200_OK
     )
