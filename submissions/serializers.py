@@ -584,3 +584,17 @@ class SubmissionStdoutSerializer(serializers.Serializer):
             'submission_id': str(instance.id),
             'status': instance.status
         }
+class UserStatusSerializer(serializers.Serializer):
+    """使用者狀態的 Serializer"""
+    
+    user_id = serializers.CharField()
+    username = serializers.CharField()
+    total_solved = serializers.IntegerField()
+    total_submissions = serializers.IntegerField()
+    accept_percent = serializers.FloatField()
+
+    difficulty = serializers.DictField(
+        child=serializers.IntegerField()
+    )
+    
+    beats_percent = serializers.FloatField()
