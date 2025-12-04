@@ -83,7 +83,7 @@ curl http://127.0.0.1:8000/ann/<course_id>/ann \
 ```json
 {
   "data": {
-    "id": "新公告ID",
+    "annId": "新公告ID",
     "created_at": 1732099200
   }
 }

@@ -87,7 +87,7 @@ class AnnouncementCreateView(generics.GenericAPIView):
         announcement = serializer.save(creator_id=request.user)
         payload = {
             "data": {
-                "id": str(announcement.id),
+                "annId": str(announcement.id),
                 "created_at": int(announcement.created_at.timestamp()),
             }
         }
