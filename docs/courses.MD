@@ -179,6 +179,43 @@ curl -X POST http://127.0.0.1:8000/course/42/invite-code/ \
 
 ---
 
+## 課程邀請代碼刪除 API
+
+**路徑**：`DELETE /course/<course_id>/invite-code/<code>/`
+
+**說明**：刪除指定課程的邀請代碼，使學生無法再透過該代碼加入。僅課程教師本人或系統管理員可執行，代碼不分大小寫。
+
+**路徑參數**
+
+| 參數名        | 型別   | 必填 | 說明                 |
+| ------------- | ------ | ---- | -------------------- |
+| `course_id`   | int    | ✅   | 課程的流水號 ID      |
+| `code`        | string | ✅   | 7 碼英數邀請代碼     |
+
+**成功回應 (200 OK)**：
+
+```json
+{ "message": "Success.", "status_code": 200 }
+```
+
+**失敗回應**
+
+| 狀況                   | HTTP | 範例訊息                                            |
+| ---------------------- | ---- | --------------------------------------------------- |
+| 未登入                 | 401  | `{ "detail": "Authentication credentials were not provided." }` |
+| 非教師/管理員          | 403  | `{ "message": "Forbidden." }`                       |
+| 非授課教師操作他人課程 | 403  | `{ "message": "You are not in this course." }`      |
+| 課程不存在             | 404  | `{ "message": "Course not found." }`                |
+| 邀請代碼錯誤/失效      | 400  | `{ "message": "Invalid join code." }`               |
+
+**cURL 測試**：
+```bash
+curl -X DELETE http://127.0.0.1:8000/course/42/invite-code/XYZ12AB/ \
+    -H "Authorization: Bearer <access>"
+```
+
+---
+
 ## 課程助教分配 API
 
 **路徑**：`POST /course/<course_id>/assign-ta/`
