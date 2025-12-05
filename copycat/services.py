@@ -1,6 +1,7 @@
 import mosspy
 import os
 import tempfile
+import logging
 from django.conf import settings
 from .models import CopycatReport
 from submissions.models import Submission
@@ -10,6 +11,8 @@ try:
     MOSS_USER_ID = settings.MOSS_USER_ID
 except AttributeError:
     raise ImproperlyConfigured("MOSS_USER_ID must be set in Django settings.")
+
+logger = logging.getLogger(__name__)
 
 
 # 1. 語言映射表 (API 字串 -> 資料庫 Integer)
