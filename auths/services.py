@@ -1,11 +1,7 @@
-# auths/services.py
-
 import secrets
 import hashlib
 
-# 定義 Token 的固定前綴和長度
-TOKEN_PREFIX = "ctp"  # Copycat Token Prefix
-TOKEN_LENGTH_BYTES = 32  # 產生 32 bytes 的隨機資料，轉換後約為 43 個 URL 安全字元
+TOKEN_LENGTH_BYTES = 32 
 
 def generate_api_token():
     """
@@ -17,10 +13,8 @@ def generate_api_token():
                                 (例如: "ctp_aBcDeFgHiJkLmNoPqRsT...")
             - token_hash (str): Token 的 SHA256 雜湊值，用於儲存在資料庫中。
     """
-    # 1. 生成 URL 安全的隨機字串
     random_part = secrets.token_urlsafe(TOKEN_LENGTH_BYTES)
     
-    # 2. 組合完整的 Token
     full_token = f"{TOKEN_PREFIX}_{random_part}"
     
     # 3. 對完整的 Token 進行 SHA256 雜湊運算
