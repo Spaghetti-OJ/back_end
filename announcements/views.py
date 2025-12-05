@@ -10,16 +10,49 @@ from .serializers import (
     SystemAnnouncementSerializer,
 )
 
+PUBLIC_DISCUSSION_COURSE_NAME = "公開討論區"
+PUBLIC_DISCUSSION_COURSE_ALIAS_ID = "0"
+
 
 class CourseAnnouncementBaseView(generics.GenericAPIView):
     serializer_class = SystemAnnouncementSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_permissions(self):
+        course_id = self.kwargs.get("course_id")
+        # Early return for public discussion course alias
+        if str(course_id) == PUBLIC_DISCUSSION_COURSE_ALIAS_ID:
+            return [permissions.AllowAny()]
+        # If course_id is None, return default permissions without querying DB
+        if course_id is None:
+            return [permission() for permission in self.permission_classes]
+        course = self._get_course(course_id=course_id)
+        if course and course.name == PUBLIC_DISCUSSION_COURSE_NAME:
+            return [permissions.AllowAny()]
+        return [permission() for permission in self.permission_classes]
+
     def _get_course(self, *, course_id):
+        course_identifier = str(course_id)
+        cached_course = getattr(self, "_course_cache", None)
+        cached_key = getattr(self, "_course_cache_key", None)
+        if cached_course and cached_key == course_identifier:
+            return cached_course
+
+        if course_identifier == PUBLIC_DISCUSSION_COURSE_ALIAS_ID:
+            course = Courses.objects.filter(name=PUBLIC_DISCUSSION_COURSE_NAME).first()
+            if course is None:
+                return None
+            self._course_cache = course
+            self._course_cache_key = course_identifier
+            return course
+
         try:
-            return Courses.objects.get(pk=course_id)
+            course = Courses.objects.get(pk=course_id)
         except Courses.DoesNotExist:
             return None
+        self._course_cache = course
+        self._course_cache_key = course_identifier
+        return course
 
 
 def _user_has_grade_permission(user, course: Courses) -> bool:
