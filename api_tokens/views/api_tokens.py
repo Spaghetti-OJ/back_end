@@ -66,9 +66,9 @@ class ApiTokenListView(APIView):
 
 class ApiTokenDetailView(APIView):
     """
-    處理對 API Tokens 的請求。
-    - GET: 列出當前登入使用者的所有 API Tokens。
-    - POST: 為當前使用者建立一個新的 API Token。
+    處理單一 API Token 的請求。
+    - GET: 取得指定 Token 的詳細資訊
+    - DELETE: 刪除指定的 Token
     """
     
     authentication_classes = [SessionAuthentication, ApiTokenAuthentication]

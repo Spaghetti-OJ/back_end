@@ -4,18 +4,12 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser
 from rest_framework.authentication import SessionAuthentication
 from api_tokens.authentication import ApiTokenAuthentication
-# if we need to add it in api token
-# from api_tokens.authentication import ApiTokenAuthentication
 
 from .models import CopycatReport
 from submissions.models import Submission
 from problems.models import Problems
 from .services import run_moss_check, LANG_DB_MAP
 
-try:
-    from problems.models import Problems
-except ImportError:
-    Problems = None
 
 # ===================================================================
 def api_response(data=None, message="OK", status_code=200):
