@@ -20,9 +20,13 @@ class CourseAnnouncementBaseView(generics.GenericAPIView):
 
     def get_permissions(self):
         course_id = self.kwargs.get("course_id")
+        # Early return for public discussion course alias
         if str(course_id) == PUBLIC_DISCUSSION_COURSE_ALIAS_ID:
             return [permissions.AllowAny()]
-        course = self._get_course(course_id=course_id) if course_id else None
+        # If course_id is None, return default permissions without querying DB
+        if course_id is None:
+            return [permission() for permission in self.permission_classes]
+        course = self._get_course(course_id=course_id)
         if course and course.name == PUBLIC_DISCUSSION_COURSE_NAME:
             return [permissions.AllowAny()]
         return [permission() for permission in self.permission_classes]
