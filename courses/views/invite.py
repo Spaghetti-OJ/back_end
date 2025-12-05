@@ -54,7 +54,10 @@ class CourseInviteCodeView(APIView):
             return permission_error
 
         normalized_code = (code or "").strip().upper()
-        if course.join_code is None or normalized_code != course.join_code:
+        if course.join_code is None:
+            # Already deleted; idempotent success
+            return api_response(message="Success.", status_code=status.HTTP_200_OK)
+        if normalized_code != course.join_code:
             return api_response(
                 message="Invalid join code.", status_code=status.HTTP_400_BAD_REQUEST
             )
