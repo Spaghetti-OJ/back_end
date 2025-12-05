@@ -44,7 +44,9 @@ def run_moss_check(report_id, problem_id, language='python'):
     """
     背景執行的 MOSS 檢測任務
     """
-    print(f"[Copycat] 開始執行 MOSS 檢測 (Report: {report_id}, Problem: {problem_id}, Lang: {language})")
+    logger.info(f"[Copycat] 開始執行 MOSS 檢測 (Report: {report_id}, Problem: {problem_id}, Lang: {language})")
+    
+    report = None
     
     try:
         
@@ -77,7 +79,7 @@ def run_moss_check(report_id, problem_id, language='python'):
         if len(final_list) < 2:
             raise Exception("提交數量不足 (至少需要 2 位不同的使用者才能比對)")
 
-        print(f"[Copycat] 找到 {len(final_list)} 份有效提交 (已過濾重複使用者)...")
+        logger.info(f"[Copycat] 找到 {len(final_list)} 份有效提交 (已過濾重複使用者)...")
 
         # 5. 準備暫存檔案並加入 MOSS
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -91,22 +93,34 @@ def run_moss_check(report_id, problem_id, language='python'):
                 m.addFile(file_path)
 
             # 6. 發送給 MOSS 伺服器
-            print("[Copycat] 正在上傳至 MOSS 伺服器，請稍候...")
+            logger.info("[Copycat] 正在上傳至 MOSS 伺服器，請稍候...")
             url = m.send() 
             
             # 7. 更新資料庫
-            print(f"[Copycat] 成功！報告網址: {url}")
+            logger.info(f"[Copycat] 成功！報告網址: {url}")
             report.moss_url = url
             report.status = 'success'
             report.save()
 
     except Exception as e:
-        print(f"[Copycat] 失敗: {e}")
+        error_msg = str(e)
+        logger.error(f"[Copycat] 任務失敗: {error_msg}")
         # report = CopycatReport.objects.get(id=report_id) 
         #try-except以防report物件失效
         try:
-            report.status = 'failed'
-            report.error_message = str(e)
-            report.save()
+            if report:
+                report.refresh_from_db()  # 確保獲取最新狀態 (避免覆蓋其他欄位)
+                report.status = 'failed'
+                report.error_message = error_msg
+                report.save()
+            else:
+                # 如果 report 一開始就沒抓到 (例如被刪了)，嘗試重新獲取
+                report = CopycatReport.objects.get(id=report_id)
+                report.status = 'failed'
+                report.error_message = error_msg
+                report.save()
+                
+        except CopycatReport.DoesNotExist:
+            logger.warning(f"[Copycat] 報告 {report_id} 已被刪除，無法更新失敗狀態")
         except Exception as db_error:
-            print(f"[Copycat] 無法更新報告狀態: {db_error}")
+            logger.error(f"[Copycat] 無法更新報告狀態 (DB Error): {db_error}")

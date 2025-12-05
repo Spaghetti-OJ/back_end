@@ -3,7 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser
 from rest_framework.authentication import SessionAuthentication
-
+from api_tokens.authentication import ApiTokenAuthentication
 # if we need to add it in api token
 # from api_tokens.authentication import ApiTokenAuthentication
 
@@ -24,7 +24,7 @@ def api_response(data=None, message="OK", status_code=200):
     return Response({"data": data, "message": message, "status": status_str}, status=status_code)
 
 class CopycatView(APIView):
-    authentication_classes = [SessionAuthentication]
+    authentication_classes = [SessionAuthentication, ApiTokenAuthentication]
     permission_classes = [IsAdminUser]
 
     def post(self, request):
