@@ -66,12 +66,13 @@ class SystemAnnouncementSerializer(serializers.ModelSerializer):
 
 class AnnouncementCreateSerializer(serializers.ModelSerializer):
     course_id = serializers.PrimaryKeyRelatedField(queryset=Courses.objects.all())
+    annId = serializers.IntegerField(source="id", read_only=True)
 
     class Meta:
         model = Announcements
-        fields = ("title", "content", "course_id", "is_pinned")
+        fields = ("annId", "title", "content", "course_id", "is_pinned")
         extra_kwargs = {"is_pinned": {"required": False}}
-
+        
 
 class AnnouncementUpdateSerializer(serializers.Serializer):
     annId = serializers.IntegerField()

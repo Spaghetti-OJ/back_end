@@ -38,11 +38,14 @@ urlpatterns = [
     path('editorials/', include('submissions.editorial_urls')),
     path('submission/', include('submissions.urls')),
     path('ranking/', submission_views.ranking_view, name='ranking'),
+    path('stats/user/<uuid:user_id>/', submission_views.user_stats_view, name='user-stats-root'),
     path('api-tokens/', include('api_tokens.urls')),
     path('profile/', include('profiles.urls')),
     path('homework/',include('assignments.urls')),
+    path('schema-viewer/', include('schema_viewer.urls')),
     path('editor/', include('editor.urls')),
     path('api-auth/', include('rest_framework.urls')),
+    path('copycat/', include('copycat.urls')),
     
     ## Swagger API Documentation URLs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

@@ -42,6 +42,24 @@ class CourseAnnouncementAPITestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_public_discussion_allows_anonymous_access(self):
+        public_course = Courses.objects.create(name="公開討論區", teacher_id=self.teacher)
+        self._create_announcement(course=public_course, title="Public Announcement")
+
+        response = self.client.get(self.url(course_id=public_course.id))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["data"][0]["title"], "Public Announcement")
+
+    def test_public_discussion_alias_id_zero(self):
+        public_course = Courses.objects.create(name="公開討論區", teacher_id=self.teacher)
+        self._create_announcement(course=public_course, title="Alias Zero Announcement")
+
+        response = self.client.get(self.url(course_id=0))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["data"][0]["title"], "Alias Zero Announcement")
+
     def test_lists_pinned_first_then_latest(self):
         now = timezone.now()
         pinned = self._create_announcement(title="Pinned", is_pinned=True)
@@ -260,6 +278,30 @@ class CourseAnnouncementDetailAPITestCase(APITestCase):
         response = self.client.get(self.url(ann_id=announcement.id))
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_public_discussion_detail_allows_anonymous_access(self):
+        public_course = Courses.objects.create(name="公開討論區", teacher_id=self.teacher)
+        announcement = self._create_announcement(
+            course=public_course, title="Public Detail"
+        )
+
+        response = self.client.get(
+            self.url(course_id=public_course.id, ann_id=announcement.id)
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["data"][0]["title"], "Public Detail")
+
+    def test_public_discussion_detail_alias_id_zero(self):
+        public_course = Courses.objects.create(name="公開討論區", teacher_id=self.teacher)
+        announcement = self._create_announcement(
+            course=public_course, title="Alias Zero Detail"
+        )
+
+        response = self.client.get(self.url(course_id=0, ann_id=announcement.id))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["data"][0]["title"], "Alias Zero Detail")
 
     def test_returns_single_announcement_payload(self):
         announcement = self._create_announcement(is_pinned=True)
