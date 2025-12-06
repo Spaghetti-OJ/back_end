@@ -210,6 +210,97 @@ class TestCasesViewSet(viewsets.ModelViewSet):
         self._ensure_owner(subtask)
         instance.delete()
 
+
+class ProblemTestCaseListCreateView(APIView):
+    """
+    GET /problem/<problemId>/test-cases — 取得測資列表（屬於此題目的所有子題的測資）
+    POST /problem/<problemId>/test-cases — 新增測資（需指定 subtask_id，且該子題必須隸屬此題目）
+    權限：owner / 課程 TA / 教師 / 管理員（POST）；GET 允許匿名但僅在題目可見時回傳（與詳情同規則）。
+    """
+    permission_classes = []
+
+    def _can_view_problem(self, problem, user):
+        visibility = getattr(problem, 'is_public', 'hidden')
+        legacy_public = visibility in (True, 1)
+        visibility_normalized = 'public' if legacy_public else visibility
+        if visibility_normalized == 'public':
+            return True
+        if not user.is_authenticated:
+            return False
+        if user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher'] or problem.creator_id == user:
+            return True
+        if visibility_normalized == 'course' and problem.course_id:
+            from courses.models import Course_members
+            return Course_members.objects.filter(course_id=problem.course_id, user_id=user).exists()
+        return False
+
+    def get(self, request, pk: int):
+        problem = get_object_or_404(Problems, pk=pk)
+        if not self._can_view_problem(problem, request.user):
+            return api_response(None, "Not enough permission", status_code=403)
+        subtasks = Problem_subtasks.objects.filter(problem_id=problem).values_list('id', flat=True)
+        tcs = Test_cases.objects.filter(subtask_id_id__in=list(subtasks)).order_by('subtask_id_id', 'idx')
+        return api_response(TestCaseSerializer(tcs, many=True).data, "OK", status_code=200)
+
+    def post(self, request, pk: int):
+        if not request.user.is_authenticated:
+            return api_response(None, "Authentication required.", status_code=401)
+        problem = get_object_or_404(Problems, pk=pk)
+        if not _has_problem_manage_permission(problem, request.user):
+            return api_response(None, "Not enough permission", status_code=403)
+        # 需指定 subtask_id，且該子題必須屬於此題目
+        subtask_id = request.data.get('subtask_id') or request.data.get('subtaskId')
+        if not subtask_id:
+            return api_response({"errors": {"subtask_id": "required"}}, "Validation error", status_code=422)
+        try:
+            subtask_id_int = int(subtask_id)
+        except (ValueError, TypeError):
+            return api_response({"errors": {"subtask_id": "must be integer"}}, "Validation error", status_code=422)
+        subtask = Problem_subtasks.objects.filter(pk=subtask_id_int, problem_id=problem).first()
+        if not subtask:
+            return api_response(None, "Subtask not found or not belonging to this problem", status_code=404)
+        data = request.data.copy()
+        data['subtask_id'] = subtask.id
+        ser = TestCaseSerializer(data=data)
+        if not ser.is_valid():
+            return api_response({"errors": ser.errors}, "Validation error", status_code=422)
+        obj = ser.save()
+        return api_response(TestCaseSerializer(obj).data, "Test case created", status_code=201)
+
+
+class ProblemTestCaseDetailView(APIView):
+    """
+    PUT /problem/<problemId>/test-cases/<caseId> — 修改測資
+    DELETE /problem/<problemId>/test-cases/<caseId> — 刪除測資
+    權限：owner / 課程 TA / 教師 / 管理員。
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_case_with_permission(self, problem_id: int, case_id: int, user):
+        case = get_object_or_404(Test_cases, pk=case_id)
+        subtask = case.subtask_id
+        if subtask.problem_id_id != problem_id:
+            from rest_framework.exceptions import NotFound
+            raise NotFound("Test case does not belong to this problem")
+        problem = subtask.problem_id
+        if _has_problem_manage_permission(problem, user):
+            return case
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("Not enough permission")
+
+    def put(self, request, pk: int, case_id: int):
+        case = self._get_case_with_permission(pk, case_id, request.user)
+        ser = TestCaseSerializer(case, data=request.data, partial=True)
+        if not ser.is_valid():
+            return api_response({"errors": ser.errors}, "Validation error", status_code=422)
+        ser.save()
+        return api_response(TestCaseSerializer(case).data, "Test case updated", status_code=200)
+
+    def delete(self, request, pk: int, case_id: int):
+        case = self._get_case_with_permission(pk, case_id, request.user)
+        case.delete()
+        return api_response(None, "Test case deleted", status_code=204)
+
 class TagListCreateView(APIView):
     """GET /tags/ 取得所有標籤
     POST /tags/ 建立新標籤（需要登入，建議僅教師/管理員；此處暫允任何登入使用者）

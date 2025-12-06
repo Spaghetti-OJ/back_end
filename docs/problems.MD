@@ -197,6 +197,63 @@ curl "http://127.0.0.1:8000/problem/30/meta?token=$SANDBOX_TOKEN" | jq
 
 ---
 
+## 題目巢狀「測資資料表」CRUD（Test_cases）
+
+此段為「資料表層級」管理子題底下的個別測資（與上面的題目層級 Zip 機制並行）。
+
+- 路徑：
+  - `GET /problem/<problem_id>/test-cases` — 取得此題目所有子題的測資清單
+  - `POST /problem/<problem_id>/test-cases` — 新增測資（需提供 `subtask_id` 且必須隸屬此題目）
+  - `PUT /problem/<problem_id>/test-cases/<case_id>` — 修改測資
+  - `DELETE /problem/<problem_id>/test-cases/<case_id>` — 刪除測資
+
+- 權限：
+  - `GET` 允許匿名，但僅在題目對該使用者可見時返回（與題目詳情相同可視規則）。
+  - `POST/PUT/DELETE` 需要題目擁有者 / 課程 TA / 教師 / 管理員。
+
+- 驗證重點：
+  - `POST` 時必須提供 `subtask_id`（或 `subtaskId`），且該子題必須屬於此題目；否則回 404。
+  - `PUT/DELETE` 時會驗證該測資所屬子題是否隸屬此題目；不符則回 404。
+
+**cURL 範例**
+
+取得測資列表：
+```bash
+curl "http://127.0.0.1:8000/problem/2/test-cases"
+```
+
+新增測資到指定子題（需登入與權限）：
+```bash
+curl -X POST "http://127.0.0.1:8000/problem/2/test-cases" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subtask_id": 3,
+    "idx": 1,
+    "input_path": "0001.in",
+    "output_path": "0001.out",
+    "status": "ready"
+  }'
+```
+
+修改測資：
+```bash
+curl -X PUT "http://127.0.0.1:8000/problem/2/test-cases/10" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "status": "disabled" }'
+```
+
+刪除測資：
+```bash
+curl -X DELETE "http://127.0.0.1:8000/problem/2/test-cases/10" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+> 備註：題目層級 Zip（`/initiate-test-case-upload`、`/complete-test-case-upload`、`/test-case`）提供給 Sandbox 與下載使用；資料表 CRUD 用於後台維護子題級測資。兩者並行，不互相覆蓋。
+
+---
+
 ## 建立題目（管理）
 
 題目有三種可見性（欄位 `is_public`）：
