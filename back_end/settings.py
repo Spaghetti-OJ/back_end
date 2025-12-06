@@ -45,7 +45,6 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
-    "schema_viewer",
     "drf_spectacular",  
     "corsheaders",
     "courses.apps.CoursesConfig",
