@@ -35,6 +35,10 @@ CSRF_TRUSTED_ORIGINS = [h.strip() for h in os.getenv("CSRF_TRUSTED_ORIGINS", "")
 # Application definition
 
 INSTALLED_APPS = [
+    # Unfold admin 必須放在 django.contrib.admin 之前
+    'unfold',
+    'unfold.contrib.filters',
+    'unfold.contrib.forms',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -60,6 +64,252 @@ INSTALLED_APPS = [
     "copycat",
     "search",
 ]
+
+# Django Unfold Admin 配置
+from django.templatetags.static import static
+from django.urls import reverse_lazy
+
+UNFOLD = {
+    "SITE_TITLE": "NOJ Admin",
+    "SITE_HEADER": "NOJ Online Judge",
+    "SITE_SUBHEADER": "超級管理員後台",
+    "SITE_URL": "/",
+    # "SITE_ICON": lambda request: static("icon.svg"),  # 可選：自訂 icon
+    "SITE_SYMBOL": "school",  # Material Symbols 圖示
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": True,
+    "ENVIRONMENT": "back_end.settings.environment_callback",
+    "DASHBOARD_CALLBACK": "back_end.settings.dashboard_callback",
+    "COLORS": {
+        "primary": {
+            "50": "250 245 255",
+            "100": "243 232 255",
+            "200": "233 213 255",
+            "300": "216 180 254",
+            "400": "192 132 252",
+            "500": "168 85 247",
+            "600": "147 51 234",
+            "700": "126 34 206",
+            "800": "107 33 168",
+            "900": "88 28 135",
+            "950": "59 7 100",
+        },
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": True,
+        "navigation": [
+            {
+                "title": "首頁",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "儀表板",
+                        "icon": "dashboard",
+                        "link": reverse_lazy("admin:index"),
+                    },
+                ],
+            },
+            {
+                "title": "使用者管理",
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": "使用者",
+                        "icon": "person",
+                        "link": reverse_lazy("admin:user_user_changelist"),
+                    },
+                    {
+                        "title": "使用者資料",
+                        "icon": "badge",
+                        "link": reverse_lazy("admin:user_userprofile_changelist"),
+                    },
+                    {
+                        "title": "API Tokens",
+                        "icon": "key",
+                        "link": reverse_lazy("admin:api_tokens_apitoken_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "課程管理",
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": "課程",
+                        "icon": "class",
+                        "link": reverse_lazy("admin:courses_courses_changelist"),
+                    },
+                    {
+                        "title": "課程成員",
+                        "icon": "groups",
+                        "link": reverse_lazy("admin:courses_course_members_changelist"),
+                    },
+                    {
+                        "title": "課程公告",
+                        "icon": "campaign",
+                        "link": reverse_lazy("admin:courses_announcements_changelist"),
+                    },
+                    {
+                        "title": "成績",
+                        "icon": "grade",
+                        "link": reverse_lazy("admin:courses_coursegrade_changelist"),
+                    },
+                    {
+                        "title": "批次匯入",
+                        "icon": "upload_file",
+                        "link": reverse_lazy("admin:courses_batch_imports_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "題目管理",
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": "題目",
+                        "icon": "quiz",
+                        "link": reverse_lazy("admin:problems_problems_changelist"),
+                    },
+                    {
+                        "title": "子任務",
+                        "icon": "format_list_numbered",
+                        "link": reverse_lazy("admin:problems_problem_subtasks_changelist"),
+                    },
+                    {
+                        "title": "測試案例",
+                        "icon": "fact_check",
+                        "link": reverse_lazy("admin:problems_test_cases_changelist"),
+                    },
+                    {
+                        "title": "標籤",
+                        "icon": "label",
+                        "link": reverse_lazy("admin:problems_tags_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "作業管理",
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": "作業",
+                        "icon": "assignment",
+                        "link": reverse_lazy("admin:assignments_assignments_changelist"),
+                    },
+                    {
+                        "title": "作業題目",
+                        "icon": "assignment_add",
+                        "link": reverse_lazy("admin:assignments_assignment_problems_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "提交管理",
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": "提交記錄",
+                        "icon": "send",
+                        "link": reverse_lazy("admin:submissions_submission_changelist"),
+                    },
+                    {
+                        "title": "提交結果",
+                        "icon": "checklist",
+                        "link": reverse_lazy("admin:submissions_submissionresult_changelist"),
+                    },
+                    {
+                        "title": "題解",
+                        "icon": "lightbulb",
+                        "link": reverse_lazy("admin:submissions_editorial_changelist"),
+                    },
+                    {
+                        "title": "自訂測試",
+                        "icon": "science",
+                        "link": reverse_lazy("admin:submissions_customtest_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "系統設定",
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": "群組",
+                        "icon": "group",
+                        "link": reverse_lazy("admin:auth_group_changelist"),
+                    },
+                ],
+            },
+        ],
+    },
+    "TABS": [
+        {
+            "models": ["user.user"],
+            "items": [
+                {
+                    "title": "使用者",
+                    "link": reverse_lazy("admin:user_user_changelist"),
+                },
+                {
+                    "title": "使用者資料",
+                    "link": reverse_lazy("admin:user_userprofile_changelist"),
+                },
+            ],
+        },
+        {
+            "models": ["problems.problems", "problems.problem_subtasks", "problems.test_cases"],
+            "items": [
+                {
+                    "title": "題目",
+                    "link": reverse_lazy("admin:problems_problems_changelist"),
+                },
+                {
+                    "title": "子任務",
+                    "link": reverse_lazy("admin:problems_problem_subtasks_changelist"),
+                },
+                {
+                    "title": "測試案例",
+                    "link": reverse_lazy("admin:problems_test_cases_changelist"),
+                },
+            ],
+        },
+    ],
+}
+
+def environment_callback(request):
+    """
+    回傳當前環境標籤
+    """
+    from django.conf import settings as conf_settings
+    if conf_settings.DEBUG:
+        return ["開發環境", "warning"]
+    return ["正式環境", "success"]
+
+def dashboard_callback(request, context):
+    """
+    自訂儀表板上下文
+    """
+    from user.models import User
+    from problems.models import Problems
+    from submissions.models import Submission
+    from courses.models import Courses
+    
+    context.update({
+        "custom_stats": [
+            {"title": "使用者總數", "value": User.objects.count(), "icon": "person"},
+            {"title": "題目總數", "value": Problems.objects.count(), "icon": "quiz"},
+            {"title": "提交總數", "value": Submission.objects.count(), "icon": "send"},
+            {"title": "課程總數", "value": Courses.objects.count(), "icon": "class"},
+        ],
+    })
+    return context
 
 AUTH_USER_MODEL = 'user.User'
 REST_FRAMEWORK = {
