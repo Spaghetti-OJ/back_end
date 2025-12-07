@@ -207,3 +207,22 @@ SPECTACULAR_SETTINGS = {
 
 # MOSS User ID(環境變數讀取)
 MOSS_USER_ID = int(os.getenv('MOSS_USER_ID', 0))
+# ====================
+# Celery Configuration
+# ====================
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://127.0.0.1:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 分鐘硬限制
+
+# ====================
+# Sandbox Configuration
+# ====================
+SANDBOX_API_URL = os.getenv('SANDBOX_API_URL', 'http://34.81.90.111:8000')
+SANDBOX_TIMEOUT = int(os.getenv('SANDBOX_TIMEOUT', '30'))  # API 請求超時（秒）
+SANDBOX_API_KEY = os.getenv('SANDBOX_API_KEY', '')  # API Key for authentication
+SANDBOX_CALLBACK_URL = os.getenv('SANDBOX_CALLBACK_URL', 'http://localhost:8000/api/submission/callback/')
