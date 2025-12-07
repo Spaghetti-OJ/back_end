@@ -1,6 +1,5 @@
 # Sandbox 整合開發日誌
 日期: 2025年12月7日
-開發者: AI Assistant
 任務: 整合 Django Backend 與 Sandbox 判題系統
 
 ## 開發目標
