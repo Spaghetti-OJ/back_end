@@ -235,8 +235,8 @@ cURL 測試範例：
 
     {
       "data": {
-        "assignment_id": 1,
-        "title": "HW1 - Intro",
+        "homework_id": 1,
+        "homework_title": "HW1 - Intro",
         "course_id": "469e303a-6d9e-4dda-831d-afe4c1ffdab5",
         "items": [
           {
