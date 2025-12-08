@@ -30,6 +30,8 @@ DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-change-me")
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
 
+CSRF_TRUSTED_ORIGINS = [h.strip() for h in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if h.strip()]
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -43,6 +45,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+    "schema_viewer",
     "drf_spectacular",  
     "corsheaders",
     "courses.apps.CoursesConfig",
@@ -54,6 +57,8 @@ INSTALLED_APPS = [
     "announcements",
     "profiles",
     "editor",
+    "copycat",
+    "search",
 ]
 
 AUTH_USER_MODEL = 'user.User'
@@ -199,3 +204,6 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
 
 }
+
+# MOSS User ID(環境變數讀取)
+MOSS_USER_ID = int(os.getenv('MOSS_USER_ID', 0))

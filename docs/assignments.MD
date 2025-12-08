@@ -192,7 +192,102 @@ cURL 測試範例：
     curl -X DELETE "http://127.0.0.1:8000/homework/<HW_ID>/" ^
       -H "Authorization: Bearer <ACCESS_TOKEN>"
 
-## 取得作業統計資訊 API
+## 取得作業提交列表 API
+
+路徑
+
+`GET /homework/<int:homework_id>/submissions`
+
+說明
+
+取得指定作業底下的所有提交紀錄（submissions）列表。
+
+-   老師 / TA：可查看所有學生的提交
+-   學生：僅能查看自己的提交
+-   支援 query 過濾：`user_id`、`status`
+
+------------------------------------------------------------------------
+
+Query Parameters
+
+  -----------------------------------------------------------------------------------------
+  參數名                       型別                必填      說明
+  ---------------------------- -------------- -------------- ------------------------------
+  user_id                      uuid                 ❌       僅老師 / TA
+                                                             有效，用於查看特定學生的提交
+
+  status                       str                  ❌       依提交狀態過濾（例如
+                                                             `"0"`=Accepted、`"1"`=Wrong
+                                                             Answer 等）
+  -----------------------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+成功回應（200 OK）
+
+``` json
+{
+  "data": {
+    "homeworkId": 1,
+    "items": [
+      {
+        "id": "uuid",
+        "problem_id": 1,
+        "user_id": "uuid",
+        "language_type": 2,
+        "status": "0",
+        "score": 60,
+        "max_score": 100,
+        "execution_time": 300,
+        "memory_usage": 2048,
+        "is_late": false,
+        "penalty_applied": "0.00",
+        "attempt_number": 1,
+        "judge_server": null,
+        "created_at": "2025-11-23T18:39:54.032501Z",
+        "judged_at": null,
+        "username": "stu1",
+        "language": "Python",
+        "status_display": "Accepted"
+      }
+    ]
+  },
+  "message": "get submissions",
+  "status": "ok"
+}
+```
+
+------------------------------------------------------------------------
+
+可能錯誤
+
+找不到作業（404）
+
+``` json
+{
+  "data": null,
+  "message": "homework not exists",
+  "status": "error"
+}
+```
+
+權限不足（403）
+
+``` json
+{
+  "data": null,
+  "message": "user must be the teacher or ta of this course",
+  "status": "error"
+}
+```
+
+------------------------------------------------------------------------
+
+cURL 範例（僅針對本 API）
+
+``` bash
+curl -X GET "http://127.0.0.1:8000/homework/1/submissions"   -H "Authorization: Bearer <ACCESS_TOKEN>"   -H "Accept: application/json"
+```
 
 **路徑：**
 

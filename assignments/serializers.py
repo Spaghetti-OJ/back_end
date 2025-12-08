@@ -7,6 +7,7 @@ from datetime import datetime
 from assignments.models import Assignments, Assignment_problems
 from courses.models import Courses
 from problems.models import Problems
+from submissions.models import Submission
 from rest_framework import serializers
 
 def to_dt_from_epoch(value: Optional[int]):
@@ -196,3 +197,69 @@ class HomeworkStatsSerializer(serializers.Serializer):
 
     overview = serializers.DictField()
     problems = HomeworkProblemStatsSerializer(many=True)
+
+class ScoreboardProblemSerializer(serializers.Serializer):
+    problem_id = serializers.IntegerField()
+    best_score = serializers.IntegerField()
+    max_possible_score = serializers.IntegerField()
+    solve_status = serializers.CharField()
+
+class ScoreboardRowSerializer(serializers.Serializer):
+    rank = serializers.IntegerField()
+    user_id = serializers.UUIDField()
+    username = serializers.CharField()
+    real_name = serializers.CharField()
+
+    total_score = serializers.IntegerField()
+    max_total_score = serializers.IntegerField()
+    is_late = serializers.BooleanField()
+
+    first_ac_time = serializers.DateTimeField(allow_null=True)
+    last_submission_time = serializers.DateTimeField(allow_null=True)
+
+    problems = ScoreboardProblemSerializer(many=True)
+
+class HomeworkScoreboardSerializer(serializers.Serializer):
+    assignment_id = serializers.IntegerField()
+    title = serializers.CharField()
+    course_id = serializers.UUIDField()
+    items = ScoreboardRowSerializer(many=True)
+
+class HomeworkSubmissionListItemSerializer(serializers.ModelSerializer):
+    """
+    GET /homework/{id}/submissions 用的單筆 submission 輸出格式
+    """
+
+    # 跟 Table Users 對應：Users.id / Users.username
+    user_id = serializers.UUIDField(source="user.id", read_only=True)
+    username = serializers.CharField(source="user.username", read_only=True)
+
+    # 額外的 display 欄位
+    language = serializers.CharField(source="get_language_type_display", read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+
+    class Meta:
+        model = Submission
+        fields = [
+            "id",
+            "problem_id",
+            "user_id",
+            "language_type",
+            "status",
+            "score",
+            "max_score",
+            "execution_time",
+            "memory_usage",
+            "is_late",
+            "penalty_applied",
+            "attempt_number",
+            "judge_server",
+            "created_at",
+            "judged_at",
+
+            # 額外資訊
+            "username",
+            "language",
+            "status_display",
+        ]
+        read_only_fields = fields

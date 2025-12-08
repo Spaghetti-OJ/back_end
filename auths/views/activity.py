@@ -1,3 +1,5 @@
+import ipaddress
+import logging   
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -9,6 +11,8 @@ from rest_framework.authentication import SessionAuthentication
 
 from ..models import UserActivity
 from ..serializers.activity import UserActivitySerializer
+
+logger = logging.getLogger(__name__)
 
 # ===================================================================
 # ⬇️ HELPER: 統一 API 回應格式 ⬇️
@@ -40,12 +44,26 @@ class UserActivityCreateView(APIView):
         return api_response(serializer.errors, "資料格式錯誤", status_code=status.HTTP_400_BAD_REQUEST)
 
     def get_client_ip(self, request):
+        """
+        從 request 取得真實 IP 的輔助函式 (強化版)。
+        驗證 IP 格式並處理多重代理的情況。
+        """
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
         if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
+            for ip in [ip.strip() for ip in x_forwarded_for.split(',')]:
+                try:
+                    ipaddress.ip_address(ip)
+                    return ip
+                except ValueError:
+                    continue
+        
+        ip = request.META.get('REMOTE_ADDR')
+        try:
+            ipaddress.ip_address(ip)
+            return ip
+        except Exception:
+            logger.warning("Could not determine client IP address for request %s. Returning 'unknown'.", request)
+            return 'unknown' # Fallback
 
 class UserActivityListView(APIView):
     """
