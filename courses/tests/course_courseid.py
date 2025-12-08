@@ -21,7 +21,7 @@ class CourseDetailAPITestCase(APITestCase):
         self.detail_course_name = f"DetailCourse_{self.unique}"
         self.member_course_name = f"MemberCourse_{self.unique}"
         self.closed_course_name = f"ClosedCourse_{self.unique}"
-        self.unknown_course_id = uuid.uuid4()
+        self.unknown_course_id = 999999
 
         self.teacher = User.objects.create_user(
             username=f"teacher_one_{self.unique}",
@@ -78,7 +78,7 @@ class CourseDetailAPITestCase(APITestCase):
         )
 
         self.client.force_authenticate(user=self.teacher)
-        response = self.client.get(self._detail_url(str(course.id)))
+        response = self.client.get(self._detail_url(course.id))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["message"], "Success.")
@@ -99,7 +99,7 @@ class CourseDetailAPITestCase(APITestCase):
         )
         self.client.force_authenticate(user=self.student)
 
-        response = self.client.get(self._detail_url(str(course.id)))
+        response = self.client.get(self._detail_url(course.id))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["message"], "Success.")
@@ -108,7 +108,7 @@ class CourseDetailAPITestCase(APITestCase):
         course = self._create_course(name=self.closed_course_name, teacher=self.teacher)
         self.client.force_authenticate(user=self.student)
 
-        response = self.client.get(self._detail_url(str(course.id)))
+        response = self.client.get(self._detail_url(course.id))
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(response.data["message"], "You are not in this course.")
@@ -116,7 +116,7 @@ class CourseDetailAPITestCase(APITestCase):
     def test_course_detail_not_found(self):
         self.client.force_authenticate(user=self.teacher)
 
-        response = self.client.get(self._detail_url(str(self.unknown_course_id)))
+        response = self.client.get(self._detail_url(self.unknown_course_id))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.data["message"], "Course not found.")
@@ -143,7 +143,7 @@ class CourseDetailAPITestCase(APITestCase):
 
         self.client.force_authenticate(user=self.teacher)
         response = self.client.put(
-            self._detail_url(str(course.id)),
+            self._detail_url(course.id),
             {"TAs": [new_ta.username]},
             format="json",
         )
@@ -159,7 +159,7 @@ class CourseDetailAPITestCase(APITestCase):
         self.client.force_authenticate(user=self.teacher)
 
         response = self.client.put(
-            self._detail_url(str(course.id)),
+            self._detail_url(course.id),
             {"TAs": ["unknown_ta_user"]},
             format="json",
         )
@@ -172,7 +172,7 @@ class CourseDetailAPITestCase(APITestCase):
         self.client.force_authenticate(user=self.teacher)
 
         response = self.client.put(
-            self._detail_url(str(course.id)),
+            self._detail_url(course.id),
             {"TAs": []},
             format="json",
         )
@@ -185,7 +185,7 @@ class CourseDetailAPITestCase(APITestCase):
         self.client.force_authenticate(user=self.student)
 
         response = self.client.put(
-            self._detail_url(str(course.id)),
+            self._detail_url(course.id),
             {"TAs": []},
             format="json",
         )
@@ -203,7 +203,7 @@ class CourseDetailAPITestCase(APITestCase):
         self.client.force_authenticate(user=self.teacher)
 
         response = self.client.put(
-            f"{self._detail_url(str(course.id))}?student={self.student.id}",
+            f"{self._detail_url(course.id)}?student={self.student.id}",
             {},
             format="json",
         )
@@ -222,7 +222,7 @@ class CourseDetailAPITestCase(APITestCase):
         self.client.force_authenticate(user=self.teacher)
 
         response = self.client.put(
-            f"{self._detail_url(str(course.id))}?student={uuid.uuid4()}",
+            f"{self._detail_url(course.id)}?student={uuid.uuid4()}",
             {},
             format="json",
         )
@@ -242,7 +242,7 @@ class CourseDetailAPITestCase(APITestCase):
         self.client.force_authenticate(user=self.teacher)
 
         response = self.client.put(
-            f"{self._detail_url(str(course.id))}?student={outsider.id}",
+            f"{self._detail_url(course.id)}?student={outsider.id}",
             {},
             format="json",
         )

@@ -1,5 +1,3 @@
-import uuid
-
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
@@ -144,7 +142,7 @@ class CourseGradeViewTests(APITestCase):
     def test_returns_not_found_when_course_missing(self):
         self.client.force_authenticate(self.teacher)
 
-        response = self.client.get(self._url(uuid.uuid4(), self.student))
+        response = self.client.get(self._url(999999, self.student))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.data["message"], "Course not found.")

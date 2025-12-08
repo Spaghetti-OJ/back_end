@@ -17,11 +17,13 @@ from assignments.models import Assignments, Assignment_problems
 from courses.models import Courses, Course_members
 from problems.models import Problems
 from submissions.models import UserProblemStats
+from submissions.models import Submission
 from .serializers import (
     HomeworkCreateSerializer,
     HomeworkDetailSerializer,
     HomeworkUpdateSerializer,
     AddProblemsInSerializer,
+    HomeworkSubmissionListItemSerializer,
     make_list_item_from_instance,
     HomeworkScoreboardSerializer,
 )
@@ -37,6 +39,18 @@ def is_teacher_or_ta(user, course) -> bool:
 def collect_problem_ids(hw: Assignments) -> List[int]:
     return list(
         hw.assignment_problems.order_by("order_index").values_list("problem_id", flat=True)
+    )
+
+# --------- 統一回傳格式 ---------
+def api_response(data=None, message="OK", status_code=200):
+    status_str = "ok" if 200 <= status_code < 400 else "error"
+    return Response(
+        {
+            "data": data,
+            "message": message,
+            "status": status_str,
+        },
+        status=status_code,
     )
 
 # --------- POST /homework/ ---------
@@ -456,4 +470,81 @@ class HomeworkScoreboardView(APIView):
             data=serializer.data,
             message="get homework scoreboard",
             status_code=200,
+    
+class HomeworkSubmissionsListView(APIView):
+    """
+    GET /homework/{homework_id}/submissions — 取得作業的所有提交
+
+    權限：
+      - 老師 / TA：可以看該作業所有學生的 submissions
+      - 學生：只能看到自己在這份作業的 submissions
+
+    支援的 query 參數（可選）：
+      - ?user_id=<UUID>  （只有老師 / TA 有效，用來篩某個學生）
+      - ?status=<str>    （依 Submission.status 篩，例如 'accepted' / 'wrong_answer' 等）
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, homework_id: int):
+        # 1) 找作業（Assignments.id）
+        try:
+            hw = (
+                Assignments.objects
+                .select_related("course")
+                .prefetch_related("assignment_problems")
+                .get(pk=homework_id)
+            )
+        except Assignments.DoesNotExist:
+            return api_response(
+                data=None,
+                message="homework not exists",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 2) 判斷是否為老師 / TA
+        is_staff_like = is_teacher_or_ta(request.user, hw.course)
+
+        # 3) 找出這份作業底下的 problem_id 列表（Assignment_problems.problem_id）
+        problem_ids = collect_problem_ids(hw)
+        if not problem_ids:
+            return api_response(
+                data={
+                    "homeworkId": hw.id,  # ✅ 保留原本的 homeworkId
+                    "items": [],
+                },
+                message="get submissions",
+                status_code=status.HTTP_200_OK,
+            )
+
+        # 4) 以 problem_id 篩選 submissions（Submissions.problem_id）
+        qs = (
+            Submission.objects
+            .filter(problem_id__in=problem_ids)
+            .select_related("user")
+            .order_by("-created_at")
+        )
+
+        # 5) 權限：學生只能看到自己的 submission
+        if not is_staff_like:
+            qs = qs.filter(user=request.user)
+
+        # 6) 額外 query 參數篩選
+        user_id = request.query_params.get("user_id")
+        if user_id and is_staff_like:
+            qs = qs.filter(user_id=user_id)
+
+        status_param = request.query_params.get("status")
+        if status_param is not None:
+            qs = qs.filter(status=status_param)
+
+        # 7) 序列化輸出
+        ser = HomeworkSubmissionListItemSerializer(qs, many=True)
+        data = {
+            "homeworkId": hw.id,  # ✅ 頂層 key 用 homeworkId
+            "items": ser.data,
+        }
+        return api_response(
+            data=data,
+            message="get submissions",
+            status_code=status.HTTP_200_OK,
         )

@@ -3,7 +3,7 @@ from rest_framework import serializers
 from django.core.validators import MaxLengthValidator
 from .models import (
     Submission, SubmissionResult, UserProblemStats, UserProblemSolveStatus,
-    UserProblemQuota, CustomTest, CodeDraft, Editorial, EditorialLike
+    UserProblemQuota, CustomTest, Editorial, EditorialLike
 )
 import hashlib
 
@@ -244,55 +244,6 @@ class CustomTestSerializer(serializers.ModelSerializer):
             'id', 'user', 'status', 'actual_output', 'execution_time', 
             'memory_usage', 'error_message', 'created_at', 'completed_at'
         ]
-
-
-class CodeDraftCreateSerializer(serializers.ModelSerializer):
-    source_code = serializers.CharField(
-        max_length=65535,
-        min_length=1,
-        error_messages={
-            'max_length': '程式碼長度不能超過 64KB',
-            'min_length': '程式碼不能為空',
-        }
-    )
-    
-    language_type = serializers.ChoiceField(
-        choices=CodeDraft.LANGUAGE_CHOICES,
-        error_messages={
-            'invalid_choice': '不支援的程式語言'
-        }
-    )
-    
-    problem_id = serializers.IntegerField(
-        min_value=1,
-        error_messages={
-            'min_value': '題目 ID 必須大於 0'
-        }
-    )
-    
-    class Meta:
-        model = CodeDraft
-        fields = ['problem_id', 'assignment_id', 'language_type', 'source_code', 'title', 'auto_saved']
-    
-    def validate_source_code(self, value):
-        """基本資料品質驗證"""
-        if not value.strip():
-            raise serializers.ValidationError('程式碼不能只包含空白字元')
-        return value
-    
-    def create(self, validated_data):
-        request = self.context['request']
-        validated_data['user'] = request.user
-        return super().create(validated_data)
-
-
-class CodeDraftSerializer(serializers.ModelSerializer):
-    user_username = serializers.CharField(source='user.username', read_only=True)
-    
-    class Meta:
-        model = CodeDraft
-        fields = '__all__'
-        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
 
 
 class EditorialCreateSerializer(serializers.ModelSerializer):
@@ -633,3 +584,17 @@ class SubmissionStdoutSerializer(serializers.Serializer):
             'submission_id': str(instance.id),
             'status': instance.status
         }
+class UserStatusSerializer(serializers.Serializer):
+    """使用者狀態的 Serializer"""
+    
+    user_id = serializers.CharField()
+    username = serializers.CharField()
+    total_solved = serializers.IntegerField()
+    total_submissions = serializers.IntegerField()
+    accept_percent = serializers.FloatField()
+
+    difficulty = serializers.DictField(
+        child=serializers.IntegerField()
+    )
+    
+    beats_percent = serializers.FloatField()

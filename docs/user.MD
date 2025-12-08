@@ -20,7 +20,7 @@
 | `password`   | string |  ✅  | 使用者密碼（後端會雜湊儲存）                                              |
 | `email`      | string |  ✅  | 有效 Email，**唯一**                                             |
 | `real_name`  | string |  ✅  | 最多 150 字元                                                   |
-| `identity`   | string |  ✅  | 身分：`teacher` / `admin` / `student`（**必填**；模型預設仍為 `student`） |
+| `role`   | string |  ✅  | 身分：`teacher` / `admin` / `student`（**必填**；模型預設仍為 `student`） |
 | `student_id` | string |  ❌  | 最多 50 字元（唯一）。若無可省略                                          |
 | `bio`        | string |  ❌  | 自我介紹                                                        |
 
@@ -32,7 +32,7 @@
   "email": "momo@example.com",
   "password": "abc12345",
   "real_name": "小桃",
-  "identity": "student",
+  "role": "student",
   "student_id": "1160001",
   "bio": "我愛娃娃"
 }
@@ -46,7 +46,7 @@
   "username": "momo",
   "email": "momo@example.com",
   "real_name": "小桃",
-  "identity": "student",
+  "role": "student",
   "date_joined": "2025-10-03T07:15:14.123Z",
   "last_login": null
 }
@@ -69,10 +69,10 @@
   ```json
   {"email":["請輸入有效的電子郵件地址。"]}
   ```
-* `identity` 未填或值錯誤：
+* `role` 未填或值錯誤：
 
   ```json
-  {"identity":["此為必需欄位。或值必須為 teacher/admin/student 之一"]}
+  {"role":["此為必需欄位。或值必須為 teacher/admin/student 之一"]}
   ```
 
 **cURL 測試**：
@@ -85,7 +85,7 @@ curl -X POST http://127.0.0.1:8000/auth/signup/ \
     "email":"momo@example.com",
     "password":"abc12345",
     "real_name":"小桃",
-    "identity":"student"
+    "role":"student"
   }'
 ```
 
@@ -341,7 +341,7 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 **路徑**：`GET /auth/me/`
 
 **說明**：
-使用目前登入狀態（Authorization Header 帶入 `Bearer <access>`）取得當前使用者的基本資料，包含 `userid`、`username`、`email`、`role`。
+使用目前登入狀態（Authorization Header 帶入 `Bearer <access>`）取得當前使用者的基本資料，包含 `user_id`、`username`、`email`、`role`。
 
 ### 請求格式
 
@@ -370,7 +370,7 @@ Authorization: Bearer <ACCESS_TOKEN>
   "status": "ok",
   "message": "Get current user",
   "data": {
-    "userid": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
+    "user_id": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
     "username": "momo",
     "email": "momo@example.com",
     "role": "student"
@@ -384,7 +384,7 @@ Authorization: Bearer <ACCESS_TOKEN>
 | --------------- | ------ | ------------------ |
 | `status`        | string | 狀態字串，成功固定為 `"ok"`  |
 | `message`       | string | 描述訊息               |
-| `data.userid`   | string | 使用者在系統中的唯一 ID      |
+| `data.user_id`   | string | 使用者在系統中的唯一 ID      |
 | `data.username` | string | 使用者帳號              |
 | `data.email`    | string | 使用者註冊 email        |
 | `data.role`     | string | 使用者角色（如：`student`） |
@@ -422,7 +422,7 @@ curl -X GET "http://127.0.0.1:8000/auth/me/" \
 > 使用說明：
 >
 > * 建議登入後（呼叫 `POST /auth/session/` 拿到 access）就立刻呼叫一次 `GET /auth/me/`，
->   將回傳的 `userid`、`username`、`email`、`role` 存到前端的全域狀態（例如 Redux / Zustand / Vuex），作為之後顯示使用者名稱或判斷角色權限之用。
+>   將回傳的 `user_id`、`username`、`email`、`role` 存到前端的全域狀態（例如 Redux / Zustand / Vuex），作為之後顯示使用者名稱或判斷角色權限之用。
 > * 若收到 401，請先確認 access token 是否過期，可搭配 `POST /auth/refresh/` 重新取得新的 access。
 
 ---
@@ -455,12 +455,12 @@ curl -X GET "http://127.0.0.1:8000/auth/me/" \
 ```json
 {
   "real_name": "陳天天",
-  "user_name": "momo",
+  "username": "momo",
   "role": "Student",
   "email": "412470100S@gapps.ntnu.edu.tw",
   "user_id": "omuba",
   "student_id": "41247057S",
-  "introduction": "哈囉我是資工116",
+  "bio": "哈囉我是資工116",
   "avatar":null
 }
 ```
@@ -470,12 +470,12 @@ curl -X GET "http://127.0.0.1:8000/auth/me/" \
 | 欄位           | 型別     | 說明                               |
 | ------------ | ------ | -------------------------------- |
 | real_name    | string | 使用者真實姓名                          |
-| user_name    | string | 使用者帳號（username）                  |
+| username    | string | 使用者帳號（username）                  |
 | role         | string | 使用者身份（Student / Teacher / Admin） |
 | email        | string | 使用者電子郵件                          |
 | user_id      | string | 使用者的 ID             |
 | student_id   | string | 學號（若有）                           |
-| introduction | string | 個人簡介                             |
+| bio | string | 個人簡介                             |
 | avatar       | string | 頭像 url                |
 
 ---
@@ -545,11 +545,11 @@ GET /profile/{username}/
 
 ```json
 {
-  "user_name": "momo",
+  "username": "momo",
   "role": "Student",
   "email": "momo@example.com",
   "user_id": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
-  "introduction": "哈囉我是資工116",
+  "bio": "哈囉我是資工116",
   "avatar":null
 }
 ```
@@ -558,11 +558,11 @@ GET /profile/{username}/
 
 | 欄位           | 類型     | 說明                                        |
 | ------------ | ------ | ----------------------------------------- |
-| user_name    | string | 使用者帳號（username）                           |
+| username    | string | 使用者帳號（username）                           |
 | role         | string | 使用者身份（例如：`Student` / `Teacher` / `Admin`） |
 | email        | string | 使用者電子郵件（依隱私策略可能顯示或遮蔽）                     |
 | user_id      | string | 使用者的公開 ID（預設為使用者主鍵；若系統有自訂公開 ID 則為該值）      |
-| introduction | string | 個人簡介（來源：UserProfile.bio；若未設定可能為空字串）       |
+| bio | string | 個人簡介（來源：UserProfile.bio；若未設定可能為空字串）       |
 | avatar       | string | 頭像 url                |
 
 > 注意：**不包含** `real_name`、`student_id`。
@@ -601,4 +601,119 @@ curl -i -X GET "http://127.0.0.1:8000/profile/momo/" \
   -H "Content-Type: application/json"
 ```
 
+---
+
+## POST /profile/
+
+### 說明
+
+更新登入使用者的個人資料。所有欄位皆為非必填，僅會更新請求中提供的欄位，其餘保持不變。
+
+可修改欄位：
+
+* `real_name`：真實姓名（User）
+* `email`：Email（User）
+* `student_id`：學號，可空（UserProfile）
+* `bio`：個人簡介，可空（UserProfile）
+* `avatar`：頭像圖片檔案，可選（UserProfile）
+
+📌 不含檔案 → 使用 `application/json`
+📌 含 `avatar` → 使用 `multipart/form-data`
+
+---
+
+## 請求格式
+
+### JSON（不含檔案）
+
+```
+POST /profile/
+Content-Type: application/json
+Authorization: Bearer <ACCESS_TOKEN>
+```
+
+```json
+{
+  "real_name": "新名字",
+  "email": "new_email@example.com",
+  "student_id": "4103xxxx",
+  "bio": "更新後的自我介紹"
+}
+```
+
+### multipart/form-data（含 avatar）
+
+```
+POST /profile/
+Content-Type: multipart/form-data
+Authorization: Bearer <ACCESS_TOKEN>
+```
+
+欄位：
+
+* `avatar`: file
+* `bio`: text
+* 其餘文字欄位：`real_name`, `email`, `student_id`
+
+---
+
+## 成功回應（200）
+
+```json
+{
+  "data": {
+    "real_name": "新名字",
+    "username": "momo",
+    "role": "Student",
+    "email": "new_email@example.com",
+    "user_id": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
+    "student_id": "4103xxxx",
+    "bio": "更新後的自我介紹",
+    "avatar": "http://127.0.0.1:8000/media/avatars/xxx.png"
+  },
+  "message": "Profile updated",
+  "status": "ok"
+}
+```
+
+---
+
+## 失敗回應（400）
+
+```json
+{
+  "data": {
+    "email": ["Enter a valid email address."],
+    "avatar": ["The submitted file is empty."]
+  },
+  "message": "Validation error",
+  "status": "error"
+}
+```
+
+---
+
+## curl 範例
+
+### 修改文字欄位（JSON）
+
+```bash
+curl -X POST "http://127.0.0.1:8000/profile/" \
+  -H "Authorization: Bearer $ACCESS" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "real_name": "小桃改名版",
+    "email": "new_momo@example.com",
+    "bio": "這是新的自介！"
+  }'
+```
+
+### 上傳頭像（multipart/form-data）
+
+```bash
+curl -X POST "http://127.0.0.1:8000/profile/" \
+  -H "Authorization: Bearer $ACCESS" \
+  -F "avatar=@/home/rokusenn/Pictures/avatar.png" \
+  -F "bio=更新過的自我介紹"
+```
 ---

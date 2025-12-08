@@ -5,16 +5,17 @@ from user.models import UserProfile
 User = get_user_model()
 
 class RegisterSerializer(serializers.ModelSerializer):
-    identity = serializers.ChoiceField(
-        choices=[c.value for c in User.Identity],  # ['teacher','admin','student']
-        required=True
+    role = serializers.ChoiceField(
+        source='identity',                          
+        choices=[c.value for c in User.Identity],   
+        required=True,
     )
     student_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     bio = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = User
-        fields = ['id','username','email','password','real_name','identity','student_id','bio']
+        fields = ['id', 'username', 'email', 'password', 'real_name', 'role', 'student_id', 'bio']
         extra_kwargs = {'password': {'write_only': True}}
 
     def create(self, validated_data):
@@ -34,9 +35,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         profile.save()
         return user
 
-
 class MeSerializer(serializers.Serializer):
-    userid = serializers.CharField(source="id", read_only=True)
+    user_id = serializers.CharField(source="id", read_only=True)
     username = serializers.CharField(read_only=True)
     email = serializers.EmailField(read_only=True)
     role = serializers.CharField(source="identity", read_only=True)
