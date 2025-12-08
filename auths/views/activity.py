@@ -62,7 +62,8 @@ class UserActivityCreateView(APIView):
             ipaddress.ip_address(ip)
             return ip
         except Exception:
-            return '0.0.0.0' # Fallback
+            logger.warning("Could not determine client IP address for request %s. Returning 'unknown'.", request)
+            return 'unknown' # Fallback
 
 class UserActivityListView(APIView):
     """
