@@ -843,8 +843,18 @@ def submission_rejudge(request, id):
         # 清除舊的判題結果
         SubmissionResult.objects.filter(submission=submission).delete()
         
-        # TODO: 發送到 SandBox 重新判題
-        # send_to_sandbox(submission)
+        # 發送到 Sandbox 重新判題
+        from .tasks import submit_to_sandbox_task
+        try:
+            submit_to_sandbox_task.delay(str(submission.id))
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f'Rejudge queued for submission: {submission.id}')
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Failed to queue rejudge for {submission.id}: {str(e)}')
+            # 即使 celery 失敗，也回傳成功（submission 已經重設為 pending）
         
         # NOJ 格式響應
         return api_response(data=None, message=f"{submission.id} rejudge successfully.", status_code=status.HTTP_200_OK)

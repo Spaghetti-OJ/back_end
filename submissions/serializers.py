@@ -447,28 +447,28 @@ class SubmissionCodeUploadSerializer(serializers.ModelSerializer):
         return instance
     
     def send_to_sandbox(self, submission):
-        """發送提交到 SandBox 進行判題"""
-        # TODO: 實作 SandBox 整合邏輯
-        # 這裡應該包括：
-        # 1. 準備判題所需的資料
-        # 2. 呼叫 SandBox API
-        # 3. 處理回應和錯誤
+        """
+        發送提交到 Sandbox 進行判題（異步）
         
-        # 暫時的實作示例：
-        sandbox_data = {
-            'submission_id': str(submission.id),
-            'problem_id': submission.problem_id,
-            'language': submission.language_type,
-            'source_code': submission.source_code,
-            'code_hash': submission.code_hash,
-        }
+        使用 Celery 異步任務，避免阻塞 API 回應
+        """
+        from .tasks import submit_to_sandbox_task
         
-        # 實際的 SandBox API 呼叫會在這裡
-        # response = sandbox_client.submit(sandbox_data)
-        # return response.success
-        
-        print(f"[DEBUG] Sending to SandBox: {sandbox_data}")
-        return True  # 暫時返回成功
+        try:
+            # 異步提交到 Sandbox（立即返回，不等待結果）
+            submit_to_sandbox_task.delay(str(submission.id))
+            
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f'Queued submission for Sandbox: {submission.id}')
+            
+            return True
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Failed to queue submission {submission.id}: {str(e)}')
+            raise
 
 
 class SubmissionListSerializer(serializers.ModelSerializer):
