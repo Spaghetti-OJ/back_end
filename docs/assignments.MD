@@ -202,8 +202,8 @@ cURL 測試範例：
 
     | 欄位          | 型別              | 說明                                 |
     | ------------- | ----------------- | ------------------------------------ |
-    | assignment_id | int               | 作業 ID（對應 `Assignments.id`）     |
-    | title         | string            | 作業標題（`Assignments.title`）      |
+    | homework_id   | int               | 作業 ID（對應 `Assignments.id`）     |
+    | homework_title| string            | 作業標題（`Assignments.title`）      |
     | course_id     | uuid              | 課程 ID（`Assignments.course_id`）   |
     | items         | array<object>     | 排行榜每一列資料（每位學生一列）     |
 
