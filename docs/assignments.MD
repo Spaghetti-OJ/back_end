@@ -289,3 +289,119 @@ cURL 範例（僅針對本 API）
 curl -X GET "http://127.0.0.1:8000/homework/1/submissions"   -H "Authorization: Bearer <ACCESS_TOKEN>"   -H "Accept: application/json"
 ```
 
+## 作業排行榜 API
+
+路徑：GET /homework/<homework_id>/scoreboard/
+
+說明：回傳指定作業的排行榜資訊。
+
+- `data` 物件內容：
+
+    | 欄位          | 型別              | 說明                                 |
+    | ------------- | ----------------- | ------------------------------------ |
+    | homework_id   | int               | 作業 ID（對應 `Assignments.id`）     |
+    | homework_title| string            | 作業標題（`Assignments.title`）      |
+    | course_id     | uuid              | 課程 ID（`Assignments.course_id`）   |
+    | items         | array<object>     | 排行榜每一列資料（每位學生一列）     |
+
+- `items[]` 欄位（單一學生一列）：
+
+    | 欄位                | 型別            | 說明                                                                 |
+    | ------------------- | --------------- | -------------------------------------------------------------------- |
+    | rank                | int             | 名次（依 `total_score` 由高到低、再比最早 AC 時間等規則排序後給定） |
+    | user_id             | uuid            | 使用者 ID（`Users.id`）                                              |
+    | username            | string          | 使用者帳號（`Users.username`）                                       |
+    | real_name           | string          | 真實姓名（`Users.real_name`）                                        |
+    | total_score         | int             | 此作業所有題目的總得分（各題 `best_score` 加總）                    |
+    | max_total_score     | int             | 此作業理論滿分（各題 `max_possible_score` 加總）                     |
+    | is_late             | boolean         | 是否有任何一題是「遲交」                                             |
+    | first_ac_time       | string or null  | 最早 AC 時間（ISO 8601，若沒有 AC 則為 null）                        |
+    | last_submission_time| string or null  | 最後一次提交時間（ISO 8601，若無提交則為 null）                      |
+    | problems            | array<object>   | 此學生在本作業各題的詳細成績                                         |
+
+- `items[].problems[]` 欄位（單一題目成績）：
+
+    | 欄位              | 型別   | 說明                                      |
+    | ----------------- | ------ | ----------------------------------------- |
+    | problem_id        | int    | 題目 ID（`Problems.id`）                  |
+    | best_score        | int    | 此學生在該題的最佳得分                    |
+    | max_possible_score| int    | 該題的理論滿分                            |
+    | solve_status      | string | 解題狀態：`"unsolved" / "partial" / "solved"` |
+
+成功回應（200 OK）範例：
+
+    {
+      "data": {
+        "homework_id": 1,
+        "homework_title": "HW1 - Intro",
+        "course_id": "469e303a-6d9e-4dda-831d-afe4c1ffdab5",
+        "items": [
+          {
+            "rank": 1,
+            "user_id": "0c224e53-9f94-46b6-af1e-0a226cf04072",
+            "username": "momo",
+            "real_name": "Momo",
+            "total_score": 100,
+            "max_total_score": 100,
+            "is_late": false,
+            "first_ac_time": "2025-11-15T12:34:56Z",
+            "last_submission_time": "2025-11-15T12:34:56Z",
+            "problems": [
+              {
+                "problem_id": 1,
+                "best_score": 100,
+                "max_possible_score": 100,
+                "solve_status": "solved"
+              }
+            ]
+          },
+          {
+            "rank": 2,
+            "user_id": "554dea0c-16dc-4a49-afb7-897af80554e0",
+            "username": "stu1",
+            "real_name": "Student 1",
+            "total_score": 80,
+            "max_total_score": 100,
+            "is_late": false,
+            "first_ac_time": null,
+            "last_submission_time": "2025-11-15T12:40:00Z",
+            "problems": [
+              {
+                "problem_id": 1,
+                "best_score": 80,
+                "max_possible_score": 100,
+                "solve_status": "partial"
+              }
+            ]
+          }
+        ]
+      },
+      "message": "get homework scoreboard",
+      "status": "ok"
+    }
+
+錯誤回應：
+
+- 作業不存在（404）：
+
+      {
+        "data": null,
+        "message": "Not found.",
+        "status": "error"
+      }
+
+- 未登入或 Token 無效（401 / 403）：
+
+      {
+        "data": null,
+        "message": "Authentication credentials were not provided.",
+        "status": "error"
+      }
+
+（實際訊息內容會依 DRF / SimpleJWT 設定而略有不同）
+
+cURL 測試範例（Windows cmd，用 `%ACCESS_TOKEN%` 環境變數）： 
+
+    curl -X GET "http://127.0.0.1:8000/homework/1/scoreboard/" ^
+      -H "Authorization: Bearer %ACCESS_TOKEN%" ^
+      -H "Accept: application/json"

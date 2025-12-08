@@ -6,12 +6,17 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status, permissions
-from django.db.models import Max
+from django.db.models import Sum, Count, Max, Q
 from decimal import Decimal
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from collections import defaultdict
+import datetime
 
 from assignments.models import Assignments, Assignment_problems
 from courses.models import Courses, Course_members
 from problems.models import Problems
+from submissions.models import UserProblemStats
 from submissions.models import Submission
 from .serializers import (
     HomeworkCreateSerializer,
@@ -20,6 +25,7 @@ from .serializers import (
     AddProblemsInSerializer,
     HomeworkSubmissionListItemSerializer,
     make_list_item_from_instance,
+    HomeworkScoreboardSerializer,
 )
 
 # --------- 權限 & 工具 ---------
@@ -297,6 +303,173 @@ class AddProblemsToHomeworkView(APIView):
 
         # 9) 回傳結果
         return Response("Add problems Success", status=status.HTTP_200_OK)
+
+# --------- GET /homework/<id>/scoreboard ---------
+class HomeworkScoreboardView(APIView):
+    """
+    GET /homework/<homework_id>/scoreboard/
+    取得某份作業的排行榜
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_assignment(self, homework_id: int) -> Assignments:
+        return get_object_or_404(
+            Assignments.objects.select_related("course"), pk=homework_id
+        )
+
+    def check_permission(self, request, assignment: Assignments):
+        """
+        檢查使用者是否為課程成員（student / ta / teacher）
+        """
+        user = request.user
+        course = assignment.course
+
+        # 1. 如果課程有 teacher 欄位，先檢查是不是教師
+        is_teacher = getattr(course, "teacher_id", None) == user.id
+
+        # 2. 再檢查 Course_members（student / ta / teacher）
+        is_member = Course_members.objects.filter(
+            course_id=course,   
+            user_id=user,       
+        ).exists()
+
+        if not (is_teacher or is_member):
+            return api_response(
+                data=None,
+                message="permission denied: user is not a member of this course",
+                status_code=403,
+            )
+
+        return None
+
+    def get(self, request, homework_id: int):
+        # 1. 取出作業
+        assignment = self.get_assignment(homework_id)
+
+        # 2. 權限檢查
+        resp = self.check_permission(request, assignment)
+        if resp is not None:
+            return resp
+
+        # 3. 取出這份作業底下所有 UserProblemStats
+        stats_qs = (
+            UserProblemStats.objects
+            .filter(assignment_id=assignment.id)
+            .select_related("user")
+            .order_by("user_id", "problem_id")
+        )
+
+        # 如果完全沒有統計資料，直接回空排行榜
+        if not stats_qs.exists():
+            payload = {
+                "homework_id": assignment.id,
+                "homework_title": assignment.title,
+                "course_id": assignment.course_id,
+                "items": [],
+            }
+            serializer = HomeworkScoreboardSerializer(payload)
+            return api_response(
+                data=serializer.data,
+                message="get homework scoreboard",
+                status_code=200,
+            )
+
+        # 4. 以 user 分組，累計成績 & 題目資訊
+        user_map = {}  # user_id -> dict
+
+        for s in stats_qs:
+            uid = s.user_id
+            if uid not in user_map:
+                user_obj = s.user
+                user_map[uid] = {
+                    "user_id": user_obj.id,
+                    "username": user_obj.username,
+                    "real_name": getattr(user_obj, "real_name", None),
+
+                    "total_score": 0,
+                    "max_total_score": 0,
+                    "is_late": False,
+                    "first_ac_time": None,
+                    "last_submission_time": None,
+                    "problems": [],
+                }
+
+            entry = user_map[uid]
+
+            # 累加題目資訊
+            entry["problems"].append({
+                "problem_id": s.problem_id,
+                "best_score": s.best_score,
+                "max_possible_score": s.max_possible_score,
+                "solve_status": s.solve_status,
+            })
+
+            # 累加總分
+            entry["total_score"] += s.best_score
+            entry["max_total_score"] += s.max_possible_score
+
+            # 是否有遲交
+            entry["is_late"] = entry["is_late"] or bool(s.is_late)
+
+            # 最早 AC 時間（取最小）
+            if s.first_ac_time:
+                if (
+                    entry["first_ac_time"] is None
+                    or s.first_ac_time < entry["first_ac_time"]
+                ):
+                    entry["first_ac_time"] = s.first_ac_time
+
+            # 最後提交時間（取最大）
+            if s.last_submission_time:
+                if (
+                    entry["last_submission_time"] is None
+                    or s.last_submission_time > entry["last_submission_time"]
+                ):
+                    entry["last_submission_time"] = s.last_submission_time
+
+        # 5. 轉成 list 並排序
+        items = list(user_map.values())
+
+        # 為了排序用的「最大時間」(避免 timezone.datetime.max 在某些平台出錯)
+        dummy_max = datetime.datetime(9999, 12, 31, tzinfo=datetime.timezone.utc)
+
+        def sort_key(item):
+            total = item["total_score"]
+            first_ac = item["first_ac_time"] or dummy_max
+            last_sub = item["last_submission_time"] or dummy_max
+            username = item["username"] or ""
+            # 分數降冪、AC 時間升冪、最後提交時間升冪、username 升冪
+            return (-total, first_ac, last_sub, username)
+
+        items.sort(key=sort_key)
+
+        # 6. 指定名次（同分同 AC 時間的人名次一樣）
+        current_rank = 0
+        prev_key = None
+
+        for index, item in enumerate(items, start=1):
+            key = (
+                item["total_score"],
+                item["first_ac_time"] or dummy_max,
+            )
+            if key != prev_key:
+                current_rank = index
+                prev_key = key
+            item["rank"] = current_rank
+
+        # 7. 組成 payload -> serializer -> api_response
+        payload = {
+            "assignment_id": assignment.id,
+            "title": assignment.title,
+            "course_id": assignment.course_id,
+            "items": items,
+        }
+        serializer = HomeworkScoreboardSerializer(payload)
+
+        return api_response(
+            data=serializer.data,
+            message="get homework scoreboard",
+            status_code=200,
     
 class HomeworkSubmissionsListView(APIView):
     """
