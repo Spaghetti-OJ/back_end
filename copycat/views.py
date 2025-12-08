@@ -3,19 +3,13 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser
 from rest_framework.authentication import SessionAuthentication
-
-# if we need to add it in api token
-# from api_tokens.authentication import ApiTokenAuthentication
+from api_tokens.authentication import ApiTokenAuthentication
 
 from .models import CopycatReport
 from submissions.models import Submission
 from problems.models import Problems
 from .services import run_moss_check, LANG_DB_MAP
 
-try:
-    from problems.models import Problems
-except ImportError:
-    Problems = None
 
 # ===================================================================
 def api_response(data=None, message="OK", status_code=200):
@@ -24,7 +18,7 @@ def api_response(data=None, message="OK", status_code=200):
     return Response({"data": data, "message": message, "status": status_str}, status=status_code)
 
 class CopycatView(APIView):
-    authentication_classes = [SessionAuthentication]
+    authentication_classes = [SessionAuthentication, ApiTokenAuthentication]
     permission_classes = [IsAdminUser]
 
     def post(self, request):

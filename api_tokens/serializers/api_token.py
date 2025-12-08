@@ -1,5 +1,3 @@
-# api_tokens/serializers/api_token.py
-
 from rest_framework import serializers
 from ..models import ApiToken
 
