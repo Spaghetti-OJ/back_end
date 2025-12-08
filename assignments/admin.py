@@ -5,7 +5,7 @@ from .models import Assignments, Assignment_problems
 class AssignmentProblemsInline(admin.TabularInline):
     model = Assignment_problems
     extra = 1
-    fields = ['problem', 'order_index', 'weight', 'special_judge', 'time_limit', 'memory_limit', 'attempt_quota']
+    fields = ['problem', 'order_index', 'weight', 'special_judge', 'time_limit', 'memory_limit', 'attempt_quota', 'is_active', 'partial_score', 'hint_text']
     ordering = ['order_index']
 
 
