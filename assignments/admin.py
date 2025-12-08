@@ -41,7 +41,7 @@ class AssignmentsAdmin(admin.ModelAdmin):
 
 @admin.register(Assignment_problems)
 class AssignmentProblemsAdmin(admin.ModelAdmin):
-    list_display = ['id', 'assignment', 'problem', 'order_index', 'weight', 'special_judge']
+    list_display = ['id', 'assignment', 'problem', 'order_index', 'weight', 'special_judge', 'is_active', 'partial_score']
     list_filter = ['special_judge', 'is_active', 'partial_score']
     search_fields = ['assignment__title', 'problem__title']
     ordering = ['assignment', 'order_index']
