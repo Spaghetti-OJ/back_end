@@ -470,6 +470,7 @@ class HomeworkScoreboardView(APIView):
             data=serializer.data,
             message="get homework scoreboard",
             status_code=200,
+        )
     
 class HomeworkSubmissionsListView(APIView):
     """
