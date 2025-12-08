@@ -45,3 +45,4 @@ class AssignmentProblemsAdmin(admin.ModelAdmin):
     list_filter = ['special_judge', 'is_active', 'partial_score']
     search_fields = ['assignment__title', 'problem__title']
     ordering = ['assignment', 'order_index']
+    readonly_fields = ['created_at']
