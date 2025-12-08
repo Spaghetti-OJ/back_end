@@ -16,6 +16,8 @@ urlpatterns = [
     path("<int:homework_id>/problems", views.AddProblemsToHomeworkView.as_view(), name="homework-add-problems"),
     path("<int:homework_id>/problems/", views.AddProblemsToHomeworkView.as_view(), name="homework-add-problems-slash"),
 
+    path("<int:homework_id>/stats/", views.HomeworkStatsView.as_view(), name="homework-stats"),
+    path("<int:homework_id>/stats", views.HomeworkStatsView.as_view(), name="homework-stats-no-slash"),
     # GET /homework/<id>/scoreboard
     path("<int:homework_id>/scoreboard/",views.HomeworkScoreboardView.as_view(),name="homework-scoreboard",),
 
