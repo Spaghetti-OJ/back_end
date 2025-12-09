@@ -72,7 +72,14 @@ class MeProfileUpdateSerializer(serializers.Serializer):
             user_updated = True
 
         if "email" in validated_data:
-            user.email = validated_data["email"]
+            new_email = validated_data["email"]
+
+            if User.objects.filter(email=new_email).exclude(id=user.id).exists():
+                raise serializers.ValidationError({
+                    "email": ["Email has been used by another account."]
+                })
+
+            user.email = new_email
             user_updated = True
 
         if user_updated:
