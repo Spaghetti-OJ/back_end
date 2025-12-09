@@ -271,8 +271,8 @@ curl -X POST http://127.0.0.1:8000/course/42/assign-ta/ \
 
 | 欄位名 | 型別 | 必填 | 說明                                 |
 | ------ | ---- | ---- | ------------------------------------ |
-| `remove` | list | ⭕   | 要移除的學生 ID 列表（UUID） |
-| `new`    | list | ⭕   | 要加入課程的學生 ID 列表（UUID） |
+| `remove` | list | ❌   | 要移除的學生 ID 列表（UUID） |
+| `new`    | list | ❌   | 要加入課程的學生 ID 列表（UUID） |
 
 > 備註：`remove`、`new` 皆可省略或給空陣列，代表該方向不異動。
 
@@ -322,8 +322,8 @@ curl -X PUT "http://127.0.0.1:8000/course/<course_id>/" \
 | `username`   | ✅   | 學生帳號（全域唯一）                               |
 | `email`      | ✅   | 學生 Email（全域唯一）                             |
 | `real_name`  | ✅   | 學生姓名                                           |
-| `student_id` | ⭕   | 學號，若提供會寫入 `UserProfile.student_id`         |
-| `password`   | ⭕   | 初始密碼，未填時會自動產生隨機密碼                 |
+| `student_id` | ❌   | 學號，若提供會寫入 `UserProfile.student_id`         |
+| `password`   | ❌   | 初始密碼，未填時會自動產生隨機密碼                 |
 
 **成功回應 (200 OK)**：
 
@@ -579,7 +579,7 @@ curl -X POST http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
 | 欄位名 | 型別 | 必填 | 說明 |
 | --- | --- | --- | --- |
 | `title` | string | ✅ | 要修改的成績項目原標題 |
-| `new_title` | string | ⭕ | 新標題，若缺省則維持原標題 |
+| `new_title` | string | ❌ | 新標題，若缺省則維持原標題 |
 | `content` | string | ✅ | 成績說明，可為空字串 |
 | `score` | number / string | ✅ | 分數，可為數字或字母（例如 `92`、`"A"`） |
 
@@ -743,8 +743,8 @@ curl -X DELETE http://127.0.0.1:8000/course/ \
 | 參數名   | 型別   | 必填 | 說明                                |
 | -------- | ------ | ---- | ----------------------------------- |
 | `pids`   | string | ✅   | 題目 ID 逗號串，如 `1,2,3`            |
-| `start`  | float  | ⭕   | 開始時間戳（秒），過濾 >= 該時間的提交 |
-| `end`    | float  | ⭕   | 結束時間戳（秒），過濾 <= 該時間的提交 |
+| `start`  | float  | ❌   | 開始時間戳（秒），過濾 >= 該時間的提交 |
+| `end`    | float  | ❌   | 結束時間戳（秒），過濾 <= 該時間的提交 |
 
 **成功回應 (200 OK)**：
 
