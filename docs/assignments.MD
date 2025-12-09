@@ -192,6 +192,111 @@ cURL 測試範例：
     curl -X DELETE "http://127.0.0.1:8000/homework/<HW_ID>/" ^
       -H "Authorization: Bearer <ACCESS_TOKEN>"
 
+## 更新作業截止時間 API
+
+路徑：PUT /homework/<homework_id>/deadline/
+
+說明：只更新指定作業的截止時間（`due_time`），不會修改其他作業欄位。
+
+權限：需登入，且必須為該課程之老師或助教。
+
+---
+
+### 請求格式（JSON）
+
+| 欄位 | 型別           | 必填 | 說明                                                                 |
+| ---- | -------------- | :--: | -------------------------------------------------------------------- |
+| end  | string or null |  ✅  | 作業截止時間，為 ISO 8601 datetime 字串（例如 `2025-12-31T23:59:59Z`），或 `null` 代表清除截止時間 |
+
+---
+
+### 請求範例
+
+1）設定截止時間：
+
+```json
+{
+  "end": "2025-12-31T23:59:59Z"
+}
+```
+
+2）清除截止時間（不再限制截止時間）：
+
+```json
+{
+  "end": null
+}
+```
+
+---
+
+### 成功回應（200 OK）
+
+```text
+"Update homework deadline Success"
+```
+
+---
+
+### 錯誤回應
+
+- 400 缺少必要欄位：
+
+```text
+"end is required"
+```
+
+- 400 `end` 格式錯誤（無法解析成合法的 datetime）：
+
+```text
+"end must be ISO 8601 datetime string or null"
+```
+
+- 400 `end` 早於作業開始時間（若有設定 start_time）：
+
+```text
+"end must be greater than or equal to start"
+```
+
+- 403 權限不足（非課程老師／助教）：
+
+```text
+"user must be the teacher or ta of this course"
+```
+
+- 404 作業不存在：
+
+```text
+"Not found."
+```
+
+（實際訊息依 Django/DRF 預設 404 回應而定）
+
+---
+
+### cURL 測試範例
+
+1）設定截止時間：
+
+```bash
+curl -X PUT "http://127.0.0.1:8000/homework/<HW_ID>/deadline/" ^
+  -H "Authorization: Bearer <ACCESS_TOKEN>" ^
+  -H "Content-Type: application/json" ^
+  -d "{
+    \"end\": \"2025-12-31T23:59:59Z\"
+  }"
+```
+
+2）清除截止時間：
+
+```bash
+curl -X PUT "http://127.0.0.1:8000/homework/<HW_ID>/deadline/" ^
+  -H "Authorization: Bearer <ACCESS_TOKEN>" ^
+  -H "Content-Type: application/json" ^
+  -d "{
+    \"end\": null
+  }"
+```
 ## 作業截止資訊 API
 
 路徑：GET /homework/<homework_id>/deadline/
