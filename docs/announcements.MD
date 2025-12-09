@@ -4,13 +4,13 @@
 
 **說明**：取得指定課程的公告列表，會先依「是否置頂」再依更新時間（新 → 舊）排序。
 
-**需要登入**
+**需要登入**（課程名稱為「公開討論區」時可免登入）
 
 **URL 參數**
 
 | 參數        | 說明           |
 | ----------- | -------------- |
-| `course_id` | 要查詢的課程 ID |
+| `course_id` | 要查詢的課程 ID；公共討論區可使用 `0` |
 
 **成功回應 (200 OK)**
 
@@ -26,13 +26,13 @@
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "admin01",
         "real_name": "系統管理員",
-        "identity": "admin"
+        "role": "admin"
       },
       "updater": {
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "admin01",
         "real_name": "系統管理員",
-        "identity": "admin"
+        "role": "admin"
       },
       "markdown": "### 系統維護\n今晚 23:00 ~ 23:30 將進行資料庫維護。",
       "pinned": true
@@ -47,6 +47,8 @@
 - `creator` / `updater` 若已被刪除，欄位會回傳 `null`。
 - 若找不到課程會回傳 `404 {"message": "Course not found."}`。
 - 未登入時會回傳 `401`。
+- 若該課程名稱為「公開討論區」，可直接存取（無須登入）。
+- 公開討論區路徑可將 `course_id` 設為 `0` 代表系統公告（公開討論區）。
 
 **cURL 測試**
 
@@ -83,7 +85,7 @@ curl http://127.0.0.1:8000/ann/<course_id>/ann \
 ```json
 {
   "data": {
-    "id": "新公告ID",
+    "annId": "新公告ID",
     "created_at": 1732099200
   }
 }
@@ -191,13 +193,13 @@ curl -X DELETE http://127.0.0.1:8000/ann/ \
 
 **說明**：取得指定課程中某一則公告，回傳欄位與列表 API 相同，但只包含符合 `ann_id` 的公告資料。
 
-**需要登入**
+**需要登入**（課程名稱為「公開討論區」時可免登入）
 
 **URL 參數**
 
 | 參數        | 說明             |
 | ----------- | ---------------- |
-| `course_id` | 目標課程的 ID    |
+| `course_id` | 目標課程的 ID；公開討論區可使用 `0` |
 | `ann_id`    | 要查詢的公告 ID |
 
 **成功回應 (200 OK)**
@@ -214,13 +216,13 @@ curl -X DELETE http://127.0.0.1:8000/ann/ \
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "admin01",
         "real_name": "系統管理員",
-        "identity": "admin"
+        "role": "admin"
       },
       "updater": {
         "id": "c1234f56-789a-4bde-b123-456789abcd12",
         "username": "admin01",
         "real_name": "系統管理員",
-        "identity": "admin"
+        "role": "admin"
       },
       "markdown": "### 系統維護\n今晚 23:00 ~ 23:30 將進行資料庫維護。",
       "pinned": true
@@ -234,6 +236,8 @@ curl -X DELETE http://127.0.0.1:8000/ann/ \
 - 若公告不存在會回傳 `404 {"message": "Announcement not found."}`。
 - 其他狀況（登入、時間戳格式、創建者為 `null` 等）同列表 API。
 - 若 `course_id` 對應的是名稱為「公開討論區」的課程，亦會回傳系統公告對應的資料。
+- 若該課程名稱為「公開討論區」，可直接存取（無須登入）。
+- 公開討論區路徑可將 `course_id` 設為 `0` 代表公開討論區。
 - 本 API 與列表使用同一個 `SystemAnnouncementSerializer`，欄位完全一致。
 
 **cURL 測試**

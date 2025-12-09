@@ -6,6 +6,10 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied, NotFound, ValidationError
 from django.utils import timezone
+from django.db.models import Count
+from rest_framework.views import APIView
+from problems.models import Problems, Problem_subtasks, Test_cases
+from user.models import User
 import uuid
 
 # 統一的 API 響應格式
@@ -26,11 +30,12 @@ def api_response(data=None, message="OK", status_code=200):
         "status": status_str,
     }, status=status_code)
 
-from .models import Editorial, EditorialLike
+from .models import Editorial, EditorialLike, UserProblemSolveStatus
 from .serializers import (
     EditorialSerializer, 
     EditorialCreateSerializer, 
-    EditorialLikeSerializer
+    EditorialLikeSerializer,
+    UserStatusSerializer
 )
 from problems.models import Problems
 from courses.models import Courses, Course_members
@@ -602,6 +607,68 @@ class SubmissionRetrieveUpdateView(BasePermissionMixin, generics.RetrieveUpdateA
         except Exception as e:
             return api_response(data=None, message="can not find the source file", status_code=status.HTTP_400_BAD_REQUEST)
 
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def submission_output_view(request, id, task_no, case_no):
+    """
+    GET /submission/{id}/output/{task_no}/{case_no}
+    """
+
+    # 1. 找 submission
+    try:
+        submission = Submission.objects.get(id=id)
+    except Submission.DoesNotExist:
+        return api_response(None, "submission not found", 404)
+
+    # 2. 權限檢查
+    mixin = BasePermissionMixin()
+    if not mixin.check_submission_view_permission(request.user, submission):
+        return api_response(None, "no permission", 403)
+
+    # 3. 找 subtask
+    try:
+        subtask = Problem_subtasks.objects.get(
+            problem_id=submission.problem_id,
+            subtask_no=task_no
+        )
+    except Problem_subtasks.DoesNotExist:
+        return api_response(None, "task_no not found", 404)
+
+    # 4. 找 test_case（task_no + case_no）
+    try:
+        test_case = Test_cases.objects.get(
+            subtask_id=subtask.id,
+            idx=case_no
+        )
+    except Test_cases.DoesNotExist:
+        return api_response(None, "case_no not found", 404)
+
+    # 5. 找結果
+    try:
+        result = SubmissionResult.objects.get(
+            submission_id=submission.id,
+            test_case_id=test_case.id
+        )
+    except SubmissionResult.DoesNotExist:
+        return api_response(None, "output not found", 404)
+
+    # 6. 回傳
+    payload = {
+        "submission_id": str(submission.id),
+        "task_no": task_no,
+        "case_no": case_no,
+        "status": result.status,
+        "score": result.score,
+        "max_score": result.max_score,
+        "execution_time": result.execution_time,
+        "memory_usage": result.memory_usage,
+        "output": result.output_preview or "",
+        "error_message": result.error_message or "",
+        "judge_message": result.judge_message or "",
+    }
+
+    return api_response(payload, "ok", 200)
+
 
 # 保留原來的個別 view 類以便需要時使用
 class SubmissionListView(BasePermissionMixin, generics.ListAPIView):
@@ -776,8 +843,18 @@ def submission_rejudge(request, id):
         # 清除舊的判題結果
         SubmissionResult.objects.filter(submission=submission).delete()
         
-        # TODO: 發送到 SandBox 重新判題
-        # send_to_sandbox(submission)
+        # 發送到 Sandbox 重新判題
+        from .tasks import submit_to_sandbox_task
+        try:
+            submit_to_sandbox_task.delay(str(submission.id))
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f'Rejudge queued for submission: {submission.id}')
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Failed to queue rejudge for {submission.id}: {str(e)}')
+            # 即使 celery 失敗，也回傳成功（submission 已經重設為 pending）
         
         # NOJ 格式響應
         return api_response(data=None, message=f"{submission.id} rejudge successfully.", status_code=status.HTTP_200_OK)
@@ -796,7 +873,6 @@ def ranking_view(request):
         # 遍歷系統中所有用戶並返回統計資料，不進行排序（由前端處理）
         
         from django.db.models import Count, Q
-        from user.models import User  # 使用自定義的 User 模型
         
         # 獲取所有用戶的提交統計
         users = User.objects.all()
@@ -837,9 +913,108 @@ def ranking_view(request):
         # NOJ 格式：返回所有用戶資料，不進行排序（由前端處理）
         return api_response(
             data={'ranking': ranking_data},
-            message='here you are, bro',
+            message='Ranking data retrieved successfully',
             status_code=status.HTTP_200_OK
         )
     
     except Exception as e:
         return api_response(data=None, message="Some error occurred, please contact the admin", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def user_stats_view(request, user_id):
+    """
+    GET /stats/user/{userId} - 使用者統計
+    回傳使用者解題數、提交數、難度分布、接受率、Beats 百分比
+    """
+
+    # 1. 找 user
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return api_response(
+            data=None,
+            message="User not found",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+
+    # 2. 提交統計
+    user_submissions = Submission.objects.filter(user=user)
+    total_submissions = user_submissions.count()
+
+    
+    ac_submissions = user_submissions.filter(status='0').count()
+
+    if total_submissions > 0:
+        acceptance_percent = ac_submissions / total_submissions * 100.0
+    else:
+        acceptance_percent = 0.0
+
+    # 3. 解題數 + 難度分布
+    solved_qs = UserProblemSolveStatus.objects.filter(
+        user_id=user.id,
+        solve_status='fully_solved',  # 對應 schema 裡的 enum 值
+    )
+    total_solved = solved_qs.count()
+
+    solved_problem_ids = solved_qs.values_list('problem_id', flat=True)
+
+    difficulty_counts = (
+        Problems.objects.filter(id__in=solved_problem_ids)
+        .values('difficulty')
+        .annotate(cnt=Count('id'))
+    )
+
+    def get_diff_count(name):
+        for row in difficulty_counts:
+            if row['difficulty'] == name:
+                return row['cnt']
+        return 0
+
+    easy_cnt = get_diff_count('easy')
+    medium_cnt = get_diff_count('medium')
+    hard_cnt = get_diff_count('hard')
+
+    # 4. Beats：以 fully_solved 題數當基準（優化版：直接在 DB 層過濾）
+    # 先計算所有有解題的使用者總數
+    total_users = (
+        UserProblemSolveStatus.objects
+        .filter(solve_status='fully_solved')
+        .values('user_id')
+        .distinct()
+        .count()
+    )
+    
+    if total_users > 0:
+        # 只計算 solved_count < total_solved 的使用者數量（在 DB 層級過濾）
+        lower_users = (
+            UserProblemSolveStatus.objects
+            .filter(solve_status='fully_solved')
+            .values('user_id')
+            .annotate(solved_count=Count('problem_id'))
+            .filter(solved_count__lt=total_solved)
+            .count()
+        )
+        beats_percent = lower_users / total_users * 100.0
+    else:
+        beats_percent = 0.0
+
+    payload = {
+        "user_id": user.id,
+        "username": user.username,
+        "total_solved": total_solved,
+        "total_submissions": total_submissions,
+        "accept_percent": round(acceptance_percent, 2),
+        "difficulty": {
+            "easy": easy_cnt,
+            "medium": medium_cnt,
+            "hard": hard_cnt,
+        },
+        "beats_percent": round(beats_percent, 2),
+    }
+
+    serializer = UserStatusSerializer(payload)
+    return api_response(
+        data={"user_stats": serializer.data},
+        message="here you are, bro",
+        status_code=status.HTTP_200_OK
+    )
