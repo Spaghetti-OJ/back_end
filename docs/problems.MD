@@ -2,9 +2,175 @@
 
 本節說明目前可用的題目 API。後端採用 Django + DRF + Simple JWT，所有請求/回應皆為 JSON。
 
+## 查看題目詳情（學生/一般）
+
+- 路徑：`GET /problem/<problem_id>`
+- 未登入僅能看到 `public` 題目；`course` / `hidden` 需題目擁有者、課程成員或有管理權限。
+
+成功回應（200 OK 範例，部分欄位視登入與資料情況可能為 null）：
+```json
+{
+  "data": {
+    "id": 1,
+    "title": "Two Sum",
+    "difficulty": "easy",
+    "is_public": "public",
+    "course_id": "<uuid>",
+    "tags": [{"id":1, "name":"陣列", "usage_count": 10}],
+    "submit_count": 2,
+    "high_score": 80
+  },
+  "message": "取得題目成功",
+  "status": "200"
+}
+```
+未登入或無權限時可能回 404（隱藏不可見）或 403。
+
+**cURL**
+```bash
+curl "http://127.0.0.1:8000/problem/1" -H "Authorization: Bearer $TOKEN"
+```
+
 ---
 
-## 權限與可見性
+## 題目最高分資訊
+
+- 路徑：`GET /problem/<problem_id>/high-score`
+- 回傳目前使用者或全域的最高分（依後端邏輯）。未登入可能為 null。
+
+成功回應（200 OK）：
+```json
+{
+  "data": { "score": 85 },
+  "message": "OK",
+  "status": "200"
+}
+```
+
+**cURL**
+```bash
+curl "http://127.0.0.1:8000/problem/1/high-score" -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## 題目測資（Test Cases）上傳／下載（題目層級）
+
+後端採「三端點」模式（取消舊的分片 PUT 端點）：
+1. 初始化上傳：`POST /problem/<problem_id>/initiate-test-case-upload`
+2. 完成上傳：`POST /problem/<problem_id>/complete-test-case-upload`
+3. 下載測資：`GET /problem/<problem_id>/test-case`
+
+權限：題目擁有者 / 課程 TA / 教師 / 管理員（`_has_problem_manage_permission` 包含 TA）。
+
+檔名配對驗證：上傳的 zip 內容需包含四位數成對檔名，例如 `0001.in` 與 `0001.out`；若有缺失或不對稱回 400。
+
+### 1) 初始化上傳
+`POST /problem/<pid>/initiate-test-case-upload`
+
+Body 範例：
+```json
+{ "length": 123456, "part_size": 1048576 }
+```
+回傳一組 `upload_id` 與暫存 TTL。`part_endpoint` 為佔位（本地不使用實際分片上傳）。
+
+成功回應（200 OK）：
+```json
+{
+  "data": { "upload_id": "<uuid>", "ttl": 600, "part_endpoint": "/problem/1/test-case-upload-part" },
+  "message": "Upload initiated",
+  "status": "200"
+}
+```
+
+### 2) 完成上傳
+`POST /problem/<pid>/complete-test-case-upload`
+
+Body：
+```json
+{ "upload_id": "<uuid>", "parts": [ { "PartNumber": 1, "ETag": "..." } ] }
+```
+後端會拼合暫存分片并讀取 zip，驗證成對檔名。
+
+成功回應（201 Created）：
+```json
+{
+  "data": { "path": "testcases/p<pid>/problem.zip" },
+  "message": "Upload completed",
+  "status": "201"
+}
+```
+
+### 3) 下載測資
+`GET /problem/<pid>/test-case`
+
+成功：直接回傳二進位串流（`Content-Disposition: attachment`）。例外：測資不存在回 404；權限不足 403。
+
+**cURL（下載）**
+```bash
+curl "http://127.0.0.1:8000/problem/30/test-case" -H "Authorization: Bearer $TOKEN" -o problem-30-testcases.zip
+```
+
+### Sandbox 專用：測資校驗與結構
+
+沙盒在判題前會：
+1. 下載 zip 檔案。
+2. 呼叫 checksum 端點確認 MD5 是否一致（避免網路傳輸損毀）。
+3. 呼叫 meta 端點取得測資對列表（in/out）以便依序執行。
+
+安全驗證：使用 query string `token` 與後端設定的 `SANDBOX_TOKEN` 比對；不需一般登入權限。若 token 缺失或不符 → 401。
+
+#### 1) 取得 MD5 校驗和
+- 路徑：`GET /problem/<problem_id>/checksum?token=<sandbox_token>`
+- 成功回應：
+```json
+{
+  "data": { "checksum": "d41d8cd98f00b204e9800998ecf8427e" },
+  "message": "OK",
+  "status": "200"
+}
+```
+錯誤：401 Invalid sandbox token；404 題目或測資不存在。
+
+**cURL**
+```bash
+curl "http://127.0.0.1:8000/problem/30/checksum?token=$SANDBOX_TOKEN"
+```
+
+#### 2) 取得測資元資料
+- 路徑：`GET /problem/<problem_id>/meta?token=<sandbox_token>`
+- 回傳欄位：
+  - `checksum`: 與 /checksum 相同 MD5（方便比對）
+  - `task_count`: 總測試對數量
+  - `missing_pairs`: 缺失配對的 stem 列表（理想應為空）
+  - `tasks`: 陣列，每項包含 `no`, `stem`, `in`, `out`
+
+成功回應（範例）：
+```json
+{
+  "data": {
+    "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+    "task_count": 2,
+    "missing_pairs": [],
+    "tasks": [
+      { "no": 1, "stem": "0001", "in": "0001.in", "out": "0001.out" },
+      { "no": 2, "stem": "0002", "in": "0002.in", "out": "0002.out" }
+    ]
+  },
+  "message": "OK",
+  "status": "200"
+}
+```
+錯誤：401 Invalid sandbox token；404 測資不存在；500 zip 損毀。
+
+**cURL**
+```bash
+curl "http://127.0.0.1:8000/problem/30/meta?token=$SANDBOX_TOKEN" | jq
+```
+
+---
+
+## 建立題目（管理）
 
 題目有三種可見性（欄位 `is_public`）：
 - `public`：所有人可見
@@ -28,86 +194,28 @@
   - `course_id`: 課程 UUID
   - `page`, `page_size`: 分頁參數
 
-成功回應（200 OK，略）：
-```json
-[
-  {
-    "id": 1,
-    "title": "Two Sum",
-    "difficulty": "easy",
-    "is_public": "public",
-    "course_id": "<uuid>",
-    "tags": [
-      {"id": 1, "name": "陣列", "usage_count": 10}
-    ],
-    "created_at": "2025-11-08T06:45:00Z"
-  }
-]
-```
-
-**cURL 測試**：
-```bash
-curl "http://127.0.0.1:8000/problem/" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
----
-
-## 查看題目詳情（學生視角）
-
-- 路徑：`GET /problem/<problem_id>`
-- 說明：回傳題目詳情；未登入僅能查看 `public` 題目。對於 `course`/`hidden` 依權限與課程成員資格判斷。
-
-成功回應（200 OK，部分欄位省略）：
+成功回應（200 OK，分頁包裝）：
 ```json
 {
-  "id": 1,
-  "title": "Two Sum",
-  "difficulty": "easy",
-  "is_public": "public",
-  "course_id": "<uuid>",
-  "tags": [{"id":1, "name":"陣列", "usage_count": 10}],
-  "submit_count": 2,
-  "high_score": 80
+  "data": {
+    "count": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "id": 1,
+        "title": "Two Sum",
+        "difficulty": "easy",
+        "is_public": "public",
+        "course_id": "<uuid>",
+        "tags": [{"id": 1, "name": "陣列", "usage_count": 10}],
+        "created_at": "2025-11-08T06:45:00Z"
+      }
+    ]
+  },
+  "message": "OK",
+  "status": "200"
 }
-```
-未登入時 `submit_count`/`high_score` 會為 `null`。
-
-**cURL 測試**：
-```bash
-curl "http://127.0.0.1:8000/problem/$PROBLEM_ID" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-可能錯誤：
-- 401 未登入（針對非公開題目）
-- 403 非課程成員/非擁有者/非教師管理員（當題目為 `course` 或 `hidden`）
-- 404 題目不存在
-
----
-
-## 取得題目最高分數
-
-- 路徑：`GET /problem/<problem_id>/high-score`
-- 權限：需要登入
-- 說明：回傳當前使用者在該題目的最高分數。若從未提交過則回傳 0。
-
-成功回應（200 OK）：
-```json
-{
-  "score": 85
-}
-```
-
-可能錯誤：
-- 401 未登入
-- 404 題目不存在
-
-**cURL 測試**：
-```bash
-curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/high-score" \
-  -H "Authorization: Bearer $TOKEN"
-```
 
 ---
 
@@ -120,26 +228,30 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/high-score" \
 成功回應範例（200 OK）：
 ```json
 {
-  "acUserRatio": [5, 20],
-  "triedUserCount": 12,
-  "average": 67.5,
-  "std": 15.2,
-  "scoreDistribution": [
-    {"score": 0, "count": 2},
-    {"score": 50, "count": 3},
-    {"score": 100, "count": 7}
-  ],
-  "statusCount": {
-    "accepted": 7,
-    "wrong_answer": 3,
-    "runtime_error": 2
+  "data": {
+    "acUserRatio": [5, 20],
+    "triedUserCount": 12,
+    "average": 67.5,
+    "std": 15.2,
+    "scoreDistribution": [
+      {"score": 0, "count": 2},
+      {"score": 50, "count": 3},
+      {"score": 100, "count": 7}
+    ],
+    "statusCount": {
+      "accepted": 7,
+      "wrong_answer": 3,
+      "runtime_error": 2
+    },
+    "top10RunTime": [
+      {"id": "...", "user": "...", "execution_time": 120, "score": 100, "status": "accepted"}
+    ],
+    "top10MemoryUsage": [
+      {"id": "...", "user": "...", "memory_usage": 1024, "score": 100, "status": "accepted"}
+    ]
   },
-  "top10RunTime": [
-    {"id": "...", "user": "...", "execution_time": 120, "score": 100, "status": "accepted"}
-  ],
-  "top10MemoryUsage": [
-    {"id": "...", "user": "...", "memory_usage": 1024, "score": 100, "status": "accepted"}
-  ]
+  "message": "OK",
+  "status": "200"
 }
 ```
 
@@ -240,7 +352,11 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/stats" \
 
 成功回應（201 Created）：
 ```json
-{ "success": true, "problem_id": 1 }
+{
+  "data": { "problem_id": 1 },
+  "message": "題目建立成功",
+  "status": "201"
+}
 ```
 
 錯誤情況：
@@ -307,7 +423,14 @@ curl -X POST http://127.0.0.1:8000/problem/manage \
 - 權限：教師或管理員（或題目擁有者）
 - 說明：回傳完整題目資訊（包含 subtasks/test cases 等管理用欄位）。
 
-成功回應（200 OK）：結構與一般詳情類似，但欄位更完整，略。
+成功回應（200 OK）：結構與一般詳情類似，但欄位更完整，略。統一包裝：
+```json
+{
+  "data": { /* 管理詳情 payload */ },
+  "message": "取得題目（管理）成功",
+  "status": "200"
+}
+```
 
 ---
 
@@ -328,7 +451,11 @@ curl -X POST http://127.0.0.1:8000/problem/manage \
 
 成功回應（200 OK）：
 ```json
-{ "success": true, "problem_id": 1 }
+{
+  "data": { "problem_id": 1 },
+  "message": "題目更新成功",
+  "status": "200"
+}
 ```
 
 錯誤情況：
@@ -397,8 +524,9 @@ curl -X DELETE http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
 成功回應（201 Created）：
 ```json
 {
-  "detail": "Liked",
-  "likes_count": 15
+  "data": { "likes_count": 15 },
+  "message": "Liked",
+  "status": "201"
 }
 ```
 
@@ -425,8 +553,9 @@ curl -X POST "http://127.0.0.1:8000/problem/$PROBLEM_ID/like" \
 成功回應（200 OK）：
 ```json
 {
-  "detail": "Unliked",
-  "likes_count": 14
+  "data": { "likes_count": 14 },
+  "message": "Unliked",
+  "status": "200"
 }
 ```
 
@@ -453,7 +582,9 @@ curl -X DELETE "http://127.0.0.1:8000/problem/$PROBLEM_ID/like" \
 成功回應（200 OK）：
 ```json
 {
-  "likes_count": 42
+  "data": { "likes_count": 42 },
+  "message": "OK",
+  "status": "200"
 }
 ```
 
@@ -473,34 +604,43 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/likes"
 - 權限：需要登入
 - 說明：回傳當前使用者按讚過的所有題目（依建立時間倒序）。回傳格式與題目列表相同，包含每個題目的 `is_liked_by_user`（恆為 `true`）、`submit_count`、`high_score` 等個人化欄位。
 
-成功回應（200 OK）：
+成功回應（200 OK，分頁包裝）：
 ```json
-[
-  {
-    "id": 3,
-    "title": "Binary Search",
-    "difficulty": "medium",
-    "is_public": "public",
-    "course_id": "<uuid>",
-    "tags": [{"id": 1, "name": "搜尋", "usage_count": 5}],
-    "submit_count": 10,
-    "high_score": 100,
-    "is_liked_by_user": true,
-    "created_at": "2025-11-10T08:00:00Z"
+{
+  "data": {
+    "count": 2,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "id": 3,
+        "title": "Binary Search",
+        "difficulty": "medium",
+        "is_public": "public",
+        "course_id": "<uuid>",
+        "tags": [{"id": 1, "name": "搜尋", "usage_count": 5}],
+        "submit_count": 10,
+        "high_score": 100,
+        "is_liked_by_user": true,
+        "created_at": "2025-11-10T08:00:00Z"
+      },
+      {
+        "id": 1,
+        "title": "Two Sum",
+        "difficulty": "easy",
+        "is_public": "public",
+        "course_id": "<uuid>",
+        "tags": [{"id": 2, "name": "陣列", "usage_count": 12}],
+        "submit_count": 5,
+        "high_score": 80,
+        "is_liked_by_user": true,
+        "created_at": "2025-11-08T06:45:00Z"
+      }
+    ]
   },
-  {
-    "id": 1,
-    "title": "Two Sum",
-    "difficulty": "easy",
-    "is_public": "public",
-    "course_id": "<uuid>",
-    "tags": [{"id": 2, "name": "陣列", "usage_count": 12}],
-    "submit_count": 5,
-    "high_score": 80,
-    "is_liked_by_user": true,
-    "created_at": "2025-11-08T06:45:00Z"
-  }
-]
+  "message": "OK",
+  "status": "200"
+}
 ```
 
 可能錯誤：
@@ -522,18 +662,20 @@ curl "http://127.0.0.1:8000/problem/liked" \
 3. 新增標籤到題目：`POST /problem/<problem_id>/tags`
 4. 從題目移除標籤：`DELETE /problem/<problem_id>/tags/<tag_id>`
 
-> 注意：舊版路徑 `/problem/router/tags/` 已淘汰，現在統一使用上述格式方便前端整合。
-
 ### 1. 取得所有標籤
 - 路徑：`GET /problem/tags`
 - 權限：公開（可匿名）
 
-成功回應：
+成功回應（200 OK）：
 ```json
-[
-  {"id":1, "name":"陣列", "usage_count":12},
-  {"id":2, "name":"字串", "usage_count":7}
-]
+{
+  "data": [
+    {"id":1, "name":"陣列", "usage_count":12},
+    {"id":2, "name":"字串", "usage_count":7}
+  ],
+  "message": "取得標籤列表成功",
+  "status": "200"
+}
 ```
 
 **cURL**
@@ -548,7 +690,11 @@ curl "http://127.0.0.1:8000/problem/tags" | jq
 
 成功回應（201）：
 ```json
-{"id":5, "name":"圖論", "usage_count":0}
+{
+  "data": {"id":5, "name":"圖論", "usage_count":0},
+  "message": "Tag created",
+  "status": "201"
+}
 ```
 
 錯誤：
@@ -563,6 +709,65 @@ curl -X POST "http://127.0.0.1:8000/problem/tags" \
   -d '{"name":"圖論"}' | jq
 ```
 
+---
+
+## 複製題目（管理）
+
+- 路徑：`POST /problem/clone`
+- 權限：系統管理員或目標課程教師 / TA
+- 功能：複製指定題目到目標課程，複製其 tags、subtasks、test cases；統計欄位（提交次數、讚數、瀏覽、AC 率等）會歸零。
+- 支援 `status` 欄位（可選）：接受 `0|1|2` 或 `hidden|course|public`；未提供則沿用原題目狀態。
+- 支援 `dry_run`（布林，可選）：若為 `true`，只建立題目本體，不複製關聯資料（用於除錯）。
+
+請求（JSON 範例）：
+```json
+{
+  "problem_id": 2,
+  "target": "作業系統",
+  "status": "public"
+}
+```
+
+成功回應（200 OK）：
+```json
+{
+  "data": { "problemId": 99 },
+  "message": "Success.",
+  "status": "200"
+}
+```
+
+`dry_run: true` 範例成功回應：
+```json
+{
+  "data": { "problemId": 100 },
+  "message": "Success (dry_run: only problem created).",
+  "status": "200"
+}
+```
+
+可能錯誤：
+- 400 缺少 `problem_id` 或 `target`
+- 403 `Problem can not view.`（來源題目不可視） / `Permission denied`（無權在目標課程建立）
+- 404 `Problem not found` / `Target course not found`
+
+**cURL（一般複製）**
+```bash
+curl -X POST "http://127.0.0.1:8000/problem/clone" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "problem_id": 2, "target": "作業系統", "status": "public" }'
+```
+
+**cURL（dry_run 只建立題目本體(除錯用)）**
+```bash
+curl -X POST "http://127.0.0.1:8000/problem/clone" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "problem_id": 2, "target": "作業系統", "status": "public", "dry_run": true }'
+```
+
+
 ### 3. 新增標籤到題目
 - 路徑：`POST /problem/<problem_id>/tags`
 - 權限：題目擁有者 / 課程 TA / 教師 / 管理員
@@ -571,8 +776,9 @@ curl -X POST "http://127.0.0.1:8000/problem/tags" \
 成功回應（201）：
 ```json
 {
-  "detail": "Tag added",
-  "tag": {"id":1, "name":"陣列", "usage_count":13}
+  "data": {"tag": {"id":1, "name":"陣列", "usage_count":13}},
+  "message": "Tag added",
+  "status": "201"
 }
 ```
 
@@ -596,8 +802,9 @@ curl -X POST "http://127.0.0.1:8000/problem/$PROBLEM_ID/tags" \
 成功回應（200）：
 ```json
 {
-  "detail": "Tag removed",
-  "tag": {"id":1, "name":"陣列", "usage_count":12}
+  "data": {"tag": {"id":1, "name":"陣列", "usage_count":12}},
+  "message": "Tag removed",
+  "status": "200"
 }
 ```
 
@@ -655,6 +862,160 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/likes" | jq
 ```
 
 ---
+
+
+
+
+
+
+
+
+
+
+
+## 子題（Subtasks）API
+
+提供四個操作，皆採統一回傳包裝（`data/message/status`）：
+
+1. 取得子題列表：`GET /problem/<problem_id>/subtasks`
+2. 新增子題：`POST /problem/<problem_id>/subtasks`
+3. 修改子題：`PUT /problem/<problem_id>/subtasks/<subtask_id>`
+4. 刪除子題：`DELETE /problem/<problem_id>/subtasks/<subtask_id>`
+
+權限說明：
+- GET：公開題可匿名；若為 `course`/`hidden` 題目則需具備觀看權限（課程成員/擁有者/教師/管理員）。
+- POST/PUT/DELETE：題目擁有者、課程 TA、教師、管理員。
+
+資料結構（`SubtaskSerializer`）：
+```json
+{
+  "id": 12,
+  "problem_id": 30,
+  "subtask_no": 1,
+  "weight": 20,
+  "time_limit_ms": 1000,
+  "memory_limit_mb": 256,
+  "created_at": "2025-11-28T01:23:45Z",
+  "updated_at": "2025-11-28T01:23:45Z",
+  "test_cases": [
+    {
+      "id": 101,
+      "subtask_id": 12,
+      "idx": 1,
+      "input_path": "...",
+      "output_path": "...",
+      "input_size": 123,
+      "output_size": 45,
+      "checksum_in": "...",
+      "checksum_out": "...",
+      "status": "ready",
+      "created_at": "2025-11-28T01:23:45Z"
+    }
+  ]
+}
+```
+
+### 1) 取得子題列表
+- 路徑：`GET /problem/<problem_id>/subtasks`
+
+成功回應（200 OK）：
+```json
+{
+  "data": [ { /* SubtaskSerializer */ } ],
+  "message": "OK",
+  "status": "200"
+}
+```
+
+**cURL**
+```bash
+curl "http://127.0.0.1:8000/problem/30/subtasks" | jq
+```
+
+### 2) 新增子題
+- 路徑：`POST /problem/<problem_id>/subtasks`
+- 權限：題目擁有者 / 課程 TA / 教師 / 管理員
+- Body 範例：
+```json
+{
+  "subtask_no": 2,
+  "weight": 30,
+  "time_limit_ms": 1500,
+  "memory_limit_mb": 256
+}
+```
+
+成功回應（201 Created）：
+```json
+{
+  "data": { /* SubtaskSerializer */ },
+  "message": "Subtask created",
+  "status": "201"
+}
+```
+
+**cURL**
+```bash
+curl -X POST "http://127.0.0.1:8000/problem/30/subtasks" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subtask_no": 2,
+    "weight": 30,
+    "time_limit_ms": 1500,
+    "memory_limit_mb": 256
+  }'
+```
+
+### 3) 修改子題
+- 路徑：`PUT /problem/<problem_id>/subtasks/<subtask_id>`
+- 權限：題目擁有者 / 課程 TA / 教師 / 管理員
+- Body（部分欄位即可）：
+```json
+{
+  "weight": 25,
+  "time_limit_ms": 1200
+}
+```
+
+成功回應（200 OK）：
+```json
+{
+  "data": { /* SubtaskSerializer */ },
+  "message": "Subtask updated",
+  "status": "200"
+}
+```
+
+**cURL**
+```bash
+curl -X PUT "http://127.0.0.1:8000/problem/30/subtasks/12" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "weight": 25,
+    "time_limit_ms": 1200
+  }'
+```
+
+### 4) 刪除子題
+- 路徑：`DELETE /problem/<problem_id>/subtasks/<subtask_id>`
+- 權限：題目擁有者 / 課程 TA / 教師 / 管理員
+
+成功回應（204 No Content）：
+```json
+{
+  "data": null,
+  "message": "Subtask deleted",
+  "status": "204"
+}
+```
+
+**cURL**
+```bash
+curl -X DELETE "http://127.0.0.1:8000/problem/30/subtasks/12" \
+  -H "Authorization: Bearer $TOKEN"
+```
 
 
 

@@ -156,4 +156,3 @@ echo "  python3 manage.py makemigrations"
 echo "  python3 manage.py migrate"
 echo "若你的 .venv 被意外破壞，請重新建立或重新安裝依賴："
 echo "  python3 -m venv .venv && source .venv/bin/activate && python3 -m pip install -r requirements.txt"
-// ...existing code...

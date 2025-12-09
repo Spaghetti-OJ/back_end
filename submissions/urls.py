@@ -10,4 +10,6 @@ urlpatterns = [
     path('<uuid:id>/code/', views.SubmissionCodeView.as_view(), name='submission-code'),
     path('<uuid:id>/stdout/', views.SubmissionStdoutView.as_view(), name='submission-stdout'),
     path('<uuid:id>/rejudge/', views.submission_rejudge, name='submission-rejudge'),
+    # Note: user_stats_view is registered at root level in back_end/urls.py as /stats/user/<uuid:user_id>/
+    path('<uuid:id>/output/<int:task_no>/<int:case_no>/', views.submission_output_view, name='submission-output'),
 ]

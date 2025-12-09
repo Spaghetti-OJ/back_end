@@ -30,6 +30,8 @@ DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-change-me")
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
 
+CSRF_TRUSTED_ORIGINS = [h.strip() for h in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if h.strip()]
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -43,6 +45,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+    "schema_viewer",
     "drf_spectacular",  
     "corsheaders",
     "courses.apps.CoursesConfig",
@@ -54,6 +57,8 @@ INSTALLED_APPS = [
     "announcements",
     "profiles",
     "editor",
+    "copycat",
+    "search",
 ]
 
 AUTH_USER_MODEL = 'user.User'
@@ -211,3 +216,24 @@ EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER)
 
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://127.0.0.1:5173")
+# MOSS User ID(環境變數讀取)
+MOSS_USER_ID = int(os.getenv('MOSS_USER_ID', 0))
+# ====================
+# Celery Configuration
+# ====================
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://127.0.0.1:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Asia/Taipei'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 分鐘硬限制
+
+# ====================
+# Sandbox Configuration
+# ====================
+SANDBOX_API_URL = os.getenv('SANDBOX_API_URL', 'http://34.81.90.111:8000')
+SANDBOX_TIMEOUT = int(os.getenv('SANDBOX_TIMEOUT', '30'))  # API 請求超時（秒）
+SANDBOX_API_KEY = os.getenv('SANDBOX_API_KEY', '')  # API Key for authentication
+SANDBOX_CALLBACK_URL = os.getenv('SANDBOX_CALLBACK_URL', 'http://localhost:8000/api/submission/callback/')

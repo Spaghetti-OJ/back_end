@@ -1,5 +1,3 @@
-# api_tokens/permissions.py
-
 from rest_framework.permissions import BasePermission
 from .models import ApiToken
 
@@ -15,18 +13,15 @@ class TokenHasScope(BasePermission):
             return False
 
         if not isinstance(request.auth, ApiToken):
-            
             return True
 
         required_scopes = getattr(view, 'required_scopes', [])
-
+        
         if not required_scopes:
             return True
 
-        token_perms = request.auth.permissions or []
+        token_perms = set(request.auth.permissions or [])
+    
+        required_perms = set(required_scopes)
         
-        for scope in required_scopes:
-            if scope not in token_perms:
-                return False
-
-        return True
+        return required_perms.issubset(token_perms)

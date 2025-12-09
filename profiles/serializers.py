@@ -39,7 +39,7 @@ class MeProfileSerializer(serializers.ModelSerializer):
         return obj.user.get_identity_display()
     
 class PublicProfileSerializer(serializers.ModelSerializer):
-    username = serializers.CharField(source="username", read_only=True)
+    username = serializers.CharField(read_only=True)
     role = serializers.SerializerMethodField(read_only=True)
     email = serializers.EmailField(read_only=True)
     user_id = serializers.CharField(source="id", read_only=True)
