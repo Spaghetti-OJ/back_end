@@ -16,7 +16,7 @@ urlpatterns = [
     path("<int:homework_id>/problems", views.AddProblemsToHomeworkView.as_view(), name="homework-add-problems"),
     path("<int:homework_id>/problems/", views.AddProblemsToHomeworkView.as_view(), name="homework-add-problems-slash"),
     
-    path("<int:homework_id>/deadline/",views.HomeworkDeadlineUpdateAPIView.as_view(),name="homework-deadline-update",),
+    path("<int:homework_id>/deadline/", views.HomeworkDeadlineUpdateAPIView.as_view(), name="homework-deadline-update"),
 
     # GET /homework/<id>/deadline
     path("<int:homework_id>/deadline", views.HomeworkDeadlineView.as_view(), name="homework-deadline"),
