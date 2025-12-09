@@ -477,6 +477,7 @@ curl -X GET "http://127.0.0.1:8000/auth/me/" \
 | student_id   | string | 學號（若有）                           |
 | bio | string | 個人簡介                             |
 | avatar       | string | 頭像 url                |
+| email_verified   | bool | 是否驗證過信箱 |
 
 ---
 
@@ -612,7 +613,7 @@ curl -i -X GET "http://127.0.0.1:8000/profile/momo/" \
 可修改欄位：
 
 * `real_name`：真實姓名（User）
-* `email`：Email（User）
+* `email`：Email（User），修改 Email 後會變成未驗證狀態
 * `student_id`：學號，可空（UserProfile）
 * `bio`：個人簡介，可空（UserProfile）
 * `avatar`：頭像圖片檔案，可選（UserProfile）
