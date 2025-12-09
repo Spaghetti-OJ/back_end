@@ -41,14 +41,47 @@ python manage.py runserver
 請複製 `.env.example` 為 `.env`，並依需求調整：
 
 ```env
+# Django 基本設定
 DJANGO_DEBUG=True
 DJANGO_SECRET_KEY=dev-secret
 ALLOWED_HOSTS=127.0.0.1,localhost
 DB_ENGINE=sqlite
 CORS_ALLOWED_ORIGINS=http://localhost:5173
+
+# Celery 設定
+CELERY_BROKER_URL=redis://127.0.0.1:6379/0
+CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/0
+
+# Sandbox API 設定
+SANDBOX_API_URL=http://34.81.90.111:8000
+SANDBOX_TIMEOUT=30
+SANDBOX_API_KEY=happylittle7
 ```
 
-SQLite 用於本機測試；正式環境將改為 **PostgreSQL**。
+#### 環境變數說明
+
+**Django 基本設定：**
+- `DJANGO_DEBUG`: 開發模式開關，正式環境須設為 `False`
+- `DJANGO_SECRET_KEY`: Django 加密金鑰，請參考下方「如何產生 DJANGO_SECRET_KEY」
+- `ALLOWED_HOSTS`: 允許的主機名稱，多個用逗號分隔
+- `DB_ENGINE`: 資料庫引擎，開發用 `sqlite`，正式環境用 `postgresql`
+- `CORS_ALLOWED_ORIGINS`: CORS 允許的來源，前端位址
+
+**Celery 設定：**
+- `CELERY_BROKER_URL`: Celery 訊息佇列位址，使用 Redis database 0
+- `CELERY_RESULT_BACKEND`: Celery 結果儲存位址，使用 Redis database 0
+
+**Sandbox API 設定：**
+- `SANDBOX_API_URL`: Sandbox 判題系統 API 位址
+- `SANDBOX_TIMEOUT`: API 請求超時時間（秒）
+- `SANDBOX_API_KEY`: Sandbox API 認證金鑰
+
+#### 注意事項
+
+- SQLite 用於本機測試；正式環境將改為 **PostgreSQL**
+- Redis 需要另外啟動：`redis-server`
+- Celery Worker 需要另外啟動：`celery -A back_end worker --loglevel=info`
+- 請勿將 `.env` 提交到 Git，已加入 `.gitignore`
 
 ---
 
