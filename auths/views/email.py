@@ -92,3 +92,65 @@ class SendVerificationEmailView(APIView):
             message="Verification Email Sent",
             status_code=status.HTTP_200_OK,
         )
+    
+class VerifyEmailView(APIView):
+    """
+    POST /auth/verify-email/ - 驗證 Email token，將帳號標記為已驗證
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        token_str = request.data.get("token")
+
+        if not token_str:
+            return api_response(
+                data=None,
+                message="Missing token",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            token = EmailVerificationToken.objects.select_related("user").get(
+                token=token_str
+            )
+        except EmailVerificationToken.DoesNotExist:
+            return api_response(
+                data=None,
+                message="Invalid Token",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if token.used:
+            return api_response(
+                data=None,
+                message="Token Already Used",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if token.is_expired:
+            return api_response(
+                data=None,
+                message="Token Expired",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = token.user
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+
+        # 標記為已驗證（如果已經是 True 就維持）
+        if not profile.email_verified:
+            profile.email_verified = True
+            profile.save()
+
+        # 標記 token 已使用
+        token.used = True
+        token.save()
+
+        return api_response(
+            data={"email": user.email,"username": user.username,
+                "user_id": str(user.id),},
+            message="Email Verified",
+            status_code=status.HTTP_200_OK,
+        )

@@ -5,7 +5,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views.revoke import SessionRevokeView
 from .views import activity
 from .views.check import CheckAvailabilityView
-from .views.email import SendVerificationEmailView
+from .views.email import SendVerificationEmailView, VerifyEmailView
 
 urlpatterns = [
     path('login-logs/', login_logs.LoginLogListView.as_view(), name='login-log-list-self'),
@@ -20,4 +20,5 @@ urlpatterns = [
     path('activity/<uuid:user_id>/', activity.UserActivityListView.as_view(), name='user-activity-list'),
     path('check/<str:item>/', CheckAvailabilityView.as_view(), name='auth-check'),
     path("send-email/", SendVerificationEmailView.as_view(), name="auth-send-email"),
+    path("verify-email/", VerifyEmailView.as_view(), name="auth-verify-email"),
 ]
