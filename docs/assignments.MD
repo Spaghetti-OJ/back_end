@@ -192,6 +192,62 @@ cURL 測試範例：
     curl -X DELETE "http://127.0.0.1:8000/homework/<HW_ID>/" ^
       -H "Authorization: Bearer <ACCESS_TOKEN>"
 
+## 作業截止資訊 API
+
+路徑：GET /homework/<homework_id>/deadline/
+
+說明：
+- 回傳指定作業的開始／結束時間與是否逾期等資訊。
+- 主要提供前端顯示「截止時間」、「是否已逾期」、「伺服器目前時間」等狀態使用。
+
+成功回應（200 OK）：
+
+    {
+      "data": {
+        "id": 1,
+        "name": "HW1 - Intro",
+        "markdown": "第一份作業內容",
+        "course_id": "4e3e0a4e-6a75-48da-b692-291c65186ce3",
+        "start": "2025-01-10T00:00:00Z",
+        "end": "2025-01-17T23:59:59Z",
+        "is_overdue": false,
+        "server_time": "2025-01-12T12:00:00Z"
+      },
+      "message": "get homework deadline",
+      "status": "ok"
+    }
+
+欄位說明：
+
+| 欄位                | 型別           | 說明                                           |
+| ------------------- | -------------- | ---------------------------------------------- |
+| data.id             | int            | 作業 ID                                       |
+| data.name           | string         | 作業名稱                                      |
+| data.markdown       | string         | 作業說明（純文字或 Markdown）                 |
+| data.course_id      | uuid           | 所屬課程 ID                                   |
+| data.start          | string or null | 作業開始時間（ISO 8601）                      |
+| data.end            | string or null | 作業截止時間（ISO 8601）                      |
+| data.is_overdue     | boolean        | 是否已逾期（以後端伺服器時間判斷）            |
+| data.server_time    | string         | 後端伺服器當下時間（ISO 8601）                |
+| message             | string         | 結果訊息（固定為 `"get homework deadline"`）   |
+| status              | string         | 狀態字串（預期為 `"ok"`）                     |
+
+錯誤回應：
+
+- 404 作業不存在：
+
+      {"detail": "Not found."}
+
+cURL 測試範例（Windows cmd）：
+
+    curl -X GET "http://127.0.0.1:8000/homework/<HW_ID>/deadline/" ^
+      -H "Authorization: Bearer <ACCESS_TOKEN>" ^
+      -H "Accept: application/json"
+
+cURL 測試範例（Linux / macOS）：
+
+    curl -X GET "http://127.0.0.1:8000/homework/<HW_ID>/deadline/"       -H "Authorization: Bearer <ACCESS_TOKEN>"       -H "Accept: application/json"
+
 ## 取得作業提交列表 API
 
 路徑

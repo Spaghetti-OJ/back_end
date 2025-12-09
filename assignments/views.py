@@ -26,6 +26,7 @@ from .serializers import (
     AddProblemsInSerializer,
     HomeworkSubmissionListItemSerializer,
     make_list_item_from_instance,
+    HomeworkDeadlineSerializer,
     HomeworkStatsSerializer,
     HomeworkScoreboardSerializer,
 )
@@ -42,6 +43,18 @@ def collect_problem_ids(hw: Assignments) -> List[int]:
     return list(
         hw.assignment_problems.order_by("order_index").values_list("problem_id", flat=True)
     )
+def is_course_member(user, course) -> bool:
+    """
+    判斷使用者是否為該課程成員（學生 / TA / 老師都算）
+    """
+    return Course_members.objects.filter(course_id=course, user_id=user).exists()
+def api_response(data=None, message="OK", status_code=200):
+    status_str = "ok" if 200 <= status_code < 400 else "error"
+    return Response({
+        "data": data,
+        "message": message,
+        "status": status_str,
+    }, status=status_code)
 
 # --------- 統一回傳格式 ---------
 def api_response(data=None, message="OK", status_code=200):
@@ -306,6 +319,21 @@ class AddProblemsToHomeworkView(APIView):
         # 9) 回傳結果
         return Response("Add problems Success", status=status.HTTP_200_OK)
 
+class HomeworkDeadlineView(APIView):
+    """
+    GET /homework/<homework_id>/deadline — 取得作業截止時間
+
+    權限：
+      - 老師 / TA：可查看自己課程的所有作業
+      - 其他登入使用者：必須是該課程成員（學生）才能查看
+
+    命名規則：
+      - 舊 API 已存在的欄位名：沿用（name, markdown, start, end）
+      - 其餘欄位：沿用 Assignments table（id, course_id）
+      - 新增欄位：is_overdue, server_time
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
 # --------- NEW: GET /homework/<homework_id>/stats ---------
 class HomeworkStatsView(APIView):
     """
