@@ -60,6 +60,10 @@ urlpatterns = [
         name="redoc",
     ),
     path("search/", include("search.urls")),
+    path(
+        "course/<int:course_id>/homework/",
+        include(("courses.urls.homework", "homework"), namespace="homework"),
+    ),
 ]
 
 if settings.DEBUG:

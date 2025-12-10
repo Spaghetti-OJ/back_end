@@ -8,7 +8,7 @@
 
 ## 課程作業列表
 
-路徑：GET /course/<uuid:course_id>/homework/
+路徑：路徑：GET /course/<int:course_id>/homework/
 
 說明：回傳指定課程底下所有作業清單（依 `make_list_item_from_instance` 輸出結構）。
 
@@ -35,7 +35,7 @@
 
 cURL 測試範例：
 
-    curl -X GET "http://127.0.0.1:8000/course/<COURSE_UUID>/homework/" ^
+    curl -X GET "http://127.0.0.1:8000/course/<COURSE_ID>/homework/" ^
       -H "Authorization: Bearer <ACCESS_TOKEN>" ^
       -H "Accept: application/json"
 
