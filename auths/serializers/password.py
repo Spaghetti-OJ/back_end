@@ -20,6 +20,9 @@ class ChangePasswordSerializer(serializers.Serializer):
             validate_password(value, self.context["request"].user)
         except DjangoValidationError as e:
             raise serializers.ValidationError(e.messages)
+        old_password = self.initial_data.get("old_password")
+        if old_password is not None and value == old_password:
+            raise serializers.ValidationError("New password must be different from the old password.")
         return value
 
     def save(self, **kwargs):
