@@ -66,10 +66,9 @@ class ApiTokenAuthenticationTest(TestCase):
         request = self.factory.get('/')
         request.META['HTTP_AUTHORIZATION'] = 'Bearer'  # 缺少 token
         
-        with self.assertRaises(AuthenticationFailed) as context:
-            self.auth.authenticate(request)
-        
-        self.assertIn('格式錯誤', str(context.exception))
+        # 根據新邏輯，這會被視為不符合格式或無法解析，因此回傳 None (忽略)
+        result = self.auth.authenticate(request)
+        self.assertIsNone(result)
 
     def test_authenticate_with_jwt_token_ignored(self):
         """測試 JWT token（不是 noj_pat_ 開頭）會被忽略"""
@@ -98,14 +97,14 @@ class ApiTokenAuthenticationTest(TestCase):
 
 
     def test_authenticate_with_invalid_token(self):
-        """測試使用無效的 token"""
+        """測試使用無效的 token (非 API Token 格式)"""
         request = self.factory.get('/')
+        # 這不僅是無效，連格式都不對 (沒有 noj_pat_ 前綴)
+        # 所以應該被忽略，而不是拋出 AuthenticationFailed
         request.META['HTTP_AUTHORIZATION'] = 'Bearer invalid_token_12345'
         
-        with self.assertRaises(AuthenticationFailed) as context:
-            self.auth.authenticate(request)
-        
-        self.assertIn('無效', str(context.exception))
+        result = self.auth.authenticate(request)
+        self.assertIsNone(result)
 
     def test_authenticate_with_expired_token(self):
         """測試使用已過期的 token"""
