@@ -18,7 +18,7 @@ class SubmissionResultInline(admin.TabularInline):
     extra = 0
     readonly_fields = ['id', 'test_case_id', 'test_case_index', 'status', 'execution_time', 
                        'memory_usage', 'score', 'max_score', 'solve_status', 'created_at']
-    fields = ['test_case_index', 'status', 'execution_time', 'memory_usage', 'score', 'max_score']
+    fields = ['id', 'test_case_id', 'test_case_index', 'status', 'execution_time', 'memory_usage', 'score', 'max_score', 'solve_status', 'created_at']
     ordering = ['test_case_index']
     can_delete = False
     
