@@ -71,6 +71,32 @@ class ApiTokenAuthenticationTest(TestCase):
         
         self.assertIn('格式錯誤', str(context.exception))
 
+    def test_authenticate_with_jwt_token_ignored(self):
+        """測試 JWT token（不是 noj_pat_ 開頭）會被忽略"""
+        request = self.factory.get('/')
+        # 模擬 JWT token（Base64 編碼，包含點分隔符）
+        jwt_token = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoxfQ.abcdef123456'
+        request.META['HTTP_AUTHORIZATION'] = f'Bearer {jwt_token}'
+        
+        result = self.auth.authenticate(request)
+        
+        # 應該返回 None，讓其他認證類別（如 JWTAuthentication）處理
+        self.assertIsNone(result)
+
+    def test_authenticate_with_api_token_prefix(self):
+        """測試確保 API Token 有正確的前綴才會被處理"""
+        request = self.factory.get('/')
+        # 不是有效的 API token，但有正確前綴
+        invalid_api_token = 'noj_pat_invalid_token_12345'
+        request.META['HTTP_AUTHORIZATION'] = f'Bearer {invalid_api_token}'
+        
+        with self.assertRaises(AuthenticationFailed) as context:
+            self.auth.authenticate(request)
+        
+        # 會嘗試驗證但失敗（因為 hash 不存在）
+        self.assertIn('無效', str(context.exception))
+
+
     def test_authenticate_with_invalid_token(self):
         """測試使用無效的 token"""
         request = self.factory.get('/')
