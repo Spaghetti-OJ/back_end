@@ -37,10 +37,14 @@ class ApiTokenCreateSerializerTest(TestCase):
 
     def test_valid_data_with_expiry(self):
         """測試包含過期時間的有效數據"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        future_date = (timezone.now() + timedelta(days=365)).isoformat()
         data = {
             'name': 'Test Token',
             'permissions': ['read:user'],
-            'expires_at': '2026-12-31T23:59:59Z'
+            'expires_at': future_date
         }
         serializer = ApiTokenCreateSerializer(data=data)
         self.assertTrue(serializer.is_valid())

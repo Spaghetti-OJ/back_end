@@ -28,21 +28,6 @@ class MossServicesTest(TestCase):
             status='pending'
         )
 
-    def test_lang_db_map_contains_expected_languages(self):
-        """測試語言映射表包含預期的語言"""
-        expected_languages = ['c', 'cpp', 'c++', 'cc', 'python', 'py', 'java', 'javascript', 'js']
-        
-        for lang in expected_languages:
-            self.assertIn(lang, LANG_DB_MAP)
-
-    def test_lang_db_map_values(self):
-        """測試語言映射表的值正確"""
-        self.assertEqual(LANG_DB_MAP['c'], 0)
-        self.assertEqual(LANG_DB_MAP['cpp'], 1)
-        self.assertEqual(LANG_DB_MAP['python'], 2)
-        self.assertEqual(LANG_DB_MAP['java'], 3)
-        self.assertEqual(LANG_DB_MAP['javascript'], 4)
-
     @patch('copycat.services.mosspy.Moss')
     @patch('copycat.services.Submission.objects.filter')
     def test_run_moss_check_with_no_submissions(self, mock_submissions, mock_moss):

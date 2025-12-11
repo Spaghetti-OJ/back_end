@@ -6,7 +6,6 @@ from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.contrib.auth.signals import user_logged_in, user_login_failed
 from auths.models import LoginLog
-from auths.signals import log_user_login, log_user_login_failed
 
 User = get_user_model()
 

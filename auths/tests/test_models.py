@@ -5,8 +5,6 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
-from django.utils import timezone
-from datetime import timedelta
 from auths.models import UserActivity, LoginLog
 
 User = get_user_model()

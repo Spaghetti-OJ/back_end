@@ -146,13 +146,13 @@ class CopycatReportModelTest(TestCase):
 
     def test_multiple_reports_for_same_problem(self):
         """測試同一題目可以有多個報告"""
-        report1 = CopycatReport.objects.create(
+        CopycatReport.objects.create(
             problem_id=101,
             requester=self.user,
             status='success'
         )
         
-        report2 = CopycatReport.objects.create(
+        CopycatReport.objects.create(
             problem_id=101,
             requester=self.user,
             status='pending'
