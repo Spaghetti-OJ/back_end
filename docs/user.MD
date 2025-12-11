@@ -1159,7 +1159,7 @@ HTTP 狀態碼：`400 Bad Request`
 ## 請求範例（Curl）
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/auth/change-password" \
+curl -X POST "http://127.0.0.1:8000/auth/change-password/" \
   -H "Authorization: Bearer <你的 access token>" \
   -H "Content-Type: application/json" \
   -d '{
