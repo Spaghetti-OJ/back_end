@@ -1135,3 +1135,96 @@ HTTP 狀態碼：`400 Bad Request`
      * 或錯誤提示（連結已失效、Token 無效等）
 
 3. 之後其他需要「已驗證信箱」的功能（例如重設密碼、寄通知信等），即可依據 `email_verified` 欄位進行權限控制。
+
+---
+
+## POST /auth/change-password/
+
+**說明**：
+已登入使用者可以透過此 API 驗證舊密碼，並將密碼更新為新的密碼。
+
+需使用 JWT Access Token（放在 `Authorization: Bearer <token>`）完成驗證。
+
+---
+
+## 請求格式（JSON）
+
+| 欄位名            | 型別     |  必填 | 說明  |
+| -------------- | ------ | :-: | --- |
+| `old_password` | string |  ✅  | 舊密碼 |
+| `new_password` | string |  ✅  | 新密碼 |
+
+---
+
+## 請求範例（Curl）
+
+```bash
+curl -X POST "http://127.0.0.1:8000/auth/change-password/" \
+  -H "Authorization: Bearer <你的 access token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "old_password": "oldpass123",
+    "new_password": "newpass456"
+  }'
+```
+
+成功後會回傳：
+
+```json
+{
+  "data": null,
+  "message": "Password changed successfully.",
+  "status": "ok"
+}
+```
+
+---
+
+### 可能的錯誤回應
+
+### 1. 未登入 / Token 無效
+
+**HTTP 401 Unauthorized**
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+### 2. 舊密碼錯誤
+
+**HTTP 400 Bad Request**
+
+```json
+{
+  "data": null,
+  "message": "Old password is incorrect.",
+  "status": "error"
+}
+```
+
+### 3. 新密碼不符合密碼強度檢查
+
+**HTTP 400 Bad Request**
+
+```json
+{
+  "data": {
+    "new_password": [
+      "This password is too short. It must contain at least 8 characters."
+    ]
+  },
+  "message": "Invalid password.",
+  "status": "error"
+}
+```
+
+---
+
+### 備註
+
+* 系統會使用 Django 的內建 password validators 檢查新密碼是否符合規範。
+* 舊密碼必須正確，否則不允許更新。
+* 密碼更新後建議讓前端刷新 Token（若業務需要）。
+
