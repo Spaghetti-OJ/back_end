@@ -42,5 +42,8 @@ urlpatterns = [
         "<course_id>/import-csv/",
         include((f"{__package__}.urls.import_csv", "import_csv"), namespace="import_csv"),
     ),
-    path("", include("courses.urls.homework")),
+    path(
+        "<course_id>/homework/",
+        include((f"{__package__}.urls.homework", "homework"), namespace="homework"),
+    ),
 ]
