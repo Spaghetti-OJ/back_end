@@ -28,6 +28,11 @@ class ApiTokenAuthentication(BaseAuthentication):
         except IndexError:
             raise AuthenticationFailed('Token 格式錯誤')
 
+        # 2.5. 檢查是否為 API Token 格式
+        # 如果不是 noj_pat_ 開頭，可能是 JWT token，讓其他認證類別處理
+        if not raw_token.startswith('noj_pat_'):
+            return None
+
         # 3. 對 Token 進行雜湊 (因為資料庫存的是 Hash)
         # 注意：這裡必須跟當初生成 Token 時的雜湊演算法一致 (SHA-256)
         hashed_token = hashlib.sha256(raw_token.encode('utf-8')).hexdigest()

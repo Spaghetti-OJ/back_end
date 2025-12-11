@@ -1,12 +1,8 @@
 from rest_framework import serializers
 from ..models import ApiToken
+from ..scopes import Scopes
 
-VALID_SCOPES = {
-    'read:user',
-    'read:courses', 'write:courses',
-    'read:problems', 'write:problems',
-    'read:submissions', 'write:submissions',
-}
+VALID_SCOPES = set(Scopes.all_scopes())
 
 class ApiTokenCreateSerializer(serializers.ModelSerializer):
     class Meta:
