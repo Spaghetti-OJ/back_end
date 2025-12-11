@@ -72,6 +72,7 @@ class ProblemSerializer(serializers.ModelSerializer):
         required=True,
         allow_null=False
     )
+    course_name = serializers.CharField(source="course_id.name", read_only=True)
 
     class Meta:
         model = Problems
@@ -82,7 +83,7 @@ class ProblemSerializer(serializers.ModelSerializer):
             "description", "input_description", "output_description",
             "sample_input", "sample_output", "hint",
             "subtask_description", "supported_languages",
-            "creator_id", "course_id",
+            "creator_id", "course_id", "course_name",
             "created_at", "updated_at",
             "tags", "tag_ids",
         ]

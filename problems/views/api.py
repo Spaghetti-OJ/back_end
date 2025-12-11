@@ -552,7 +552,7 @@ class ProblemListView(APIView):
         return []
 
     def get(self, request):
-        queryset = Problems.objects.all().select_related('creator_id').prefetch_related('tags', 'subtasks')
+        queryset = Problems.objects.all().select_related('creator_id', 'course_id').prefetch_related('tags', 'subtasks')
         
         # 篩選：difficulty
         difficulty = request.query_params.get('difficulty')
