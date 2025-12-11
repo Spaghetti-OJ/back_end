@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import generics, permissions, status
@@ -68,31 +69,104 @@ class CourseDetailView(generics.GenericAPIView):
         if permission_error is not None:
             return permission_error
 
-        ta_usernames = self._extract_ta_payload(request.data)
-        if isinstance(ta_usernames, Response):
-            return ta_usernames
-
-        student_identifier = self._extract_student_identifier(request)
-
-        try:
-            ta_users = self._resolve_ta_users(ta_usernames)
-        except ValueError as exc:
-            return api_response(
-                message=str(exc), status_code=status.HTTP_404_NOT_FOUND
-            )
-
-        student_membership = None
-        if student_identifier:
-            student_lookup = self._resolve_student_membership(course, student_identifier)
-            if isinstance(student_lookup, Response):
-                return student_lookup
-            student_membership = student_lookup
+        student_lists = self._extract_student_lists(request.data)
+        if isinstance(student_lists, Response):
+            return student_lists
+        remove_ids, new_ids = student_lists
 
         with transaction.atomic():
-            if ta_users is not None:
-                self._sync_tas(course, ta_users)
-            if student_membership is not None:
-                student_membership.delete()
+            try:
+                locked_course = Courses.objects.select_for_update().get(pk=course.pk)
+            except Courses.DoesNotExist:
+                return api_response(
+                    message="Course not found.", status_code=status.HTTP_404_NOT_FOUND
+                )
+
+            student_memberships = list(
+                Course_members.objects.select_for_update().filter(
+                    course_id=locked_course,
+                    role=Course_members.Role.STUDENT,
+                )
+            )
+            student_membership_map = {
+                str(membership.user_id_id): membership
+                for membership in student_memberships
+            }
+
+            to_remove = []
+            for student_id in remove_ids:
+                membership = student_membership_map.get(student_id)
+                if membership is None:
+                    return api_response(
+                        message="Student not found.",
+                        status_code=status.HTTP_404_NOT_FOUND,
+                    )
+                to_remove.append(membership)
+
+            new_ids_set = set(new_ids)
+            existing_memberships = Course_members.objects.select_for_update().filter(
+                course_id=locked_course, user_id__in=new_ids_set
+            )
+            existing_map = {
+                str(membership.user_id_id): membership
+                for membership in existing_memberships
+            }
+            for student_id in remove_ids:
+                existing_map.pop(student_id, None)
+
+            new_users = list(User.objects.filter(id__in=new_ids_set))
+            found_ids = {str(user.id) for user in new_users}
+            missing_new = next((sid for sid in new_ids_set if sid not in found_ids), None)
+            if missing_new:
+                return api_response(
+                    message="Student not found.", status_code=status.HTTP_404_NOT_FOUND
+                )
+
+            for user in new_users:
+                if getattr(user, "identity", None) != User.Identity.STUDENT:
+                    return api_response(
+                        message="User is not a student.",
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                    )
+                if str(user.id) in existing_map:
+                    return api_response(
+                        message="Student already in this course.",
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            current_student_count = len(student_memberships)
+            final_student_count = (
+                current_student_count - len(to_remove) + len(new_users)
+            )
+            if (
+                locked_course.student_limit is not None
+                and final_student_count > locked_course.student_limit
+            ):
+                return api_response(
+                    message="Course is full.",
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+
+            if to_remove:
+                Course_members.objects.filter(
+                    pk__in=[membership.pk for membership in to_remove]
+                ).delete()
+
+            if new_users:
+                Course_members.objects.bulk_create(
+                    [
+                        Course_members(
+                            course_id=locked_course,
+                            user_id=user,
+                            role=Course_members.Role.STUDENT,
+                        )
+                        for user in new_users
+                    ]
+                )
+
+            Courses.objects.filter(pk=locked_course.pk).update(
+                student_count=final_student_count
+            )
 
         return api_response(message="Success.", status_code=status.HTTP_200_OK)
 
@@ -120,105 +194,38 @@ class CourseDetailView(generics.GenericAPIView):
         return None
 
     @staticmethod
-    def _extract_ta_payload(data):
-        if not isinstance(data, dict):
+    def _extract_student_lists(data):
+        if not isinstance(data, Mapping):
             return api_response(
                 message="Invalid payload.", status_code=status.HTTP_400_BAD_REQUEST
             )
-        if "TAs" not in data:
-            return None
 
-        tas = data.get("TAs")
-        if tas is None:
+        remove_ids = CourseDetailView._normalize_student_id_list(data.get("remove"), "remove")
+        if isinstance(remove_ids, Response):
+            return remove_ids
+
+        new_ids = CourseDetailView._normalize_student_id_list(data.get("new"), "new")
+        if isinstance(new_ids, Response):
+            return new_ids
+
+        return remove_ids, new_ids
+
+    @staticmethod
+    def _normalize_student_id_list(value, field_name):
+        if value is None:
             return []
-        if not isinstance(tas, list):
+        if not isinstance(value, list):
             return api_response(
-                message="TAs must be provided as a list.",
+                message=f"{field_name} must be provided as a list.",
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
         normalized = []
-        for username in tas:
-            if not isinstance(username, str):
+        for raw in value:
+            student_id = str(raw).strip()
+            if not student_id:
                 return api_response(
-                    message="TAs must be provided as usernames.",
+                    message=f"{field_name} cannot contain blank student ids.",
                     status_code=status.HTTP_400_BAD_REQUEST,
                 )
-            trimmed = username.strip()
-            if not trimmed:
-                return api_response(
-                    message="TA username cannot be blank.",
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                )
-            normalized.append(trimmed)
+            normalized.append(student_id)
         return normalized
-
-    @staticmethod
-    def _extract_student_identifier(request):
-        identifier = request.query_params.get("student")
-        if identifier:
-            identifier = identifier.strip()
-        if not identifier and isinstance(request.data, dict):
-            raw_student = request.data.get("student")
-            if raw_student:
-                identifier = str(raw_student).strip()
-        return identifier or None
-
-    @staticmethod
-    def _resolve_ta_users(usernames):
-        if usernames is None:
-            return None
-        if not usernames:
-            return []
-
-        users = list(User.objects.filter(username__in=usernames))
-        found_usernames = {user.username for user in users}
-        missing = next((name for name in usernames if name not in found_usernames), None)
-        if missing:
-            raise ValueError(f"User: {missing} not found.")
-        return users
-
-    @staticmethod
-    def _resolve_student_membership(course, student_identifier):
-        try:
-            student = User.objects.get(pk=student_identifier)
-        except (User.DoesNotExist, ValueError):
-            return api_response(
-                message="Student not found.", status_code=status.HTTP_404_NOT_FOUND
-            )
-
-        membership = Course_members.objects.filter(
-            course_id=course,
-            user_id=student,
-            role=Course_members.Role.STUDENT,
-        ).first()
-
-        if membership is None:
-            return api_response(
-                message="Student not found.", status_code=status.HTTP_404_NOT_FOUND
-            )
-        return membership
-
-    @staticmethod
-    def _sync_tas(course, ta_users):
-        desired_ids = {user.id for user in ta_users}
-        Course_members.objects.filter(
-            course_id=course, role=Course_members.Role.TA
-        ).exclude(user_id__in=desired_ids).delete()
-
-        existing_memberships = Course_members.objects.filter(
-            course_id=course, user_id__in=desired_ids
-        )
-        membership_map = {membership.user_id_id: membership for membership in existing_memberships}
-
-        for user in ta_users:
-            membership = membership_map.get(user.id)
-            if membership:
-                if membership.role != Course_members.Role.TA:
-                    membership.role = Course_members.Role.TA
-                    membership.save(update_fields=["role"])
-                continue
-            Course_members.objects.create(
-                course_id=course,
-                user_id=user,
-                role=Course_members.Role.TA,
-            )
