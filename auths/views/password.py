@@ -106,7 +106,9 @@ class ForgotPasswordView(APIView):
             )
 
         # ⚠️ 依你的實際欄位名稱調整：email / email_verified
-        if not getattr(profile, "email", None) or not getattr(profile, "email_verified", False):
+        email = getattr(user, "email", None)
+
+        if not email or not profile.email_verified:
             return api_response(
                 data=None,
                 message="此帳號尚未綁定或驗證信箱，無法使用密碼恢復。",
@@ -132,7 +134,7 @@ class ForgotPasswordView(APIView):
         reset_url = f"{frontend_base}/reset-password?token={token}"
 
         # 5) 寄信
-        send_password_reset_email(to_email=profile.email, reset_url=reset_url)
+        send_password_reset_email(to_email=email, reset_url=reset_url)
 
         return api_response(
             data=None,
