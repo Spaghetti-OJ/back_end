@@ -7,12 +7,26 @@ class ProblemTagsInline(admin.TabularInline):
     autocomplete_fields = ['tag_id', 'added_by']
 
 
+class ProblemSubtaskInline(admin.TabularInline):
+    model = Problem_subtasks
+    extra = 0
+    fields = ('subtask_no', 'weight', 'time_limit_ms', 'memory_limit_mb', 'created_at', 'updated_at')
+    readonly_fields = ('created_at', 'updated_at')
+
+
+class TestCaseInline(admin.TabularInline):
+    model = Test_cases
+    extra = 0
+    fields = ('idx', 'status', 'input_path', 'output_path', 'created_at')
+    readonly_fields = ('created_at',)
+
+
 @admin.register(Problems)
 class ProblemAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'difficulty', 'is_public', 'total_submissions', 'accepted_submissions', 'acceptance_rate')
     list_filter = ('difficulty', 'is_public')
     search_fields = ('title',)
-    inlines = [ProblemTagsInline]
+    inlines = [ProblemTagsInline, ProblemSubtaskInline]
 
 
 @admin.register(Problem_subtasks)
@@ -21,6 +35,7 @@ class ProblemSubtaskAdmin(admin.ModelAdmin):
     list_filter = ('problem_id',)
     search_fields = ('problem_id__title',)   # 依你的 Problem 欄位調整
     ordering = ('problem_id', 'subtask_no')
+    inlines = [TestCaseInline]
 
 @admin.register(Test_cases)
 class TestCaseAdmin(admin.ModelAdmin):
