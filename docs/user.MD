@@ -1147,7 +1147,7 @@ HTTP 狀態碼：`400 Bad Request`
 
 ---
 
-## 請求格式（JSON）
+### 請求格式（JSON）
 
 | 欄位名            | 型別     |  必填 | 說明  |
 | -------------- | ------ | :-: | --- |
@@ -1156,7 +1156,7 @@ HTTP 狀態碼：`400 Bad Request`
 
 ---
 
-## 請求範例（Curl）
+### 請求範例（Curl）
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/auth/change-password/" \
@@ -1228,3 +1228,163 @@ curl -X POST "http://127.0.0.1:8000/auth/change-password/" \
 * 舊密碼必須正確，否則不允許更新。
 * 密碼更新後建議讓前端刷新 Token（若業務需要）。
 
+--
+
+## POST /auth/forgot-password/
+
+**說明**：
+使用者輸入自己的 `username`。若該帳號已綁定且**已驗證**信箱，系統會寄出「重設密碼」信件到 `User.email`（或你專案綁定信箱欄位），信內包含可用來重設密碼的連結（含一次性 token）。
+
+> 典型使用時機：登入頁面點選「忘記密碼」後呼叫。
+
+### 權限
+
+* 不需登入（`AllowAny`）
+
+### Request
+
+* **Method**：`POST`
+* **Path**：`/auth/forgot-password/`
+* **Headers**：
+
+  * `Content-Type: application/json`
+
+#### Body（JSON）
+
+| 欄位         | 型別     |  必填 | 說明    |
+| ---------- | ------ | :-: | ----- |
+| `username` | string |  ✅  | 使用者帳號 |
+
+#### 範例
+
+```json
+{ "username": "momomo" }
+```
+
+### Success Response
+
+* **Status**：`200 OK`
+
+```json
+{ "data": null, "message": "已寄出重設密碼信，請至驗證信箱查收。", "status": "ok" }
+```
+
+### Error Responses
+
+#### 找不到使用者
+
+* **Status**：`404 Not Found`
+
+```json
+{ "data": null, "message": "找不到此使用者。", "status": "error" }
+```
+
+#### 尚未綁定或尚未驗證信箱
+
+* **Status**：`400 Bad Request`
+
+```json
+{ "data": null, "message": "此帳號尚未綁定或驗證信箱，無法使用密碼恢復。", "status": "error" }
+```
+
+### Curl 範例
+
+```bash
+curl -X POST "http://127.0.0.1:8000/auth/forgot-password/" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"momomo"}'
+```
+
+### 寄信內容（概念）
+
+信件會包含重設連結，通常類似：
+
+* `http://localhost:3000/reset-password?token=<TOKEN>`
+
+其中 `<TOKEN>` 為一次性 token，需在有效期限內使用。
+
+---
+
+## POST /auth/reset-password/
+
+**說明**：
+使用者從信件連結取得 `token` 後，提交 `token` 與 `new_password` 以完成重設密碼。此 API 會驗證 token 是否存在、是否過期、是否已使用，通過後將使用者密碼更新為新密碼，並將 token 標記為已使用。
+
+### 權限
+
+* 不需登入（`AllowAny`）
+
+### Request
+
+* **Method**：`POST`
+* **Path**：`/auth/reset-password/`
+* **Headers**：
+
+  * `Content-Type: application/json`
+
+#### Body（JSON）
+
+| 欄位             | 型別     |  必填 | 說明              |
+| -------------- | ------ | :-: | --------------- |
+| `token`        | string |  ✅  | 信件連結中的一次性 token |
+| `new_password` | string |  ✅  | 新密碼（預設最少 8 碼）   |
+
+#### 範例
+
+```json
+{ "token": "<TOKEN>", "new_password": "NewPassword123!" }
+```
+
+### Success Response
+
+* **Status**：`200 OK`
+
+```json
+{ "data": null, "message": "密碼已成功重設。", "status": "ok" }
+```
+
+### Error Responses
+
+#### Token 無效
+
+* **Status**：`400 Bad Request`
+
+```json
+{ "data": null, "message": "無效的重設連結。", "status": "error" }
+```
+
+#### Token 已使用
+
+* **Status**：`400 Bad Request`
+
+```json
+{ "data": null, "message": "此重設連結已被使用。", "status": "error" }
+```
+
+#### Token 已過期
+
+* **Status**：`400 Bad Request`
+
+```json
+{ "data": null, "message": "此重設連結已過期。", "status": "error" }
+```
+
+### Curl 範例
+
+> 先從信件連結取得 `token=` 後面的值，再帶入以下 curl。
+
+```bash
+curl -X POST "http://127.0.0.1:8000/auth/reset-password/" \
+  -H "Content-Type: application/json" \
+  -d '{"token":"<TOKEN>","new_password":"NewPassword123!"}'
+```
+
+### 測試：重設後登入（可選）
+
+若你的登入 API 為 `POST /auth/session/`，可用新密碼登入確認：
+
+```bash
+curl -X POST "http://127.0.0.1:8000/auth/session/" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"momomo","password":"NewPassword123!"}'
+```
