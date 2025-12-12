@@ -31,3 +31,16 @@ class ChangePasswordSerializer(serializers.Serializer):
         user.set_password(new_password)
         user.save()
         return user
+    
+class ForgotPasswordSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=150, required=True)
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    token = serializers.CharField(required=True)
+    new_password = serializers.CharField(min_length=8, max_length=128, required=True)
+
+    def validate_new_password(self, value):
+        if value.strip() == "":
+            raise serializers.ValidationError("密碼不能為空白")
+        return value

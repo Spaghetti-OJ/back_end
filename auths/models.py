@@ -165,7 +165,7 @@ class EmailVerificationToken(models.Model):
     
 class PasswordResetToken(models.Model):
     """
-    儲存一次性重設密碼 token
+    一次性重設密碼 token
     """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="password_reset_tokens")
     token = models.CharField(max_length=128, unique=True, db_index=True)
@@ -174,4 +174,4 @@ class PasswordResetToken(models.Model):
     used = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.user.username} - {self.token[:8]}..."
+        return f"{self.user_id} {self.token[:8]}..."

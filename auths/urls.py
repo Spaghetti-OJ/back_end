@@ -6,7 +6,7 @@ from .views.revoke import SessionRevokeView
 from .views import activity
 from .views.check import CheckAvailabilityView
 from .views.email import SendVerificationEmailView, VerifyEmailView
-from .views.password import ChangePasswordView
+from .views.password import ChangePasswordView, ForgotPasswordView, ResetPasswordView
 
 urlpatterns = [
     path('login-logs/', login_logs.LoginLogListView.as_view(), name='login-log-list-self'),
@@ -24,4 +24,6 @@ urlpatterns = [
     path("send-email/", SendVerificationEmailView.as_view(), name="auth-send-email"),
     path("verify-email/", VerifyEmailView.as_view(), name="auth-verify-email"),
     path("change-password/", ChangePasswordView.as_view(), name="auth-change-password"),
+    path("forgot-password/", ForgotPasswordView.as_view(), name="forgot_password"),
+    path("reset-password/", ResetPasswordView.as_view(), name="reset_password"),
 ]
