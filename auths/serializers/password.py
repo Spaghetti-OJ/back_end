@@ -41,6 +41,7 @@ class ResetPasswordSerializer(serializers.Serializer):
     new_password = serializers.CharField(min_length=8, max_length=128, required=True)
 
     def validate_new_password(self, value):
-        if value.strip() == "":
+        value = value.strip()
+        if value == "":
             raise serializers.ValidationError("密碼不能為空白")
         return value
