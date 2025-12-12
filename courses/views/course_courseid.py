@@ -32,7 +32,11 @@ class CourseDetailView(generics.GenericAPIView):
             .select_related("user_id")
             .order_by("joined_at")
         )
-        is_member = is_teacher or any(m.user_id.id == user.id for m in members)
+        is_member = (
+            getattr(user, "identity", None) == "admin"
+            or is_teacher
+            or any(m.user_id.id == user.id for m in members)
+        )
         if not is_member:
             return api_response(
                 message="You are not in this course.",
