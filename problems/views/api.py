@@ -44,6 +44,8 @@ import os
 import uuid
 import mimetypes
 from django.conf import settings
+from rest_framework.parsers import MultiPartParser, FormParser
+import re
 
 class ProblemsViewSet(viewsets.ModelViewSet):
     queryset = Problems.objects.all().order_by("-created_at")
@@ -435,6 +437,38 @@ class ProblemTestCaseDownloadView(APIView):
         resp = FileResponse(fh, content_type='application/zip')
         resp["Content-Disposition"] = f"attachment; filename=\"problem-{problem.id}-testcases.zip\""
         return resp
+
+
+class ProblemTestCaseZipUploadView(APIView):
+    """
+    POST /problem/<pk>/test-cases/upload-zip
+    需求（目前版）：前端拖一個 zip 直接上傳，我們僅保存 zip 檔到問題目錄，不解析內容、不產生 Test_cases 紀錄。
+
+    參數：multipart form-data
+      - file: zip 檔案（必填）
+
+    權限：題目擁有者 / 課程 TA / 教師 / 管理員。
+    行為：
+      - 將 zip 存到 `MEDIA_ROOT/testcases/p<problem.id>/problem.zip`。
+      - 回傳保存路徑。
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, pk: int):
+        problem = get_object_or_404(Problems, pk=pk)
+        if not _has_problem_manage_permission(problem, request.user):
+            return api_response(None, "Not enough permission", status_code=403)
+
+        upload = request.FILES.get('file')
+        if not upload:
+            return api_response({"errors": {"file": "required"}}, "Validation error", status_code=422)
+
+        # 僅保存 zip，不解析
+        from ..services.storage import _storage
+        rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
+        saved = _storage.save(rel, upload)
+        return api_response({"path": saved.replace('\\','/')}, "Zip uploaded", status_code=201)
 
 
 class ProblemTestCaseChecksumView(APIView):
