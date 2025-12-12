@@ -31,6 +31,8 @@ class CourseListCreateView(generics.GenericAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        if getattr(user, "identity", None) == "admin":
+            return Courses.objects.select_related("teacher_id").order_by("-created_at")
         return (
             Courses.objects.select_related("teacher_id")
             .filter(Q(teacher_id=user) | Q(members__user_id=user))
