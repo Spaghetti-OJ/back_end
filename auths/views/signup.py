@@ -22,8 +22,13 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        return api_response(data=response.data, status_code=response.status_code)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        user = User.objects.select_related("userprofile").get(pk=user.pk)
+        data = RegisterSerializer(user).data
+        return api_response(data=data, status_code=201)
 
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
