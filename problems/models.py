@@ -66,6 +66,9 @@ class Problems(models.Model):
     hint = models.TextField(blank=True, null=True)
     subtask_description = models.TextField(blank=True, null=True)
     supported_languages = models.JSONField(default=default_supported_langs)
+    # --- Solution code for test generation (not editorials) ---
+    solution_code = models.TextField(blank=True, null=True, help_text="Optional: reference solution code used for test generation.")
+    solution_code_language = models.CharField(max_length=50, blank=True, null=True, help_text="Optional: language of solution code. Required if solution code is provided.")
     creator_id = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_problems')
     course_id = models.ForeignKey('courses.Courses', on_delete=models.PROTECT, null=False, blank=False, related_name='courses')
     created_at = models.DateTimeField(default=timezone.now)
@@ -76,6 +79,17 @@ class Problems(models.Model):
         indexes = [
             models.Index(fields=['difficulty']),
             models.Index(fields=['is_public']),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                # If solution_code is empty or null, ok; otherwise solution_code_language must be present (not empty, not null)
+                check=(
+                    models.Q(solution_code__isnull=True) |
+                    models.Q(solution_code='') |
+                    (~models.Q(solution_code_language__isnull=True) & ~models.Q(solution_code_language=''))
+                ),
+                name='chk_solution_lang_required_when_code_present'
+            ),
         ]
 
     def __str__(self):
@@ -90,6 +104,13 @@ class Problems(models.Model):
         self.acceptance_rate = round(Decimal(rate), 2)
         if save:
             self.save(update_fields=['acceptance_rate'])
+
+    def clean(self):
+        # Enforce: if solution_code has content, solution_code_language must be provided
+        code = (self.solution_code or '').strip()
+        lang = (self.solution_code_language or '').strip()
+        if code and not lang:
+            raise ValidationError({'solution_code_language': '當提供 solution code 時，必須指定其語言。'})
 
 
 class Problem_subtasks(models.Model):
