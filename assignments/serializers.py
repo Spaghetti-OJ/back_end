@@ -1,22 +1,26 @@
 from typing import List, Optional
+
 from django.utils import timezone
 from rest_framework import serializers
-from datetime import datetime
-
+from datetime import datetime, timezone as dt_timezone
 
 from assignments.models import Assignments, Assignment_problems
 from courses.models import Courses
 from problems.models import Problems
 from submissions.models import Submission
-from rest_framework import serializers
+
 
 def to_dt_from_epoch(value: Optional[int]):
     if value in (None, "", 0):
         return None
     try:
-        return timezone.datetime.fromtimestamp(int(value), tz=timezone.get_current_timezone())
-    except Exception:
+        return datetime.fromtimestamp(
+            int(value),
+            tz=timezone.get_current_timezone(),
+        )
+    except (TypeError, ValueError, OSError):
         raise serializers.ValidationError("invalid timestamp")
+
 
 def to_epoch_from_dt(dt):
     if not dt:
@@ -24,15 +28,17 @@ def to_epoch_from_dt(dt):
     return int(dt.timestamp())
 
 
-# ---------- 建立 ----------
 class HomeworkCreateSerializer(serializers.Serializer):
     name = serializers.CharField(required=True)
     course_id = serializers.UUIDField()
     markdown = serializers.CharField(required=False, allow_blank=True, default="")
     start = serializers.IntegerField(required=False, allow_null=True)
     end = serializers.IntegerField(required=False, allow_null=True)
-    problem_ids = serializers.ListField(child=serializers.IntegerField(),
-                                        required=False, default=list)
+    problem_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
     scoreboard_status = serializers.IntegerField(required=False, allow_null=True)
     penalty = serializers.CharField(required=False, allow_blank=True, default="")
 
@@ -48,13 +54,22 @@ class HomeworkCreateSerializer(serializers.Serializer):
         if Assignments.objects.filter(course=course, title=attrs["name"]).exists():
             raise serializers.ValidationError("homework exists in this course")
 
-        # 時間轉換
+        # 時間轉換（epoch -> aware datetime in UTC）
         start = attrs.get("start")
         end = attrs.get("end")
-        attrs["_start_dt"] = datetime.fromtimestamp(start, tz=timezone.utc) if start is not None else None
-        attrs["_end_dt"]   = datetime.fromtimestamp(end,   tz=timezone.utc) if end   is not None else None
-        return attrs
 
+        attrs["_start_dt"] = (
+            datetime.fromtimestamp(start, tz=dt_timezone.utc)
+            if start is not None
+            else None
+        )
+        attrs["_end_dt"] = (
+            datetime.fromtimestamp(end, tz=dt_timezone.utc)
+            if end is not None
+            else None
+        )
+
+        return attrs
 # ---------- 詳情輸出 ----------
 class HomeworkDetailSerializer(serializers.Serializer):
     # 指定的輸出格式
