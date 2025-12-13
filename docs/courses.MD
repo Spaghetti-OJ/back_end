@@ -315,6 +315,13 @@ curl -X PUT "http://127.0.0.1:8000/course/<course_id>/" \
 
 **說明**：以 CSV 檔批次匯入學生帳號並加入指定課程。僅管理員或授課教師可操作；教師只能匯入自己的課程；檔案大小上限 5MB。
 
+**請求格式 (multipart/form-data)**：
+
+| 欄位    | 必填 | 說明                                                                 |
+| ------- | ---- | -------------------------------------------------------------------- |
+| `file`  | ✅   | 上傳的 CSV 檔案                                                      |
+| `force` | ❌   | 布林，`1/true` 時若帳號已存在會覆寫 email/real_name/student_id，預設為不更新 |
+
 **CSV 欄位**
 
 | 欄位名       | 必填 | 說明                                               |
@@ -366,7 +373,8 @@ curl -X PUT "http://127.0.0.1:8000/course/<course_id>/" \
 ```bash
 curl -X POST http://127.0.0.1:8000/course/42/import-csv/ \
     -H "Authorization: Bearer <access>" \
-    -F "file=@./students.csv"
+    -F "file=@./students.csv" \
+    -F "force=1"
 ```
 
 ---
