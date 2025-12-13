@@ -464,11 +464,80 @@ class ProblemTestCaseZipUploadView(APIView):
         if not upload:
             return api_response({"errors": {"file": "required"}}, "Validation error", status_code=422)
 
-        # 僅保存 zip，不解析
+        # 讀取 zip、解析檔名規則 sstt.in/out，生成 meta.json 並一併寫入 zip
+        import zipfile
+        from io import BytesIO
+        data = upload.read()
+        try:
+            src_zip = zipfile.ZipFile(BytesIO(data))
+        except zipfile.BadZipFile:
+            return api_response(None, "Uploaded file must be a valid zip", status_code=400)
+
+        names = src_zip.namelist()
+        # 映射：subtask_index -> { 'in': set(tt), 'out': set(tt) }
+        pairs_map = {}
+        for n in names:
+            base = os.path.basename(n)
+            stem, ext = os.path.splitext(base)
+            # 規則：四位數 sstt，兩位子題、兩位測資，從 00 開始
+            if ext not in ('.in', '.out'):
+                continue
+            if len(stem) != 4 or not stem.isdigit():
+                continue
+            ss = int(stem[:2])
+            tt = int(stem[2:])
+            entry = pairs_map.setdefault(ss, {'in': set(), 'out': set()})
+            entry['in' if ext == '.in' else 'out'].add(tt)
+
+        # 以「同時存在 in/out」的 tt 數量作為 caseCount
+        case_counts = {}
+        for ss, entry in pairs_map.items():
+            count = len(entry['in'] & entry['out'])
+            case_counts[ss] = count
+
+        # 從資料庫讀取既有子題設定（time/memory/score），對應 ss -> subtask_no = ss+1
+        subtask_map = {st.subtask_no - 1: st for st in Problem_subtasks.objects.filter(problem_id=problem)}
+
+        def build_meta_entry(ss_idx: int):
+            st = subtask_map.get(ss_idx)
+            case_count = case_counts.get(ss_idx, 0)
+            # 預設值（若資料庫沒有設定）：時間 1000 ms、記憶體 134218、分數 0
+            time_limit = getattr(st, 'time_limit_ms', None) or 1000
+            # memoryLimit 規格以 KB 為單位（範例 134218），以 MB 欄位轉換
+            mem_mb = getattr(st, 'memory_limit_mb', None)
+            memory_limit = (mem_mb * 1024) if mem_mb is not None else 134218
+            task_score = getattr(st, 'weight', None) or 0
+            return {
+                "caseCount": case_count,
+                "memoryLimit": memory_limit,
+                "taskScore": task_score,
+                "timeLimit": time_limit,
+            }
+
+        # 產生 meta.json 結構，子題索引由 0..max(ss)
+        if case_counts:
+            max_ss = max(case_counts.keys())
+        else:
+            max_ss = -1
+        meta = {
+            "testCase": [build_meta_entry(ss) for ss in range(max_ss + 1)]
+        }
+
+        # 重打包 zip：複製原檔案並加入 meta.json
+        out_buf = BytesIO()
+        with zipfile.ZipFile(out_buf, mode='w', compression=zipfile.ZIP_DEFLATED) as out_zip:
+            for n in names:
+                with src_zip.open(n, 'r') as f:
+                    out_zip.writestr(n, f.read())
+            import json
+            out_zip.writestr('meta.json', json.dumps(meta, ensure_ascii=False, separators=(",", ":")))
+        out_buf.seek(0)
+
+        # 保存 zip 到本地 storage
         from ..services.storage import _storage
         rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
-        saved = _storage.save(rel, upload)
-        return api_response({"path": saved.replace('\\','/')}, "Zip uploaded", status_code=201)
+        saved = _storage.save(rel, out_buf)
+        return api_response({"path": saved.replace('\\','/')}, "Zip uploaded with meta", status_code=201)
 
 
 class ProblemTestCaseChecksumView(APIView):
