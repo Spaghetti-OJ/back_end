@@ -537,6 +537,8 @@ curl http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
     -H "Authorization: Bearer <access>"
 ```
 
+## 學生成績新增 API
+
 **路徑**：`POST /course/<course_id>/grade/<student>`
 
 **說明**：新增指定學生的成績項目。需登入且必須為該課程的教師、助教或管理員（且為課程成員）。
@@ -577,6 +579,8 @@ curl -X POST http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
         "score": 95
     }'
 ```
+
+## 學生成績修改 API
 
 **路徑**：`PUT /course/<course_id>/grade/<student>`
 
@@ -621,6 +625,8 @@ curl -X PUT http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
         "score": 85
     }'
 ```
+
+## 學生成績刪除 API
 
 **路徑**：`DELETE /course/<course_id>/grade/<student>`
 
