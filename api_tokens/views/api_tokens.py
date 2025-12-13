@@ -3,6 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
 
 from api_tokens.models import ApiToken
@@ -35,7 +36,7 @@ class ApiTokenListView(APIView):
     - POST: 為當前使用者建立一個新的 API Token。
     """
 
-    authentication_classes = [SessionAuthentication, ApiTokenAuthentication]
+    authentication_classes = [ApiTokenAuthentication, JWTAuthentication, SessionAuthentication]
     permission_classes = [IsAuthenticated, TokenHasScope]
 
     def get(self, request):
@@ -71,7 +72,7 @@ class ApiTokenDetailView(APIView):
     - DELETE: 刪除指定的 Token
     """
     
-    authentication_classes = [SessionAuthentication, ApiTokenAuthentication]
+    authentication_classes = [ApiTokenAuthentication, JWTAuthentication, SessionAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get_object(self, request, tokenId):
