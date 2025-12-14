@@ -49,13 +49,6 @@ def is_course_member(user, course) -> bool:
     判斷使用者是否為該課程成員（學生 / TA / 老師都算）
     """
     return Course_members.objects.filter(course_id=course, user_id=user).exists()
-def api_response(data=None, message="OK", status_code=200):
-    status_str = "ok" if 200 <= status_code < 400 else "error"
-    return Response({
-        "data": data,
-        "message": message,
-        "status": status_str,
-    }, status=status_code)
 
 # --------- 統一回傳格式 ---------
 def api_response(data=None, message="OK", status_code=200):
@@ -68,14 +61,6 @@ def api_response(data=None, message="OK", status_code=200):
         },
         status=status_code,
     )
-
-def api_response(data=None, message="OK", status_code=200):
-    status_str = "ok" if 200 <= status_code < 400 else "error"
-    return Response({
-        "data": data,
-        "message": message,
-        "status": status_str,
-    }, status=status_code)
 
 # --------- POST /homework/ ---------
 class HomeworkCreateView(APIView):
@@ -412,6 +397,45 @@ class HomeworkDeadlineView(APIView):
     """
 
     permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, homework_id: int):
+        # 1) 先把作業抓出來，連同 course 一次 select_related
+        homework = get_object_or_404(
+            Assignments.objects.select_related("course"),
+            pk=homework_id,
+        )
+        course = homework.course
+
+        # 2) 權限：
+        #    - 老師 / TA 直接通過
+        #    - 其他使用者必須是課程成員
+        if not is_teacher_or_ta(request.user, course):
+            if not is_course_member(request.user, course):
+                return api_response(
+                    data=None,
+                    message="permission denied: user is not a member of this course",
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+
+        # 3) 組出回傳 payload
+        now = timezone.now()
+        payload = {
+            "id": homework.id,
+            "name": homework.title,
+            "markdown": homework.description or "",
+            "course_id": homework.course_id,
+            "start": homework.start_time,
+            "end": homework.due_time,
+            "is_overdue": bool(homework.due_time and now > homework.due_time),
+            "server_time": now,
+        }
+
+        ser = HomeworkDeadlineSerializer(payload)
+        return api_response(
+            data=ser.data,
+            message="get homework deadline",
+            status_code=status.HTTP_200_OK,
+        )
 # --------- NEW: GET /homework/<homework_id>/stats ---------
 class HomeworkStatsView(APIView):
     """
@@ -810,8 +834,8 @@ class HomeworkScoreboardView(APIView):
 
         # 7. 組成 payload -> serializer -> api_response
         payload = {
-            "assignment_id": assignment.id,
-            "title": assignment.title,
+            "homework_id": assignment.id,
+            "homework_title": assignment.title,
             "course_id": assignment.course_id,
             "items": items,
         }
