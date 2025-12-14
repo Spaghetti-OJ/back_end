@@ -584,17 +584,24 @@ class ProblemTestCaseMetaView(APIView):
         rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
         if not _storage.exists(rel):
             raise Http404("Test case archive not found")
-        import zipfile
-        import hashlib
+        import zipfile, hashlib, json
         with _storage.open(rel, 'rb') as fh:
             data = fh.read()
         md5 = hashlib.md5(data).hexdigest()
         from io import BytesIO
         buffer = BytesIO(data)
-        tasks = []
-        missing_pairs = []
+        # 優先讀取 zip 內的 meta.json；若不存在則回退為檔名掃描
         try:
             with zipfile.ZipFile(buffer) as zf:
+                # 先嘗試 meta.json
+                if 'meta.json' in zf.namelist():
+                    with zf.open('meta.json') as mf:
+                        meta = json.loads(mf.read().decode('utf-8'))
+                    return api_response({
+                        "checksum": md5,
+                        "meta": meta,
+                    }, "OK", status_code=200)
+                # fallback：掃描 .in/.out
                 names = zf.namelist()
                 ins = [n for n in names if n.endswith('.in')]
                 outs = [n for n in names if n.endswith('.out')]
@@ -604,6 +611,8 @@ class ProblemTestCaseMetaView(APIView):
                 in_map = {stem(n): n for n in ins}
                 out_map = {stem(n): n for n in outs}
                 all_stems = sorted(set(list(in_map.keys()) + list(out_map.keys())))
+                tasks = []
+                missing_pairs = []
                 for idx, s in enumerate(all_stems, start=1):
                     i_name = in_map.get(s)
                     o_name = out_map.get(s)
