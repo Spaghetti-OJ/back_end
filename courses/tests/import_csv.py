@@ -49,6 +49,76 @@ class CourseImportCSVAPITestCase(APITestCase):
         body = "\n".join(rows)
         return f"{header}{body}".encode("utf-8")
 
+    def test_import_existing_student_without_force_does_not_update(self):
+        course = self._create_course(name="NoForceCourse", teacher=self.teacher)
+        profile = UserProfile.objects.get_or_create(user=self.student)[0]
+        profile.student_id = f"OLD{self.unique}"
+        profile.save(update_fields=["student_id"])
+        self.student.real_name = "Original Name"
+        self.student.save(update_fields=["real_name"])
+
+        payload = self._build_csv(
+            [
+                f"{self.student.username},{self.student.email},New Name,NEW{self.unique},",
+            ]
+        )
+        upload = SimpleUploadedFile("students.csv", payload, content_type="text/csv")
+
+        self.client.force_authenticate(user=self.teacher)
+        response = self.client.post(
+            self._import_url(course.id),
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result = response.data["data"]["import"]
+        self.assertTrue(result["importResult"])
+        self.assertEqual(result["newMembers"], 1)
+        self.assertEqual(result["createdUsers"], 0)
+
+        course.refresh_from_db()
+        self.student.refresh_from_db()
+        profile.refresh_from_db()
+        self.assertEqual(course.student_count, 1)
+        self.assertEqual(self.student.real_name, "Original Name")
+        self.assertEqual(profile.student_id, f"OLD{self.unique}")
+
+    def test_import_existing_student_with_force_updates_info(self):
+        course = self._create_course(name="ForceCourse", teacher=self.teacher)
+        profile = UserProfile.objects.get_or_create(user=self.student)[0]
+        profile.student_id = f"OLD{self.unique}"
+        profile.save(update_fields=["student_id"])
+        self.student.real_name = "Old Name"
+        self.student.save(update_fields=["real_name"])
+
+        payload = self._build_csv(
+            [
+                f"{self.student.username},{self.student.email},New Forced Name,NEW{self.unique},",
+            ]
+        )
+        upload = SimpleUploadedFile("students.csv", payload, content_type="text/csv")
+
+        self.client.force_authenticate(user=self.teacher)
+        response = self.client.post(
+            self._import_url(course.id),
+            {"file": upload, "force": 1},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result = response.data["data"]["import"]
+        self.assertTrue(result["importResult"])
+        self.assertEqual(result["newMembers"], 1)
+        self.assertEqual(result["createdUsers"], 0)
+
+        course.refresh_from_db()
+        self.student.refresh_from_db()
+        profile.refresh_from_db()
+        self.assertEqual(course.student_count, 1)
+        self.assertEqual(self.student.real_name, "New Forced Name")
+        self.assertEqual(profile.student_id, f"NEW{self.unique}")
+
     def test_teacher_can_import_students_from_csv(self):
         course = self._create_course(name="ImportableCourse", teacher=self.teacher)
         payload = self._build_csv(

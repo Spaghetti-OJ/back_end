@@ -51,14 +51,14 @@ class CourseAnnouncementAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["data"][0]["title"], "Public Announcement")
 
-    def test_public_discussion_alias_id_zero(self):
+    def test_public_discussion_alias_id_one(self):
         public_course = Courses.objects.create(name="公開討論區", teacher_id=self.teacher)
-        self._create_announcement(course=public_course, title="Alias Zero Announcement")
+        self._create_announcement(course=public_course, title="Alias One Announcement")
 
-        response = self.client.get(self.url(course_id=0))
+        response = self.client.get(self.url(course_id=1))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["data"][0]["title"], "Alias Zero Announcement")
+        self.assertEqual(response.data["data"][0]["title"], "Alias One Announcement")
 
     def test_lists_pinned_first_then_latest(self):
         now = timezone.now()
@@ -292,16 +292,16 @@ class CourseAnnouncementDetailAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["data"][0]["title"], "Public Detail")
 
-    def test_public_discussion_detail_alias_id_zero(self):
+    def test_public_discussion_detail_alias_id_one(self):
         public_course = Courses.objects.create(name="公開討論區", teacher_id=self.teacher)
         announcement = self._create_announcement(
-            course=public_course, title="Alias Zero Detail"
+            course=public_course, title="Alias One Detail"
         )
 
-        response = self.client.get(self.url(course_id=0, ann_id=announcement.id))
+        response = self.client.get(self.url(course_id=1, ann_id=announcement.id))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["data"][0]["title"], "Alias Zero Detail")
+        self.assertEqual(response.data["data"][0]["title"], "Alias One Detail")
 
     def test_returns_single_announcement_payload(self):
         announcement = self._create_announcement(is_pinned=True)

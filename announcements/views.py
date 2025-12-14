@@ -11,7 +11,7 @@ from .serializers import (
 )
 
 PUBLIC_DISCUSSION_COURSE_NAME = "公開討論區"
-PUBLIC_DISCUSSION_COURSE_ALIAS_ID = "0"
+PUBLIC_DISCUSSION_COURSE_ALIAS_ID = "1"
 
 
 class CourseAnnouncementBaseView(generics.GenericAPIView):

@@ -8,13 +8,18 @@ from ..common.responses import api_response
 from ..models import Course_members, Courses
 from ..serializers import CourseDetailSerializer
 
+PUBLIC_DISCUSSION_COURSE_NAME = "公開討論區"
+PUBLIC_DISCUSSION_COURSE_ALIAS_ID = "1"
+
 User = get_user_model()
 
 
 class CourseDetailView(generics.GenericAPIView):
     """
     課程詳情端點：
-     - GET /course/<course_id>/ 取得課程資訊與成員（需為課程成員）
+     - GET /course/<course_id>/ 取得課程資訊與成員
+       - course_id 為 1 時，對應公開討論區（所有登入使用者可查看）
+       - 其他課程需為課程成員或管理員
     """
 
     permission_classes = [permissions.IsAuthenticated]
@@ -25,6 +30,7 @@ class CourseDetailView(generics.GenericAPIView):
         if isinstance(course, Response):
             return course
 
+        is_public_discussion = course.name == PUBLIC_DISCUSSION_COURSE_NAME
         user = request.user
         is_teacher = course.teacher_id_id == getattr(user, "id", None)
         members = (
@@ -33,7 +39,8 @@ class CourseDetailView(generics.GenericAPIView):
             .order_by("joined_at")
         )
         is_member = (
-            getattr(user, "identity", None) == "admin"
+            is_public_discussion
+            or getattr(user, "identity", None) == "admin"
             or is_teacher
             or any(m.user_id.id == user.id for m in members)
         )
@@ -176,6 +183,13 @@ class CourseDetailView(generics.GenericAPIView):
 
     @staticmethod
     def _get_course_or_response(course_id):
+        identifier = str(course_id)
+        if identifier == PUBLIC_DISCUSSION_COURSE_ALIAS_ID:
+            course = Courses.objects.select_related("teacher_id").filter(
+                name=PUBLIC_DISCUSSION_COURSE_NAME
+            ).first()
+            if course:
+                return course
         try:
             return Courses.objects.select_related("teacher_id").get(id=course_id)
         except Courses.DoesNotExist:
