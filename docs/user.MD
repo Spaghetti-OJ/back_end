@@ -341,7 +341,7 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 **路徑**：`GET /auth/me/`
 
 **說明**：
-使用目前登入狀態（Authorization Header 帶入 `Bearer <access>`）取得當前使用者的基本資料，包含 `user_id`、`username`、`email`、`role`。
+使用目前登入狀態（Authorization Header 帶入 `Bearer <access>`）取得當前使用者的基本資料，包含 `user_id`、`username`、`email`、`role`、`email_verified`。
 
 ### 請求格式
 
@@ -373,7 +373,8 @@ Authorization: Bearer <ACCESS_TOKEN>
     "user_id": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
     "username": "momo",
     "email": "momo@example.com",
-    "role": "student"
+    "role": "student",
+    "email_verified":true
   }
 }
 ```
@@ -388,6 +389,7 @@ Authorization: Bearer <ACCESS_TOKEN>
 | `data.username` | string | 使用者帳號              |
 | `data.email`    | string | 使用者註冊 email        |
 | `data.role`     | string | 使用者角色（如：`student`） |
+| `data.email_verified`     | bool | 是否驗證信箱 |
 
 ---
 
