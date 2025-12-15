@@ -39,3 +39,7 @@ class MeSerializer(serializers.Serializer):
     username = serializers.CharField(read_only=True)
     email = serializers.EmailField(read_only=True)
     role = serializers.CharField(source="identity", read_only=True)
+    email_verified = serializers.BooleanField(
+        source="userprofile.email_verified",
+        read_only=True,
+    )
