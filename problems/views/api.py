@@ -387,7 +387,7 @@ class ProblemTestCaseUploadCompleteView(APIView):
             with open(p, 'rb') as f:
                 buffer.write(f.read())
         buffer.seek(0)
-        # 驗證同名成對：使用簡單規則，內容為 zip，檢查內部包含 0001.in / 0001.out 配對
+        # 驗證同名成對：內容為 zip，檢查內部包含 .in/.out 配對（僅驗證，不產生 meta）
         import zipfile
         try:
             with zipfile.ZipFile(buffer) as zf:
@@ -403,9 +403,9 @@ class ProblemTestCaseUploadCompleteView(APIView):
                 if missing_pairs:
                     return api_response({"missing_pairs": missing_pairs}, "Validation error: missing paired .in/.out", status_code=400)
         except zipfile.BadZipFile:
-            return api_response(None, "Uploaded content must be a zip with paired files", status_code=400)
+            return api_response(None, "Uploaded content must be a valid zip", status_code=400)
 
-        # 保存 zip 到本地 storage
+        # 保存 zip 到本地 storage（不包含 meta.json；完整分片合併結果）
         from ..services.storage import _storage
         zip_rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
         buffer.seek(0)
@@ -597,41 +597,47 @@ class ProblemTestCaseMetaView(APIView):
                 if 'meta.json' in zf.namelist():
                     with zf.open('meta.json') as mf:
                         meta = json.loads(mf.read().decode('utf-8'))
-                    return api_response({
-                        "checksum": md5,
-                        "meta": meta,
-                    }, "OK", status_code=200)
-                # fallback：掃描 .in/.out
+                    # 依需求直接回傳 meta.json 的 JSON 結構
+                    return api_response(meta, "OK", status_code=200)
+                # fallback：掃描 .in/.out，組出與 meta.json 相同格式
                 names = zf.namelist()
-                ins = [n for n in names if n.endswith('.in')]
-                outs = [n for n in names if n.endswith('.out')]
-                def stem(n):
+                # 計算各子題的成對數量
+                pairs_map = {}
+                for n in names:
                     base = os.path.basename(n)
-                    return os.path.splitext(base)[0]
-                in_map = {stem(n): n for n in ins}
-                out_map = {stem(n): n for n in outs}
-                all_stems = sorted(set(list(in_map.keys()) + list(out_map.keys())))
-                tasks = []
-                missing_pairs = []
-                for idx, s in enumerate(all_stems, start=1):
-                    i_name = in_map.get(s)
-                    o_name = out_map.get(s)
-                    if not i_name or not o_name:
-                        missing_pairs.append(s)
-                    tasks.append({
-                        "no": idx,
-                        "stem": s,
-                        "in": i_name,
-                        "out": o_name,
-                    })
+                    stem, ext = os.path.splitext(base)
+                    if ext not in ('.in', '.out'):
+                        continue
+                    if len(stem) != 4 or not stem.isdigit():
+                        continue
+                    ss = int(stem[:2])
+                    tt = int(stem[2:])
+                    entry = pairs_map.setdefault(ss, {'in': set(), 'out': set()})
+                    entry['in' if ext == '.in' else 'out'].add(tt)
+
+                case_counts = {ss: len(entry['in'] & entry['out']) for ss, entry in pairs_map.items()}
+
+                # 從資料庫讀取子題設定，與 upload-zip 的預設一致
+                subtask_map = {st.subtask_no - 1: st for st in Problem_subtasks.objects.filter(problem_id=problem)}
+                def build_meta_entry(ss_idx: int):
+                    st = subtask_map.get(ss_idx)
+                    case_count = case_counts.get(ss_idx, 0)
+                    time_limit = getattr(st, 'time_limit_ms', None) or 1000
+                    mem_mb = getattr(st, 'memory_limit_mb', None)
+                    memory_limit = (mem_mb * 1024) if mem_mb is not None else 134218
+                    task_score = getattr(st, 'weight', None) or 0
+                    return {
+                        "caseCount": case_count,
+                        "memoryLimit": memory_limit,
+                        "taskScore": task_score,
+                        "timeLimit": time_limit,
+                    }
+                max_ss = max(case_counts.keys()) if case_counts else -1
+                meta = {"testCase": [build_meta_entry(ss) for ss in range(max_ss + 1)]}
         except zipfile.BadZipFile:
             return api_response(None, "Corrupted test case archive", status_code=500)
-        return api_response({
-            "checksum": md5,
-            "task_count": len(tasks),
-            "missing_pairs": missing_pairs,
-            "tasks": tasks,
-        }, "OK", status_code=200)
+        # 回傳 fallback 生成的 meta 結構
+        return api_response(meta, "OK", status_code=200)
 
 
 class ProblemTagAddView(APIView):
