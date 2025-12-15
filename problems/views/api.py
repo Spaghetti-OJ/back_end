@@ -409,6 +409,12 @@ class ProblemTestCaseUploadCompleteView(APIView):
         from ..services.storage import _storage
         zip_rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
         buffer.seek(0)
+        # 覆蓋舊檔，確保下載端永遠拿到最新版本
+        try:
+            if _storage.exists(zip_rel):
+                _storage.delete(zip_rel)
+        except Exception:
+            pass
         saved = _storage.save(zip_rel, buffer)
         # 清理臨時檔
         try:
@@ -531,11 +537,35 @@ class ProblemTestCaseZipUploadView(APIView):
                     out_zip.writestr(n, f.read())
             import json
             out_zip.writestr('meta.json', json.dumps(meta, ensure_ascii=False, separators=(",", ":")))
+            # 若題目有 solution code，依語言加入對應副檔名的檔案
+            try:
+                sol_code = getattr(problem, 'solution_code', None)
+                if sol_code and str(sol_code).strip():
+                    lang = (getattr(problem, 'solution_code_language', '') or '').lower()
+                    ext_map = {
+                        'python': 'py', 'py': 'py',
+                        'cpp': 'cpp', 'c++': 'cpp',
+                        'c': 'c',
+                        'java': 'java',
+                        'javascript': 'js', 'js': 'js',
+                        'go': 'go',
+                    }
+                    ext = ext_map.get(lang, 'txt')
+                    out_zip.writestr(f'solution.{ext}', sol_code)
+            except Exception:
+                # 寫入解答失敗不影響上傳流程
+                pass
         out_buf.seek(0)
 
         # 保存 zip 到本地 storage
         from ..services.storage import _storage
         rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
+        # 覆蓋舊檔，確保下載端永遠拿到最新版本
+        try:
+            if _storage.exists(rel):
+                _storage.delete(rel)
+        except Exception:
+            pass
         saved = _storage.save(rel, out_buf)
         return api_response({"path": saved.replace('\\','/')}, "Zip uploaded with meta", status_code=201)
 
