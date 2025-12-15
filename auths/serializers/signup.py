@@ -39,7 +39,10 @@ class MeSerializer(serializers.Serializer):
     username = serializers.CharField(read_only=True)
     email = serializers.EmailField(read_only=True)
     role = serializers.CharField(source="identity", read_only=True)
-    email_verified = serializers.BooleanField(
-        source="userprofile.email_verified",
-        read_only=True,
-    )
+    email_verified = serializers.SerializerMethodField()
+
+    def get_email_verified(self, obj):
+        userprofile = getattr(obj, "userprofile", None)
+        if userprofile is not None and hasattr(userprofile, "email_verified"):
+            return userprofile.email_verified
+        return False
