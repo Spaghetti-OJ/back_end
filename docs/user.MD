@@ -389,7 +389,7 @@ Authorization: Bearer <ACCESS_TOKEN>
 | `data.username` | string | 使用者帳號              |
 | `data.email`    | string | 使用者註冊 email        |
 | `data.role`     | string | 使用者角色（如：`student`） |
-| `data.email_verified`     | bool | 是否驗證信箱 |
+| `data.email_verified` | bool | 是否驗證信箱 |
 
 ---
 
