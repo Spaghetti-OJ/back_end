@@ -374,7 +374,7 @@ Authorization: Bearer <ACCESS_TOKEN>
     "username": "momo",
     "email": "momo@example.com",
     "role": "student",
-    "email_verified":true
+    "email_verified": true
   }
 }
 ```
