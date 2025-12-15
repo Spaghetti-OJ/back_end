@@ -68,7 +68,12 @@ fetch('/api/endpoint/', {
 
 ### 2. API Token 認證 (CLI/自動化工具)
 
-**適用場景：** CLI 工具、CI/CD、自動化腳本
+**適用場景：** CLI 工具、CI/CD、自動化腳本、第三方應用整合
+
+**機制：**
+- **完全基於 HTTP Header 驗證**
+- **不需要 Cookie**，因此**不需要 CSRF Token**
+- 瀏覽器不會自動附帶此 Header，因此沒有 CSRF 風險
 
 **Header 格式：**
 ```
@@ -77,9 +82,13 @@ Authorization: Bearer noj_pat_xxxxxxxxxxxxxxxx
 
 **範例：**
 ```bash
+# 不需要 Cookie，也不需要 X-CSRFToken
 curl -H "Authorization: Bearer noj_pat_abc123..." \
      https://api.example.com/api-tokens/
 ```
+
+> 🛡️ **安全說明：**
+> 由於 API Token 必須透過 Header (`Authorization`) 傳遞，而瀏覽器無法在跨站請求中自動附帶自訂 Header，因此此機制天然免疫 CSRF 攻擊。請務必妥善保管 Token，防止 XSS 洩漏。
 
 ---
 
