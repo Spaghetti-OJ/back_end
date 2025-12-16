@@ -166,8 +166,8 @@ class CourseDetailAPITestCase(APITestCase):
         response = self.client.put(
             self._detail_url(course.id),
             {
-                "remove": [str(to_remove.id)],
-                "new": [str(new_student_one.id), str(new_student_two.id)],
+                "remove": [to_remove.username],
+                "new": [new_student_one.username, new_student_two.username],
             },
             format="json",
         )
@@ -244,7 +244,7 @@ class CourseDetailAPITestCase(APITestCase):
 
         response = self.client.put(
             self._detail_url(course.id),
-            {"remove": [str(self.student.id)]},
+            {"remove": [self.student.username]},
             format="json",
         )
 
@@ -309,7 +309,7 @@ class CourseDetailAPITestCase(APITestCase):
 
         response = self.client.put(
             self._detail_url(course.id),
-            {"new": [str(non_student.id)]},
+            {"new": [non_student.username]},
             format="json",
         )
 
@@ -327,7 +327,7 @@ class CourseDetailAPITestCase(APITestCase):
 
         response = self.client.put(
             self._detail_url(course.id),
-            {"new": [str(self.student.id)]},
+            {"new": [self.student.username]},
             format="json",
         )
 
@@ -356,7 +356,7 @@ class CourseDetailAPITestCase(APITestCase):
 
         response = self.client.put(
             self._detail_url(course.id),
-            {"new": [str(another_student.id)]},
+            {"new": [another_student.username]},
             format="json",
         )
 

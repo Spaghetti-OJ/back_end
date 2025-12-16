@@ -83,7 +83,7 @@ class CourseDetailView(generics.GenericAPIView):
         student_lists = self._extract_student_lists(request.data)
         if isinstance(student_lists, Response):
             return student_lists
-        remove_ids, new_ids = student_lists
+        remove_usernames, new_usernames = student_lists
 
         with transaction.atomic():
             try:
@@ -100,13 +100,13 @@ class CourseDetailView(generics.GenericAPIView):
                 )
             )
             student_membership_map = {
-                str(membership.user_id_id): membership
+                membership.user_id.username: membership
                 for membership in student_memberships
             }
 
             to_remove = []
-            for student_id in remove_ids:
-                membership = student_membership_map.get(student_id)
+            for username in remove_usernames:
+                membership = student_membership_map.get(username)
                 if membership is None:
                     return api_response(
                         message="Student not found.",
@@ -114,20 +114,27 @@ class CourseDetailView(generics.GenericAPIView):
                     )
                 to_remove.append(membership)
 
-            new_ids_set = set(new_ids)
+            new_usernames_set = set(new_usernames)
             existing_memberships = Course_members.objects.select_for_update().filter(
-                course_id=locked_course, user_id__in=new_ids_set
+                course_id=locked_course, user_id__username__in=new_usernames_set
             )
             existing_map = {
-                str(membership.user_id_id): membership
+                membership.user_id.username: membership
                 for membership in existing_memberships
             }
-            for student_id in remove_ids:
-                existing_map.pop(student_id, None)
+            for username in remove_usernames:
+                existing_map.pop(username, None)
 
-            new_users = list(User.objects.filter(id__in=new_ids_set))
-            found_ids = {str(user.id) for user in new_users}
-            missing_new = next((sid for sid in new_ids_set if sid not in found_ids), None)
+            new_users = list(User.objects.filter(username__in=new_usernames_set))
+            found_usernames = {user.username for user in new_users}
+            missing_new = next(
+                (
+                    username
+                    for username in new_usernames_set
+                    if username not in found_usernames
+                ),
+                None,
+            )
             if missing_new:
                 return api_response(
                     message="Student not found.", status_code=status.HTTP_404_NOT_FOUND
@@ -139,7 +146,7 @@ class CourseDetailView(generics.GenericAPIView):
                         message="User is not a student.",
                         status_code=status.HTTP_400_BAD_REQUEST,
                     )
-                if str(user.id) in existing_map:
+                if user.username in existing_map:
                     return api_response(
                         message="Student already in this course.",
                         status_code=status.HTTP_400_BAD_REQUEST,
@@ -218,18 +225,22 @@ class CourseDetailView(generics.GenericAPIView):
                 message="Invalid payload.", status_code=status.HTTP_400_BAD_REQUEST
             )
 
-        remove_ids = CourseDetailView._normalize_student_id_list(data.get("remove"), "remove")
-        if isinstance(remove_ids, Response):
-            return remove_ids
+        remove_usernames = CourseDetailView._normalize_username_list(
+            data.get("remove"), "remove"
+        )
+        if isinstance(remove_usernames, Response):
+            return remove_usernames
 
-        new_ids = CourseDetailView._normalize_student_id_list(data.get("new"), "new")
-        if isinstance(new_ids, Response):
-            return new_ids
+        new_usernames = CourseDetailView._normalize_username_list(
+            data.get("new"), "new"
+        )
+        if isinstance(new_usernames, Response):
+            return new_usernames
 
-        return remove_ids, new_ids
+        return remove_usernames, new_usernames
 
     @staticmethod
-    def _normalize_student_id_list(value, field_name):
+    def _normalize_username_list(value, field_name):
         if value is None:
             return []
         if not isinstance(value, list):
@@ -239,11 +250,11 @@ class CourseDetailView(generics.GenericAPIView):
             )
         normalized = []
         for raw in value:
-            student_id = str(raw).strip()
-            if not student_id:
+            username = str(raw).strip()
+            if not username:
                 return api_response(
-                    message=f"{field_name} cannot contain blank student ids.",
+                    message=f"{field_name} cannot contain blank usernames.",
                     status_code=status.HTTP_400_BAD_REQUEST,
                 )
-            normalized.append(student_id)
+            normalized.append(username)
         return normalized

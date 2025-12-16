@@ -271,8 +271,8 @@ curl -X POST http://127.0.0.1:8000/course/42/assign-ta/ \
 
 | 欄位名 | 型別 | 必填 | 說明                                 |
 | ------ | ---- | ---- | ------------------------------------ |
-| `remove` | list | ❌   | 要移除的學生 ID 列表（UUID） |
-| `new`    | list | ❌   | 要加入課程的學生 ID 列表（UUID） |
+| `remove` | list | ❌   | 要移除的學生帳號（username）列表 |
+| `new`    | list | ❌   | 要加入課程的學生帳號（username）列表 |
 
 > 備註：`remove`、`new` 皆可省略或給空陣列，代表該方向不異動。
 
@@ -302,8 +302,8 @@ curl -X PUT "http://127.0.0.1:8000/course/<course_id>/" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer <access>" \
     -d '{
-    "remove": ["<student_id_to_remove>"],
-    "new": ["<student_id_to_add_1>", "<student_id_to_add_2>"]
+    "remove": ["<username_to_remove>"],
+    "new": ["<username_to_add_1>", "<username_to_add_2>"]
     }'
 ```
 
