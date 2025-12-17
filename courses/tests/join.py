@@ -37,8 +37,8 @@ class CourseJoinAPITestCase(APITestCase):
         course_name = name or f"SampleCourse_{self.unique}"
         return Courses.objects.create(name=course_name, teacher_id=teacher or self.teacher)
 
-    def _join_url(self, course_id):
-        return reverse(self.join_url_name, kwargs={"course_id": course_id})
+    def _join_url(self, join_code):
+        return reverse(self.join_url_name, kwargs={"join_code": join_code})
 
     def test_student_can_join_with_valid_code(self):
         course = self._create_course(name="JoinableCourse", teacher=self.teacher)
@@ -47,8 +47,8 @@ class CourseJoinAPITestCase(APITestCase):
 
         self.client.force_authenticate(user=self.student)
         response = self.client.post(
-            self._join_url(course.id),
-            {"joinCode": "join123"},
+            self._join_url(course.join_code.lower()),
+            {},
             format="json",
         )
 
@@ -71,8 +71,8 @@ class CourseJoinAPITestCase(APITestCase):
 
         self.client.force_authenticate(user=self.student)
         response = self.client.post(
-            self._join_url(course.id),
-            {"joinCode": "WRONG12"},
+            self._join_url("WRONG12"),
+            {},
             format="json",
         )
 
@@ -86,8 +86,8 @@ class CourseJoinAPITestCase(APITestCase):
 
         self.client.force_authenticate(user=self.teacher)
         response = self.client.post(
-            self._join_url(course.id),
-            {"joinCode": "JOIN123"},
+            self._join_url(course.join_code),
+            {},
             format="json",
         )
 
@@ -106,8 +106,8 @@ class CourseJoinAPITestCase(APITestCase):
 
         self.client.force_authenticate(user=self.student)
         response = self.client.post(
-            self._join_url(course.id),
-            {"joinCode": "JOIN123"},
+            self._join_url(course.join_code),
+            {},
             format="json",
         )
 
@@ -137,8 +137,8 @@ class CourseJoinAPITestCase(APITestCase):
 
         self.client.force_authenticate(user=self.student)
         response = self.client.post(
-            self._join_url(course.id),
-            {"joinCode": "JOIN123"},
+            self._join_url(course.join_code),
+            {},
             format="json",
         )
 

@@ -24,7 +24,7 @@ urlpatterns = [
         include((f"{__package__}.urls.summary", "summary"), namespace="summary"),
     ),
     path(
-        "<course_id>/join/",
+        "<join_code>/join/",
         include((f"{__package__}.urls.join", "join"), namespace="join"),
     ),
     path(
