@@ -10,6 +10,7 @@ from .views.api import (
     ProblemTestCaseUploadInitiateView, ProblemTestCaseUploadCompleteView, ProblemTestCaseDownloadView,
     ProblemTestCaseChecksumView, ProblemTestCaseMetaView,
     ProblemSubtaskListCreateView, ProblemSubtaskDetailView,
+    ProblemTestCaseListCreateView, ProblemTestCaseDetailView,
 )
 
 router = DefaultRouter()
@@ -36,6 +37,10 @@ urlpatterns = [
     path("<int:pk>/initiate-test-case-upload", ProblemTestCaseUploadInitiateView.as_view(), name="problem-initiate-testcase"),
     path("<int:pk>/complete-test-case-upload", ProblemTestCaseUploadCompleteView.as_view(), name="problem-complete-testcase"),
     path("<int:pk>/test-case", ProblemTestCaseDownloadView.as_view(), name="problem-testcase-download"),
+    path("<int:pk>/test-cases/upload-zip", ProblemTestCaseZipUploadView.as_view(), name="problem-testcases-upload-zip"),
+    # 題目巢狀測資 CRUD（資料表 Test_cases）
+    path("<int:pk>/test-cases", ProblemTestCaseListCreateView.as_view(), name="problem-testcases"),
+    path("<int:pk>/test-cases/<int:case_id>", ProblemTestCaseDetailView.as_view(), name="problem-testcase-detail"),
     # Sandbox 專用：測資檔案完整性（MD5）與結構資訊
     path("<int:pk>/checksum", ProblemTestCaseChecksumView.as_view(), name="problem-testcase-checksum"),
     path("<int:pk>/meta", ProblemTestCaseMetaView.as_view(), name="problem-testcase-meta"),

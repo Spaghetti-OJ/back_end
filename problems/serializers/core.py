@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from ..models import Problems, Problem_subtasks, Test_cases, Tags, Problem_tags
+from typing import Optional
 
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
@@ -83,6 +84,8 @@ class ProblemSerializer(serializers.ModelSerializer):
             "description", "input_description", "output_description",
             "sample_input", "sample_output", "hint",
             "subtask_description", "supported_languages",
+            # solution code fields for test generation
+            "solution_code", "solution_code_language",
             "creator_id", "course_id", "course_name",
             "created_at", "updated_at",
             "tags", "tag_ids",

@@ -7,24 +7,51 @@
 - 路徑：`GET /problem/<problem_id>`
 - 未登入僅能看到 `public` 題目；`course` / `hidden` 需題目擁有者、課程成員或有管理權限。
 
-成功回應（200 OK 範例，部分欄位視登入與資料情況可能為 null）：
+成功回應（200 OK 新格式；部分欄位視登入與資料情況可能為 null）：
 ```json
 {
   "data": {
-    "id": 1,
-    "title": "Two Sum",
-    "difficulty": "easy",
-    "is_public": "public",
-    "course_id": "<uuid>",
-    "tags": [{"id":1, "name":"陣列", "usage_count": 10}],
-    "submit_count": 2,
-    "high_score": 80
+    "problemName": "Two Sum",
+    "description": {
+      "description": "找出兩數之和等於 target。",
+      "input": "第一行 n，第二行 n 個數字，第三行 target",
+      "output": "輸出兩個索引 i j",
+      "hint": "可以使用雜湊表降低時間複雜度",
+      "sampleInput": ["5", "2 7 11 15 9", "9"],
+      "sampleOutput": ["0 1"]
+    },
+    "owner": {
+      "id": "6420753c-9e51-42a0-8349-ef79b2e70787",
+      "username": "admin",
+      "real_name": ""
+    },
+    "tags": [
+      {"id": 2, "name": "array", "usage_count": 10}
+    ],
+    "allowedLanguage": 15,
+    "courses": [
+      {"id": 1, "name": "演算法課程"}
+    ],
+    "quota": -1,
+    "defaultCode": {"c": "", "cpp": "", "java": "", "python": ""},
+    "status": "public",
+    "type": 0,
+    "testCase": [
+      {"no": 1, "stem": "0001", "in": "0001.in", "out": "0001.out"}
+    ],
+    "fillInTemplate": null,
+    "submitCount": 2,
+    "highScore": 80
   },
-  "message": "取得題目成功",
+  "message": "Problem can view.",
   "status": "200"
 }
 ```
-未登入或無權限時可能回 404（隱藏不可見）或 403。
+欄位說明補充：
+- `description.sampleInput` / `description.sampleOutput`：後端已將原始換行字串依行切割為陣列；若為空字串則回傳 `[]`。
+- `allowedLanguage`：語言遮罩（c=1, cpp=2, java=4, python=8；相加形成整數）。
+- `testCase`：僅在題目已有上傳測資 zip 且解析成功時出現。沒有則為空陣列。
+未登入或無權限時可能回 403；若是舊邏輯隱藏題目也可能視需求回 404。
 
 **cURL**
 ```bash
@@ -167,6 +194,63 @@ curl "http://127.0.0.1:8000/problem/30/checksum?token=$SANDBOX_TOKEN"
 ```bash
 curl "http://127.0.0.1:8000/problem/30/meta?token=$SANDBOX_TOKEN" | jq
 ```
+
+---
+
+## 題目巢狀「測資資料表」CRUD（Test_cases）
+
+此段為「資料表層級」管理子題底下的個別測資（與上面的題目層級 Zip 機制並行）。
+
+- 路徑：
+  - `GET /problem/<problem_id>/test-cases` — 取得此題目所有子題的測資清單
+  - `POST /problem/<problem_id>/test-cases` — 新增測資（需提供 `subtask_id` 且必須隸屬此題目）
+  - `PUT /problem/<problem_id>/test-cases/<case_id>` — 修改測資
+  - `DELETE /problem/<problem_id>/test-cases/<case_id>` — 刪除測資
+
+- 權限：
+  - `GET` 允許匿名，但僅在題目對該使用者可見時返回（與題目詳情相同可視規則）。
+  - `POST/PUT/DELETE` 需要題目擁有者 / 課程 TA / 教師 / 管理員。
+
+- 驗證重點：
+  - `POST` 時必須提供 `subtask_id`（或 `subtaskId`），且該子題必須屬於此題目；否則回 404。
+  - `PUT/DELETE` 時會驗證該測資所屬子題是否隸屬此題目；不符則回 404。
+
+**cURL 範例**
+
+取得測資列表：
+```bash
+curl "http://127.0.0.1:8000/problem/2/test-cases"
+```
+
+新增測資到指定子題（需登入與權限）：
+```bash
+curl -X POST "http://127.0.0.1:8000/problem/2/test-cases" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subtask_id": 3,
+    "idx": 1,
+    "input_path": "0001.in",
+    "output_path": "0001.out",
+    "status": "ready"
+  }'
+```
+
+修改測資：
+```bash
+curl -X PUT "http://127.0.0.1:8000/problem/2/test-cases/10" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "status": "disabled" }'
+```
+
+刪除測資：
+```bash
+curl -X DELETE "http://127.0.0.1:8000/problem/2/test-cases/10" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+> 備註：題目層級 Zip（`/initiate-test-case-upload`、`/complete-test-case-upload`、`/test-case`）提供給 Sandbox 與下載使用；資料表 CRUD 用於後台維護子題級測資。兩者並行，不互相覆蓋。
 
 ---
 

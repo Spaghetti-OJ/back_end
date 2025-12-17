@@ -44,6 +44,8 @@ import os
 import uuid
 import mimetypes
 from django.conf import settings
+from rest_framework.parsers import MultiPartParser, FormParser
+import re
 
 class ProblemsViewSet(viewsets.ModelViewSet):
     queryset = Problems.objects.all().order_by("-created_at")
@@ -210,6 +212,97 @@ class TestCasesViewSet(viewsets.ModelViewSet):
         self._ensure_owner(subtask)
         instance.delete()
 
+
+class ProblemTestCaseListCreateView(APIView):
+    """
+    GET /problem/<problemId>/test-cases — 取得測資列表（屬於此題目的所有子題的測資）
+    POST /problem/<problemId>/test-cases — 新增測資（需指定 subtask_id，且該子題必須隸屬此題目）
+    權限：owner / 課程 TA / 教師 / 管理員（POST）；GET 允許匿名但僅在題目可見時回傳（與詳情同規則）。
+    """
+    permission_classes = []
+
+    def _can_view_problem(self, problem, user):
+        visibility = getattr(problem, 'is_public', 'hidden')
+        legacy_public = visibility in (True, 1)
+        visibility_normalized = 'public' if legacy_public else visibility
+        if visibility_normalized == 'public':
+            return True
+        if not user.is_authenticated:
+            return False
+        if user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher'] or problem.creator_id == user:
+            return True
+        if visibility_normalized == 'course' and problem.course_id:
+            from courses.models import Course_members
+            return Course_members.objects.filter(course_id=problem.course_id, user_id=user).exists()
+        return False
+
+    def get(self, request, pk: int):
+        problem = get_object_or_404(Problems, pk=pk)
+        if not self._can_view_problem(problem, request.user):
+            return api_response(None, "Not enough permission", status_code=403)
+        subtasks = Problem_subtasks.objects.filter(problem_id=problem).values_list('id', flat=True)
+        tcs = Test_cases.objects.filter(subtask_id_id__in=list(subtasks)).order_by('subtask_id_id', 'idx')
+        return api_response(TestCaseSerializer(tcs, many=True).data, "OK", status_code=200)
+
+    def post(self, request, pk: int):
+        if not request.user.is_authenticated:
+            return api_response(None, "Authentication required.", status_code=401)
+        problem = get_object_or_404(Problems, pk=pk)
+        if not _has_problem_manage_permission(problem, request.user):
+            return api_response(None, "Not enough permission", status_code=403)
+        # 需指定 subtask_id，且該子題必須屬於此題目
+        subtask_id = request.data.get('subtask_id') or request.data.get('subtaskId')
+        if not subtask_id:
+            return api_response({"errors": {"subtask_id": "required"}}, "Validation error", status_code=422)
+        try:
+            subtask_id_int = int(subtask_id)
+        except (ValueError, TypeError):
+            return api_response({"errors": {"subtask_id": "must be integer"}}, "Validation error", status_code=422)
+        subtask = Problem_subtasks.objects.filter(pk=subtask_id_int, problem_id=problem).first()
+        if not subtask:
+            return api_response(None, "Subtask not found or not belonging to this problem", status_code=404)
+        data = request.data.copy()
+        data['subtask_id'] = subtask.id
+        ser = TestCaseSerializer(data=data)
+        if not ser.is_valid():
+            return api_response({"errors": ser.errors}, "Validation error", status_code=422)
+        obj = ser.save()
+        return api_response(TestCaseSerializer(obj).data, "Test case created", status_code=201)
+
+
+class ProblemTestCaseDetailView(APIView):
+    """
+    PUT /problem/<problemId>/test-cases/<caseId> — 修改測資
+    DELETE /problem/<problemId>/test-cases/<caseId> — 刪除測資
+    權限：owner / 課程 TA / 教師 / 管理員。
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_case_with_permission(self, problem_id: int, case_id: int, user):
+        case = get_object_or_404(Test_cases, pk=case_id)
+        subtask = case.subtask_id
+        if subtask.problem_id_id != problem_id:
+            from rest_framework.exceptions import NotFound
+            raise NotFound("Test case does not belong to this problem")
+        problem = subtask.problem_id
+        if _has_problem_manage_permission(problem, user):
+            return case
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("Not enough permission")
+
+    def put(self, request, pk: int, case_id: int):
+        case = self._get_case_with_permission(pk, case_id, request.user)
+        ser = TestCaseSerializer(case, data=request.data, partial=True)
+        if not ser.is_valid():
+            return api_response({"errors": ser.errors}, "Validation error", status_code=422)
+        ser.save()
+        return api_response(TestCaseSerializer(case).data, "Test case updated", status_code=200)
+
+    def delete(self, request, pk: int, case_id: int):
+        case = self._get_case_with_permission(pk, case_id, request.user)
+        case.delete()
+        return api_response(None, "Test case deleted", status_code=204)
+
 class TagListCreateView(APIView):
     """GET /tags/ 取得所有標籤
     POST /tags/ 建立新標籤（需要登入，建議僅教師/管理員；此處暫允任何登入使用者）
@@ -294,7 +387,7 @@ class ProblemTestCaseUploadCompleteView(APIView):
             with open(p, 'rb') as f:
                 buffer.write(f.read())
         buffer.seek(0)
-        # 驗證同名成對：使用簡單規則，內容為 zip，檢查內部包含 0001.in / 0001.out 配對
+        # 驗證同名成對：內容為 zip，檢查內部包含 .in/.out 配對（僅驗證，不產生 meta）
         import zipfile
         try:
             with zipfile.ZipFile(buffer) as zf:
@@ -310,12 +403,18 @@ class ProblemTestCaseUploadCompleteView(APIView):
                 if missing_pairs:
                     return api_response({"missing_pairs": missing_pairs}, "Validation error: missing paired .in/.out", status_code=400)
         except zipfile.BadZipFile:
-            return api_response(None, "Uploaded content must be a zip with paired files", status_code=400)
+            return api_response(None, "Uploaded content must be a valid zip", status_code=400)
 
-        # 保存 zip 到本地 storage
+        # 保存 zip 到本地 storage（不包含 meta.json；完整分片合併結果）
         from ..services.storage import _storage
         zip_rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
         buffer.seek(0)
+        # 覆蓋舊檔，確保下載端永遠拿到最新版本
+        try:
+            if _storage.exists(zip_rel):
+                _storage.delete(zip_rel)
+        except Exception:
+            pass
         saved = _storage.save(zip_rel, buffer)
         # 清理臨時檔
         try:
@@ -344,6 +443,131 @@ class ProblemTestCaseDownloadView(APIView):
         resp = FileResponse(fh, content_type='application/zip')
         resp["Content-Disposition"] = f"attachment; filename=\"problem-{problem.id}-testcases.zip\""
         return resp
+
+
+class ProblemTestCaseZipUploadView(APIView):
+    """
+    POST /problem/<pk>/test-cases/upload-zip
+    需求（目前版）：前端拖一個 zip 直接上傳，我們僅保存 zip 檔到問題目錄，不解析內容、不產生 Test_cases 紀錄。
+
+    參數：multipart form-data
+      - file: zip 檔案（必填）
+
+    權限：題目擁有者 / 課程 TA / 教師 / 管理員。
+    行為：
+      - 將 zip 存到 `MEDIA_ROOT/testcases/p<problem.id>/problem.zip`。
+      - 回傳保存路徑。
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, pk: int):
+        problem = get_object_or_404(Problems, pk=pk)
+        if not _has_problem_manage_permission(problem, request.user):
+            return api_response(None, "Not enough permission", status_code=403)
+
+        upload = request.FILES.get('file')
+        if not upload:
+            return api_response({"errors": {"file": "required"}}, "Validation error", status_code=422)
+
+        # 讀取 zip、解析檔名規則 sstt.in/out，生成 meta.json 並一併寫入 zip
+        import zipfile
+        from io import BytesIO
+        data = upload.read()
+        try:
+            src_zip = zipfile.ZipFile(BytesIO(data))
+        except zipfile.BadZipFile:
+            return api_response(None, "Uploaded file must be a valid zip", status_code=400)
+
+        names = src_zip.namelist()
+        # 映射：subtask_index -> { 'in': set(tt), 'out': set(tt) }
+        pairs_map = {}
+        for n in names:
+            base = os.path.basename(n)
+            stem, ext = os.path.splitext(base)
+            # 規則：四位數 sstt，兩位子題、兩位測資，從 00 開始
+            if ext not in ('.in', '.out'):
+                continue
+            if len(stem) != 4 or not stem.isdigit():
+                continue
+            ss = int(stem[:2])
+            tt = int(stem[2:])
+            entry = pairs_map.setdefault(ss, {'in': set(), 'out': set()})
+            entry['in' if ext == '.in' else 'out'].add(tt)
+
+        # 以「同時存在 in/out」的 tt 數量作為 caseCount
+        case_counts = {}
+        for ss, entry in pairs_map.items():
+            count = len(entry['in'] & entry['out'])
+            case_counts[ss] = count
+
+        # 從資料庫讀取既有子題設定（time/memory/score），對應 ss -> subtask_no = ss+1
+        subtask_map = {st.subtask_no - 1: st for st in Problem_subtasks.objects.filter(problem_id=problem)}
+
+        def build_meta_entry(ss_idx: int):
+            st = subtask_map.get(ss_idx)
+            case_count = case_counts.get(ss_idx, 0)
+            # 預設值（若資料庫沒有設定）：時間 1000 ms、記憶體 134218、分數 0
+            time_limit = getattr(st, 'time_limit_ms', None) or 1000
+            # memoryLimit 規格以 KB 為單位（範例 134218），以 MB 欄位轉換
+            mem_mb = getattr(st, 'memory_limit_mb', None)
+            memory_limit = (mem_mb * 1024) if mem_mb is not None else 134218
+            task_score = getattr(st, 'weight', None) or 0
+            return {
+                "caseCount": case_count,
+                "memoryLimit": memory_limit,
+                "taskScore": task_score,
+                "timeLimit": time_limit,
+            }
+
+        # 產生 meta.json 結構，子題索引由 0..max(ss)
+        if case_counts:
+            max_ss = max(case_counts.keys())
+        else:
+            max_ss = -1
+        meta = {
+            "testCase": [build_meta_entry(ss) for ss in range(max_ss + 1)]
+        }
+
+        # 重打包 zip：複製原檔案並加入 meta.json
+        out_buf = BytesIO()
+        with zipfile.ZipFile(out_buf, mode='w', compression=zipfile.ZIP_DEFLATED) as out_zip:
+            for n in names:
+                with src_zip.open(n, 'r') as f:
+                    out_zip.writestr(n, f.read())
+            import json
+            out_zip.writestr('meta.json', json.dumps(meta, ensure_ascii=False, separators=(",", ":")))
+            # 若題目有 solution code，依語言加入對應副檔名的檔案
+            try:
+                sol_code = getattr(problem, 'solution_code', None)
+                if sol_code and str(sol_code).strip():
+                    lang = (getattr(problem, 'solution_code_language', '') or '').lower()
+                    ext_map = {
+                        'python': 'py', 'py': 'py',
+                        'cpp': 'cpp', 'c++': 'cpp',
+                        'c': 'c',
+                        'java': 'java',
+                        'javascript': 'js', 'js': 'js',
+                        'go': 'go',
+                    }
+                    ext = ext_map.get(lang, 'txt')
+                    out_zip.writestr(f'solution.{ext}', sol_code)
+            except Exception:
+                # 寫入解答失敗不影響上傳流程
+                pass
+        out_buf.seek(0)
+
+        # 保存 zip 到本地 storage
+        from ..services.storage import _storage
+        rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
+        # 覆蓋舊檔，確保下載端永遠拿到最新版本
+        try:
+            if _storage.exists(rel):
+                _storage.delete(rel)
+        except Exception:
+            pass
+        saved = _storage.save(rel, out_buf)
+        return api_response({"path": saved.replace('\\','/')}, "Zip uploaded with meta", status_code=201)
 
 
 class ProblemTestCaseChecksumView(APIView):
@@ -390,45 +614,60 @@ class ProblemTestCaseMetaView(APIView):
         rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
         if not _storage.exists(rel):
             raise Http404("Test case archive not found")
-        import zipfile
-        import hashlib
+        import zipfile, hashlib, json
         with _storage.open(rel, 'rb') as fh:
             data = fh.read()
         md5 = hashlib.md5(data).hexdigest()
         from io import BytesIO
         buffer = BytesIO(data)
-        tasks = []
-        missing_pairs = []
+        # 優先讀取 zip 內的 meta.json；若不存在則回退為檔名掃描
         try:
             with zipfile.ZipFile(buffer) as zf:
+                # 先嘗試 meta.json
+                if 'meta.json' in zf.namelist():
+                    with zf.open('meta.json') as mf:
+                        meta = json.loads(mf.read().decode('utf-8'))
+                    # 依需求直接回傳 meta.json 的 JSON 結構
+                    return api_response(meta, "OK", status_code=200)
+                # fallback：掃描 .in/.out，組出與 meta.json 相同格式
                 names = zf.namelist()
-                ins = [n for n in names if n.endswith('.in')]
-                outs = [n for n in names if n.endswith('.out')]
-                def stem(n):
+                # 計算各子題的成對數量
+                pairs_map = {}
+                for n in names:
                     base = os.path.basename(n)
-                    return os.path.splitext(base)[0]
-                in_map = {stem(n): n for n in ins}
-                out_map = {stem(n): n for n in outs}
-                all_stems = sorted(set(list(in_map.keys()) + list(out_map.keys())))
-                for idx, s in enumerate(all_stems, start=1):
-                    i_name = in_map.get(s)
-                    o_name = out_map.get(s)
-                    if not i_name or not o_name:
-                        missing_pairs.append(s)
-                    tasks.append({
-                        "no": idx,
-                        "stem": s,
-                        "in": i_name,
-                        "out": o_name,
-                    })
+                    stem, ext = os.path.splitext(base)
+                    if ext not in ('.in', '.out'):
+                        continue
+                    if len(stem) != 4 or not stem.isdigit():
+                        continue
+                    ss = int(stem[:2])
+                    tt = int(stem[2:])
+                    entry = pairs_map.setdefault(ss, {'in': set(), 'out': set()})
+                    entry['in' if ext == '.in' else 'out'].add(tt)
+
+                case_counts = {ss: len(entry['in'] & entry['out']) for ss, entry in pairs_map.items()}
+
+                # 從資料庫讀取子題設定，與 upload-zip 的預設一致
+                subtask_map = {st.subtask_no - 1: st for st in Problem_subtasks.objects.filter(problem_id=problem)}
+                def build_meta_entry(ss_idx: int):
+                    st = subtask_map.get(ss_idx)
+                    case_count = case_counts.get(ss_idx, 0)
+                    time_limit = getattr(st, 'time_limit_ms', None) or 1000
+                    mem_mb = getattr(st, 'memory_limit_mb', None)
+                    memory_limit = (mem_mb * 1024) if mem_mb is not None else 134218
+                    task_score = getattr(st, 'weight', None) or 0
+                    return {
+                        "caseCount": case_count,
+                        "memoryLimit": memory_limit,
+                        "taskScore": task_score,
+                        "timeLimit": time_limit,
+                    }
+                max_ss = max(case_counts.keys()) if case_counts else -1
+                meta = {"testCase": [build_meta_entry(ss) for ss in range(max_ss + 1)]}
         except zipfile.BadZipFile:
             return api_response(None, "Corrupted test case archive", status_code=500)
-        return api_response({
-            "checksum": md5,
-            "task_count": len(tasks),
-            "missing_pairs": missing_pairs,
-            "tasks": tasks,
-        }, "OK", status_code=200)
+        # 回傳 fallback 生成的 meta 結構
+        return api_response(meta, "OK", status_code=200)
 
 
 class ProblemTagAddView(APIView):
@@ -695,13 +934,19 @@ class ProblemDetailView(APIView):
                     return api_response(None, "Not enough permission", status_code=403)
 
         # 聚合描述
+        # 將 sampleInput / sampleOutput 轉成陣列：依換行分割，空白行略過；若原始為空字串返回 []
+        def _to_list(text: str):
+            if not text or not str(text).strip():
+                return []
+            return [line for line in str(text).splitlines() if line.strip()]
+
         description_block = {
             'description': problem.description,
             'input': getattr(problem, 'input_description', ''),
             'output': getattr(problem, 'output_description', ''),
             'hint': getattr(problem, 'hint', ''),
-            'sampleInput': getattr(problem, 'sample_input', ''),
-            'sampleOutput': getattr(problem, 'sample_output', ''),
+            'sampleInput': _to_list(getattr(problem, 'sample_input', '')),
+            'sampleOutput': _to_list(getattr(problem, 'sample_output', '')),
         }
 
         # 語言遮罩
