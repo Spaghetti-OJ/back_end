@@ -9,6 +9,7 @@ from django.core.files.storage import default_storage
 from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
+from django.utils.crypto import get_random_string
 from rest_framework import generics, permissions, status, parsers
 from rest_framework.exceptions import ErrorDetail
 from rest_framework.response import Response
@@ -289,7 +290,7 @@ class CourseImportCSVView(generics.GenericAPIView):
                 real_name=real_name,
                 identity=User.Identity.STUDENT,
             )
-            user.set_password(password or User.objects.make_random_password(length=12))
+            user.set_password(self._generate_password(password))
             user.save()
             created = True
         else:
@@ -319,6 +320,14 @@ class CourseImportCSVView(generics.GenericAPIView):
                     profile.save(update_fields=["student_id", "updated_at"])
 
         return user, created
+
+    def _generate_password(self, password):
+        if password:
+            return password
+        generator = getattr(User.objects, "make_random_password", None)
+        if callable(generator):
+            return generator(length=12)
+        return get_random_string(12)
 
     @staticmethod
     def _mark_batch_failed(batch, error_log):

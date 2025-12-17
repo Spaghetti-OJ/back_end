@@ -159,6 +159,33 @@ class CourseImportCSVAPITestCase(APITestCase):
         self.assertTrue(batch.import_result)
         self.assertIsNone(batch.error_log)
 
+    def test_import_without_password_generates_random_password(self):
+        course = self._create_course(name="NoPasswordCourse", teacher=self.teacher)
+        username = f"nopass_{self.unique}"
+        payload = self._build_csv(
+            [
+                f"{username},{username}@example.com,No Pass Student,,",
+            ]
+        )
+        upload = SimpleUploadedFile("students.csv", payload, content_type="text/csv")
+
+        self.client.force_authenticate(user=self.teacher)
+        response = self.client.post(
+            self._import_url(course.id),
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        import_result = response.data["data"]["import"]
+        self.assertTrue(import_result["importResult"])
+        self.assertEqual(import_result["newMembers"], 1)
+
+        user = User.objects.get(username=username)
+        self.assertTrue(user.has_usable_password())
+        course.refresh_from_db()
+        self.assertEqual(course.student_count, 1)
+
     def test_rejects_non_teacher_or_admin(self):
         course = self._create_course(name="RestrictedCourse", teacher=self.teacher)
         payload = self._build_csv([f"someone,{self.unique}@example.com,Name,,"])
