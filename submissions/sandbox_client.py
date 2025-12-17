@@ -138,3 +138,91 @@ def submit_to_sandbox(submission):
     except Exception as e:
         logger.error(f'Unexpected error submitting to sandbox: {str(e)}')
         raise
+
+
+def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_data):
+    """
+    提交自定義測試到 Sandbox
+    使用 /api/v1/selftest-submissions 端點
+    
+    Args:
+        problem_id: 題目 ID
+        language_type: 語言類型（0=C, 1=C++, 2=Python, 3=Java, 4=JavaScript）
+        source_code: 程式碼
+        stdin_data: 標準輸入資料
+    
+    Returns:
+        dict: Sandbox 回應，包含 submission_id 和 status
+    """
+    import uuid
+    import hashlib
+    
+    try:
+        # 產生臨時 ID（不存 DB，只用於追蹤）
+        temp_id = f"selftest-{uuid.uuid4()}"
+        
+        # 轉換語言代碼
+        language = convert_language_code(language_type)
+        
+        # 計算檔案 hash
+        file_content = source_code.encode('utf-8')
+        file_hash = hashlib.sha256(file_content).hexdigest()
+        
+        # 組裝 payload
+        data = {
+            'submission_id': temp_id,
+            'problem_id': str(problem_id),
+            'problem_hash': f'selftest-{problem_id}',  # 特殊標記，區分自定義測試
+            'mode': 'normal',
+            'language': language,
+            'file_hash': file_hash,
+            'stdin': stdin_data,  # 關鍵：使用 stdin 參數
+            'time_limit': 2.0,  # 自定義測試設較短的時間限制
+            'memory_limit': 262144,  # 256 MB
+            'use_checker': False,
+            'checker_name': 'diff',
+            'use_static_analysis': False,
+            'priority': -1,  # 低優先級（自定義測試不影響正式提交）
+        }
+        
+        # 準備檔案
+        filename = f'solution.{get_file_extension(language)}'
+        files = {
+            'file': (filename, BytesIO(file_content), 'text/plain')
+        }
+        
+        # 準備認證 header
+        headers = {}
+        if SANDBOX_API_KEY:
+            headers['X-API-KEY'] = SANDBOX_API_KEY
+        
+        # 發送到 selftest 端點
+        url = f'{SANDBOX_API_URL}/api/v1/selftest-submissions'
+        logger.info(f'Submitting selftest: temp_id={temp_id}, problem_id={problem_id}, language={language}')
+        
+        response = requests.post(
+            url,
+            data=data,
+            files=files,
+            headers=headers,
+            timeout=SANDBOX_TIMEOUT
+        )
+        
+        response.raise_for_status()
+        result = response.json()
+        
+        logger.info(f'Selftest response: {result}')
+        return {
+            'test_id': temp_id,
+            'submission_id': result.get('submission_id', temp_id),
+            'status': result.get('status', 'queued'),
+            'queue_position': result.get('queue_position'),
+        }
+        
+    except requests.RequestException as e:
+        logger.error(f'Selftest API error: {str(e)}')
+        raise
+        
+    except Exception as e:
+        logger.error(f'Unexpected error in selftest: {str(e)}')
+        raise
