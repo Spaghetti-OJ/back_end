@@ -10,7 +10,7 @@ from .views.api import (
     ProblemTestCaseUploadInitiateView, ProblemTestCaseUploadCompleteView, ProblemTestCaseDownloadView,
     ProblemTestCaseChecksumView, ProblemTestCaseMetaView,
     ProblemSubtaskListCreateView, ProblemSubtaskDetailView,
-    ProblemTestCaseListCreateView, ProblemTestCaseDetailView,
+    ProblemTestCaseListCreateView, ProblemTestCaseDetailView, ProblemTestCaseZipUploadView,
 )
 
 router = DefaultRouter()
