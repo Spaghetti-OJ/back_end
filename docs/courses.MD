@@ -111,15 +111,9 @@ curl http://127.0.0.1:8000/course/42/ \
 
 ## 課程邀請加入 API
 
-**路徑**：`POST /course/<course_id>/join`
+**路徑**：`POST /course/<joinCode>/join`
 
-**說明**：學生以邀請代碼加入課程。僅學生身分可使用，代碼不分大小寫。
-
-**請求格式 (JSON)**
-
-| 欄位名    | 型別   | 必填 | 說明                 |
-| --------- | ------ | ---- | -------------------- |
-| `joinCode` | string | ✅   | 7 碼英數邀請代碼 |
+**說明**：學生以邀請代碼加入課程（代碼置於路徑中，大小寫不敏感）。僅學生身分可使用；此請求不需要 body。
 
 **成功回應 (200 OK)**：
 
@@ -133,17 +127,14 @@ curl http://127.0.0.1:8000/course/42/ \
 | -------------------- | ---- | ------------------------------------------ |
 | 未登入               | 401  | `{ "detail": "Authentication credentials were not provided." }` |
 | 非學生身分           | 403  | `{ "message": "Forbidden." }`              |
-| 課程不存在           | 404  | `{ "message": "Course not found." }`       |
 | 邀請代碼錯誤/失效    | 400  | `{ "message": "Invalid join code." }`      |
 | 已在課程內           | 400  | `{ "message": "You are already in this course." }` |
 | 已達人數上限         | 403  | `{ "message": "Course is full." }`         |
 
 **cURL 測試**：
 ```bash
-curl -X POST http://127.0.0.1:8000/course/42/join/ \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer <access>" \
-    -d '{"joinCode": "ABC1234"}'
+curl -X POST http://127.0.0.1:8000/course/ABC1234/join/ \
+    -H "Authorization: Bearer <access>"
 ```
 
 ## 課程邀請代碼產生 API

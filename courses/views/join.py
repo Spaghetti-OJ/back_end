@@ -2,12 +2,10 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import generics, permissions, status
 from rest_framework.exceptions import ErrorDetail
-from rest_framework.response import Response
 
 from ..common.responses import api_response
 from ..models import Course_members, Courses
 from ..serializers import CourseJoinSerializer
-from .course_courseid import CourseDetailView
 
 User = get_user_model()
 
@@ -15,24 +13,20 @@ User = get_user_model()
 class CourseJoinView(generics.GenericAPIView):
     """
     使用邀請碼加入課程：
-     - POST /course/<course_id>/join
+     - POST /course/<join_code>/join
     """
 
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = CourseJoinSerializer
 
-    def post(self, request, course_id, *args, **kwargs):
-        course = CourseDetailView._get_course_or_response(course_id)
-        if isinstance(course, Response):
-            return course
-
+    def post(self, request, join_code, *args, **kwargs):
         user = request.user
         if getattr(user, "identity", None) != User.Identity.STUDENT:
             return api_response(
                 message="Forbidden.", status_code=status.HTTP_403_FORBIDDEN
             )
 
-        serializer = self.get_serializer(data=request.data)
+        serializer = self.get_serializer(data={"joinCode": join_code})
         if not serializer.is_valid():
             detail = self._extract_error_detail(serializer.errors)
             message = str(detail) if detail else "Invalid data."
@@ -40,12 +34,10 @@ class CourseJoinView(generics.GenericAPIView):
                 message=message, status_code=status.HTTP_400_BAD_REQUEST
             )
 
-        join_code = serializer.validated_data["join_code"]
-
-        if course.join_code is None or join_code != course.join_code:
-            return api_response(
-                message="Invalid join code.", status_code=status.HTTP_400_BAD_REQUEST
-            )
+        normalized_code = serializer.validated_data["join_code"]
+        course = Courses.objects.filter(join_code=normalized_code).select_related("teacher_id").first()
+        if course is None:
+            return api_response(message="Invalid join code.", status_code=status.HTTP_400_BAD_REQUEST)
 
         if course.teacher_id_id == getattr(user, "id", None):
             return api_response(

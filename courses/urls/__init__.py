@@ -38,7 +38,7 @@ urlpatterns = [
         include((summary_urls.urlpatterns, "summary"), namespace="summary"),
     ),
     path(
-        "<course_id>/join/",
+        "<join_code>/join/",
         include((join_urls.urlpatterns, "join"), namespace="join"),
     ),
     path(
