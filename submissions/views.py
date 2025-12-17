@@ -417,10 +417,16 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
         """創建新提交 (NOJ 兼容版本)"""
         
         try:
+            # Debug logging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f'POST /submission/ data: {request.data}')
+            
             serializer = self.get_serializer(data=request.data)
             if not serializer.is_valid():
                 # 處理驗證錯誤，返回 NOJ 格式的錯誤信息
                 errors = serializer.errors
+                logger.error(f'Validation errors: {errors}')
                 
                 if 'problem_id' in errors:
                     if 'required' in str(errors['problem_id']):
@@ -1018,3 +1024,351 @@ def user_stats_view(request, user_id):
         message="here you are, bro",
         status_code=status.HTTP_200_OK
     )
+
+
+# ==================== Custom Test API ====================
+
+import redis
+import json
+from django.core.cache import cache
+from .sandbox_client import submit_selftest_to_sandbox
+
+# 初始化 Redis client (使用 database 2，避免與 Celery 和 cache 衝突)
+try:
+    redis_client = redis.Redis(
+        host='127.0.0.1',
+        port=6379,
+        db=2,
+        decode_responses=True
+    )
+    redis_client.ping()  # 測試連接
+except Exception as e:
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.error(f'Redis connection failed: {str(e)}')
+    redis_client = None
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def submit_custom_test(request, problem_id):
+    """
+    提交自定義測試（不存資料庫）
+    
+    POST /submissions/{problem_id}/custom-test/
+    
+    Request Body:
+    {
+        "language": 2,  // 0=C, 1=C++, 2=Python, 3=Java, 4=JavaScript
+        "source_code": "print(input())",
+        "stdin": "Hello World"
+    }
+    
+    Response:
+    {
+        "test_id": "selftest-uuid",
+        "submission_id": "selftest-uuid",
+        "status": "queued",
+        "message": "測試已提交"
+    }
+    """
+    try:
+        # 1. 驗證用戶狀態
+        if not request.user.is_active:
+            return api_response(
+                data=None,
+                message='使用者帳號已停用',
+                status_code=status.HTTP_403_FORBIDDEN
+            )
+        
+        # 2. 速率限制：每分鐘最多 5 次
+        if redis_client:
+            rate_limit_key = f"custom_test_rate:{request.user.id}"
+            current_count = redis_client.get(rate_limit_key)
+            
+            if current_count and int(current_count) >= 5:
+                return api_response(
+                    data=None,
+                    message='提交過於頻繁，請稍後再試（每分鐘最多 5 次）',
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS
+                )
+            
+            # 增加計數
+            pipe = redis_client.pipeline()
+            pipe.incr(rate_limit_key)
+            pipe.expire(rate_limit_key, 60)  # 60 秒過期
+            pipe.execute()
+        
+        # 3. 驗證輸入
+        language_type = request.data.get('language')
+        source_code = request.data.get('source_code')
+        stdin_data = request.data.get('stdin', '')
+        
+        if language_type is None:
+            return api_response(
+                data=None,
+                message='language 欄位必填',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not source_code:
+            return api_response(
+                data=None,
+                message='source_code 欄位必填',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 4. 驗證語言類型
+        if language_type not in [0, 1, 2, 3, 4]:
+            return api_response(
+                data=None,
+                message='語言類型無效（0=C, 1=C++, 2=Python, 3=Java, 4=JavaScript）',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 5. 驗證資料大小
+        if len(source_code) > 65535:  # 64KB
+            return api_response(
+                data=None,
+                message='程式碼長度不能超過 64KB',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if len(stdin_data) > 10240:  # 10KB
+            return api_response(
+                data=None,
+                message='輸入資料長度不能超過 10KB',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 6. 驗證程式碼不是空白
+        if not source_code.strip():
+            return api_response(
+                data=None,
+                message='程式碼不能只包含空白字元',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 7. 驗證題目是否存在
+        from problems.models import Problems
+        if not Problems.objects.filter(id=problem_id).exists():
+            return api_response(
+                data=None,
+                message='題目不存在',
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        
+        # 8. 異步提交到 Sandbox（使用 Celery 任務）
+        from .tasks import submit_selftest_to_sandbox_task
+        import uuid
+        
+        # 產生臨時測試 ID
+        test_id = f"selftest-{uuid.uuid4()}"
+        
+        # 先儲存到 Redis（狀態為 pending）
+        if redis_client:
+            cache_key = f"custom_test:{request.user.id}:{test_id}"
+            
+            test_info = {
+                'test_id': test_id,
+                'problem_id': problem_id,
+                'language': language_type,
+                'submission_id': test_id,  # 暫時使用 test_id
+                'status': 'pending',  # 等待提交
+                'created_at': str(timezone.now()),
+                'stdin': stdin_data[:100],  # 只儲存前 100 字元
+            }
+            
+            redis_client.setex(
+                cache_key,
+                1800,  # 30 分鐘
+                json.dumps(test_info)
+            )
+            
+            # 記錄到最近測試列表
+            recent_key = f"custom_tests:recent:{request.user.id}"
+            redis_client.lpush(recent_key, test_id)
+            redis_client.ltrim(recent_key, 0, 9)  # 只保留最近 10 個
+            redis_client.expire(recent_key, 1800)
+        
+        # 9. 異步調用 Celery 任務
+        try:
+            submit_selftest_to_sandbox_task.delay(
+                test_id=test_id,
+                user_id=request.user.id,
+                problem_id=problem_id,
+                language_type=language_type,
+                source_code=source_code,
+                stdin_data=stdin_data
+            )
+        except Exception as celery_error:
+            logger.error(f'Failed to queue custom test task: {str(celery_error)}')
+            # 更新 Redis 狀態為失敗
+            if redis_client:
+                test_info['status'] = 'failed'
+                test_info['error'] = 'Failed to queue task'
+                redis_client.setex(cache_key, 1800, json.dumps(test_info))
+            
+            return api_response(
+                data=None,
+                message='無法將測試加入佇列，請稍後再試',
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        
+        # 10. 返回結果（使用 api_response）
+        return api_response(
+            data={
+                'test_id': test_id,
+                'submission_id': test_id,
+                'status': 'pending',
+            },
+            message='測試已提交，請稍後查詢結果',
+            status_code=status.HTTP_202_ACCEPTED
+        )
+        
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f'Custom test submission error: {str(e)}')
+        return api_response(
+            data=None,
+            message=f'提交失敗: {str(e)}',
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_custom_test_result(request, custom_test_id):
+    """
+    查詢自定義測試結果
+    
+    GET /submissions/custom-test/{custom_test_id}/result/
+    
+    Response:
+    {
+        "test_id": "selftest-uuid",
+        "problem_id": 123,
+        "status": "completed",
+        "stdout": "3",
+        "stderr": "",
+        "time": 0.05,
+        "memory": 1024,
+        "message": "Score: 100"
+    }
+    """
+    try:
+        # 1. 驗證用戶狀態
+        if not request.user.is_active:
+            return api_response(
+                data=None,
+                message='使用者帳號已停用',
+                status_code=status.HTTP_403_FORBIDDEN
+            )
+        
+        # 2. 從 Redis 取得測試資訊
+        if not redis_client:
+            return api_response(
+                data=None,
+                message='Redis 服務不可用',
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        
+        cache_key = f"custom_test:{request.user.id}:{custom_test_id}"
+        cached = redis_client.get(cache_key)
+        
+        if not cached:
+            return api_response(
+                data=None,
+                message='測試結果不存在或已過期（30 分鐘有效期）',
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        
+        test_info = json.loads(cached)
+        
+        # 如果狀態是 pending，表示還在處理中
+        if test_info.get('status') == 'pending':
+            return api_response(
+                data={
+                    'test_id': custom_test_id,
+                    'problem_id': test_info['problem_id'],
+                    'language': test_info['language'],
+                    'status': 'pending',
+                    'created_at': test_info.get('created_at'),
+                },
+                message='測試正在處理中',
+                status_code=status.HTTP_200_OK
+            )
+        
+        # 如果已經有錯誤，直接返回
+        if test_info.get('status') == 'failed':
+            return api_response(
+                data={
+                    'test_id': custom_test_id,
+                    'problem_id': test_info['problem_id'],
+                    'status': 'failed',
+                    'error': test_info.get('error', 'Unknown error'),
+                },
+                message='測試失敗',
+                status_code=status.HTTP_200_OK
+            )
+        
+        submission_id = test_info['submission_id']
+        
+        # 3. 從 Sandbox 查詢實際結果
+        import requests
+        from .sandbox_client import SANDBOX_API_URL, SANDBOX_API_KEY
+        
+        url = f'{SANDBOX_API_URL}/api/v1/submissions/{submission_id}'
+        headers = {'X-API-KEY': SANDBOX_API_KEY}
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            sandbox_result = response.json()
+        except requests.RequestException as e:
+            return api_response(
+                data=None,
+                message=f'無法從 Sandbox 取得結果: {str(e)}',
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        
+        # 4. 更新 Redis 中的狀態
+        test_info['status'] = sandbox_result.get('status', 'unknown')
+        test_info['last_updated'] = str(timezone.now())
+        redis_client.setex(cache_key, 1800, json.dumps(test_info))
+        
+        # 5. 返回結果（使用 api_response）
+        return api_response(
+            data={
+                'test_id': custom_test_id,
+                'problem_id': test_info['problem_id'],
+                'language': test_info['language'],
+                'status': sandbox_result.get('status'),
+                'stdout': sandbox_result.get('stdout', ''),
+                'stderr': sandbox_result.get('stderr', ''),
+                'time': sandbox_result.get('time'),
+                'memory': sandbox_result.get('memory'),
+                'message': sandbox_result.get('message', ''),
+                'compile_info': sandbox_result.get('compile_info'),
+                'created_at': test_info.get('created_at'),
+            },
+            message='here you are, bro',
+            status_code=status.HTTP_200_OK
+        )
+        
+    except json.JSONDecodeError:
+        return api_response(
+            data=None,
+            message='測試資料格式錯誤',
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f'Get custom test result error: {str(e)}')
+        return api_response(
+            data=None,
+            message=f'查詢失敗: {str(e)}',
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

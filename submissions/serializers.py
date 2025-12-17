@@ -90,6 +90,13 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
         return attrs
     
     def create(self, validated_data):
+        # Debug logging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f'SubmissionBaseCreateSerializer.create() called')
+        logger.info(f'validated_data keys: {validated_data.keys()}')
+        logger.info(f'has source_code: {"source_code" in validated_data}')
+        
         # 雙重確認使用者認證（安全防護）
         request = self.context['request']
         if not request.user.is_authenticated:
@@ -108,6 +115,9 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
         validated_data['ip_address'] = self.get_client_ip(request)
         validated_data['user_agent'] = request.META.get('HTTP_USER_AGENT', '')
         
+        # 設定初始狀態為 Pending
+        validated_data['status'] = '-1'  # Pending
+        
         # 安全日誌（可選）
         import logging
         logger = logging.getLogger('submission_audit')
@@ -117,7 +127,15 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
             f'ip={validated_data["ip_address"]}'
         )
         
-        return super().create(validated_data)
+        # 創建 Submission
+        submission = super().create(validated_data)
+        
+        # 觸發 Celery 任務送到 Sandbox
+        from .tasks import submit_to_sandbox_task
+        submit_to_sandbox_task.delay(str(submission.id))
+        logger.info(f'Queued submission {submission.id} for Sandbox judging')
+        
+        return submission
     
     def get_client_ip(self, request):
         """獲取客戶端 IP"""
