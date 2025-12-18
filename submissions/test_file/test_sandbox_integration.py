@@ -48,9 +48,17 @@ def test_submission_flow_with_auth(token, problem_id=1):
     
     # 步驟 1: 創建提交
     print("\n[步驟 1] 創建提交...")
+    print(f"  使用 Problem ID: {problem_id} (Backend) -> 會映射到 Sandbox 的 'hello_world'")
+    
+    # Hello World 程式碼（對應 Sandbox 的 hello_world 題目）
+    code = """name = input()
+print(f"Hello, {name}!")
+"""
+    
     payload = {
-        "problemId": problem_id,
-        "languageType": 2  # Python
+        "problem_id": problem_id,
+        "language_type": 2,  # Python
+        "source_code": code
     }
     
     try:

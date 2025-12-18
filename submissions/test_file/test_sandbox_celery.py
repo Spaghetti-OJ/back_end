@@ -61,13 +61,9 @@ def test_sandbox_client_with_mock_submission():
     mock_submission.id = "test-submission-12345"
     mock_submission.problem_id = 1
     mock_submission.language_type = 2  # Python
-    mock_submission.source_code = """
-def solve():
-    a, b = map(int, input().split())
-    print(a + b)
-
-if __name__ == '__main__':
-    solve()
+    # hello_world 題目的程式碼 (Problem 1 映射到 Sandbox 的 hello_world)
+    mock_submission.source_code = """name = input()
+print(f"Hello, {name}!")
 """
     mock_submission.code_hash = "abc123def456"  # Mock hash
     
