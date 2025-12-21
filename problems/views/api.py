@@ -507,15 +507,10 @@ class ProblemTestCaseZipUploadView(APIView):
         def build_meta_entry(ss_idx: int):
             st = subtask_map.get(ss_idx)
             case_count = case_counts.get(ss_idx, 0)
-            # 預設值（若資料庫沒有設定）：時間 1000 ms、記憶體 134218、分數 0
-            time_limit = getattr(st, 'time_limit_ms', None) or 1000
-            # memoryLimit 規格以 KB 為單位（範例 134218），以 MB 欄位轉換
-            mem_mb = getattr(st, 'memory_limit_mb', None)
-            memory_limit = (mem_mb * 1024) if mem_mb is not None else 134218
-            task_score = getattr(st, 'weight', None) or 0
             return {
                 "caseCount": case_count,
-                "memoryLimit": memory_limit,
+                "memoryLimit": memory_limit // 1024,  # Sandbox uses MB for memoryLimit in meta
+                "memoryLimitKB": memory_limit,
                 "taskScore": task_score,
                 "timeLimit": time_limit,
             }
@@ -526,7 +521,7 @@ class ProblemTestCaseZipUploadView(APIView):
         else:
             max_ss = -1
         meta = {
-            "testCase": [build_meta_entry(ss) for ss in range(max_ss + 1)]
+            "tasks": [build_meta_entry(ss) for ss in range(max_ss + 1)]
         }
 
         # 重打包 zip：複製原檔案並加入 meta.json
@@ -654,16 +649,15 @@ class ProblemTestCaseMetaView(APIView):
                     case_count = case_counts.get(ss_idx, 0)
                     time_limit = getattr(st, 'time_limit_ms', None) or 1000
                     mem_mb = getattr(st, 'memory_limit_mb', None)
-                    memory_limit = (mem_mb * 1024) if mem_mb is not None else 134218
-                    task_score = getattr(st, 'weight', None) or 0
                     return {
                         "caseCount": case_count,
-                        "memoryLimit": memory_limit,
+                        "memoryLimit": memory_limit // 1024,
+                        "memoryLimitKB": memory_limit,
                         "taskScore": task_score,
                         "timeLimit": time_limit,
                     }
                 max_ss = max(case_counts.keys()) if case_counts else -1
-                meta = {"testCase": [build_meta_entry(ss) for ss in range(max_ss + 1)]}
+                meta = {"tasks": [build_meta_entry(ss) for ss in range(max_ss + 1)]}
         except zipfile.BadZipFile:
             return api_response(None, "Corrupted test case archive", status_code=500)
         # 回傳 fallback 生成的 meta 結構
