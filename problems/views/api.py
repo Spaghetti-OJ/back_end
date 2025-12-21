@@ -1046,13 +1046,12 @@ class ProblemStatsView(APIView):
             # 3. 所有提交
             submissions = Submission.objects.filter(problem_id=pk)
 
-            # 4. 嘗試過的用戶數
-            tried_user_ids = submissions.values_list('user', flat=True).distinct()
-            tried_user_count = len(tried_user_ids)
+            # 4. 嘗試過的用戶數（distinct count 避免載入整批資料）
+            tried_user_count = submissions.values('user').distinct().count()
 
             # 5. AC 用戶數
-            ac_user_ids = submissions.filter(status='accepted').values_list('user', flat=True).distinct()
-            ac_user_count = len(ac_user_ids)
+            # Submission.status 以 NOJ 代碼字串儲存，AC 為 '0'
+            ac_user_count = submissions.filter(status='0').values('user').distinct().count()
 
             # 6. 分數統計
             scores = list(submissions.values_list('score', flat=True))
