@@ -1046,13 +1046,12 @@ class ProblemStatsView(APIView):
             # 3. 所有提交
             submissions = Submission.objects.filter(problem_id=pk)
 
-            # 4. 嘗試過的用戶數
-            tried_user_ids = submissions.values_list('user', flat=True).distinct()
-            tried_user_count = len(tried_user_ids)
+            # 4. 嘗試過的用戶數（distinct count 避免載入整批資料）
+            tried_user_count = submissions.values('user').distinct().count()
 
             # 5. AC 用戶數
-            ac_user_ids = submissions.filter(status='accepted').values_list('user', flat=True).distinct()
-            ac_user_count = len(ac_user_ids)
+            # Submission.status 以 NOJ 代碼字串儲存，AC 為 '0'
+            ac_user_count = submissions.filter(status='0').values('user').distinct().count()
 
             # 6. 分數統計
             scores = list(submissions.values_list('score', flat=True))
@@ -1406,8 +1405,20 @@ class ProblemManageDetailView(APIView):
     permission_classes = [IsTeacherOrAdmin, IsAuthenticated]
 
     def get_object_for_modify(self, pk, user):
-        """用於 PUT/DELETE，只有 owner 或課程 TA/teacher 可操作"""
+        """用於 PUT/DELETE，檢查修改/刪除權限。
+        規則：
+        - Admin（is_superuser/is_staff 或 identity=admin）可直接操作任何題目
+        - 題目擁有者可操作
+        - 課程 TA/teacher 可操作
+        """
         problem = get_object_or_404(Problems, pk=pk)
+        # Admin 最高權限：允許直接修改/刪除
+        if (
+            getattr(user, 'is_superuser', False)
+            or getattr(user, 'is_staff', False)
+            or getattr(user, 'identity', None) == 'admin'
+        ):
+            return problem
         
         if problem.creator_id == user:
             return problem
@@ -1423,7 +1434,7 @@ class ProblemManageDetailView(APIView):
                 return problem
         
         from rest_framework.exceptions import PermissionDenied
-        raise PermissionDenied("Only the problem owner or course TA/teacher can modify or delete this problem.")
+        raise PermissionDenied("Only admin, the problem owner, or course TA/teacher can modify or delete this problem.")
 
     def get(self, request, pk):
         """
