@@ -507,6 +507,10 @@ class ProblemTestCaseZipUploadView(APIView):
         def build_meta_entry(ss_idx: int):
             st = subtask_map.get(ss_idx)
             case_count = case_counts.get(ss_idx, 0)
+            time_limit = getattr(st, 'time_limit_ms', None) or 1000
+            mem_mb = getattr(st, 'memory_limit_mb', None)
+            memory_limit = (mem_mb * 1024) if mem_mb is not None else 134218
+            task_score = getattr(st, 'weight', None) or 0
             return {
                 "caseCount": case_count,
                 "memoryLimit": memory_limit // 1024,  # Sandbox uses MB for memoryLimit in meta
@@ -649,6 +653,8 @@ class ProblemTestCaseMetaView(APIView):
                     case_count = case_counts.get(ss_idx, 0)
                     time_limit = getattr(st, 'time_limit_ms', None) or 1000
                     mem_mb = getattr(st, 'memory_limit_mb', None)
+                    memory_limit = (mem_mb * 1024) if mem_mb is not None else 134218
+                    task_score = getattr(st, 'weight', None) or 0
                     return {
                         "caseCount": case_count,
                         "memoryLimit": memory_limit // 1024,
