@@ -195,6 +195,51 @@ curl "http://127.0.0.1:8000/problem/30/checksum?token=$SANDBOX_TOKEN"
 curl "http://127.0.0.1:8000/problem/30/meta?token=$SANDBOX_TOKEN" | jq
 ```
 
+#### 3) 下載測資包（Sandbox 專用）
+- 路徑：`GET /problem/<problem_id>/testdata?token=<sandbox_token>`
+- 目的：提供 Sandbox 下載該題目的完整測資包（.zip 檔案）
+- 驗證：使用 query string `token` 與後端設定的 `SANDBOX_TOKEN` 比對
+- 回傳：`application/zip` 二進位檔案流
+
+此端點與 `/test-case` 下載端點的差異：
+- `/test-case`：需要一般使用者登入驗證（JWT），供題目管理者下載
+- `/testdata`：使用 Sandbox Token 驗證，專門供 Sandbox 環境下載判題測資
+
+成功回應（200 OK）：
+- Content-Type: `application/zip`
+- Content-Disposition: `attachment; filename="problem-<problem_id>-package.zip"`
+- Body: 測資 zip 檔案的二進位內容
+
+錯誤情況：
+- 401 Invalid sandbox token（token 缺失、不正確或 SANDBOX_TOKEN 未設定）
+- 404 題目不存在或測資檔案不存在
+
+**cURL**
+```bash
+# 下載測資包
+curl "http://127.0.0.1:8000/problem/30/testdata?token=$SANDBOX_TOKEN" -o problem-30-testdata.zip
+
+# 驗證下載的 zip 檔案
+unzip -l problem-30-testdata.zip
+```
+
+**典型 Sandbox 工作流程**
+```bash
+# 1. 下載測資包
+curl "http://127.0.0.1:8000/problem/30/testdata?token=$SANDBOX_TOKEN" -o testdata.zip
+
+# 2. 取得 checksum 並驗證完整性
+CHECKSUM=$(curl -s "http://127.0.0.1:8000/problem/30/checksum?token=$SANDBOX_TOKEN" | jq -r '.data.checksum')
+echo "$CHECKSUM  testdata.zip" | md5sum -c
+
+# 3. 取得測資結構資訊
+curl "http://127.0.0.1:8000/problem/30/meta?token=$SANDBOX_TOKEN" | jq '.data.tasks'
+
+# 4. 解壓並執行判題
+unzip -q testdata.zip -d testcases/
+# ... 執行使用者程式並比對 .in/.out 檔案
+```
+
 ---
 
 ## 題目巢狀「測資資料表」CRUD（Test_cases）
