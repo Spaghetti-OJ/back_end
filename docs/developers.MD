@@ -75,7 +75,7 @@ SANDBOX_API_KEY=happylittle7
 - `SANDBOX_API_URL`: Sandbox 判題系統 API 位址
 - `SANDBOX_TIMEOUT`: API 請求超時時間（秒）
 - `SANDBOX_API_KEY`: Sandbox API 認證金鑰
-
+- `BACKEND_BASE_URL` = Backend 公開網址（用於 Sandbox callback）
 #### 注意事項
 
 - SQLite 用於本機測試；正式環境將改為 **PostgreSQL**
