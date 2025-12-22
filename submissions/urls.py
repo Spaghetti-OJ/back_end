@@ -16,4 +16,8 @@ urlpatterns = [
     # ===== Custom Test APIs =====
     path('<int:problem_id>/custom-test/', views.submit_custom_test, name='submit-custom-test'),
     path('custom-test/<str:custom_test_id>/result/', views.get_custom_test_result, name='get-custom-test-result'),
+    
+    # ===== Sandbox Callback API =====
+    path('callback/', views.SubmissionCallbackAPIView.as_view(), name='submission-callback'),
+    path('custom-test-callback/', views.CustomTestCallbackAPIView.as_view(), name='custom-test-callback'),
 ]
