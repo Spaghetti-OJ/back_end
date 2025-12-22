@@ -69,6 +69,17 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "30/min",     # 未登入
+        "user": "120/min",    # 已登入
+        "send_email": "1/min",     # 例如寄驗證信
+        "reset_pw": "5/hour",   # 重設密碼
+    },
 }
 
 MIDDLEWARE = [
