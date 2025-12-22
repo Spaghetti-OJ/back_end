@@ -15,6 +15,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 import secrets
 from user.models import UserProfile
+from rest_framework.throttling import ScopedRateThrottle
 
 User = get_user_model()
 
@@ -78,6 +79,8 @@ class ForgotPasswordView(APIView):
     使用者輸入 username，如果有「已驗證的 email」就寄出重設密碼信。
     """
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "send_email"
 
     def post(self, request):
         serializer = ForgotPasswordSerializer(data=request.data)
@@ -149,6 +152,8 @@ class ResetPasswordView(APIView):
     前端帶 token + new_password 來真正重設密碼。
     """
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "reset_pw"
 
     def post(self, request):
         serializer = ResetPasswordSerializer(data=request.data)

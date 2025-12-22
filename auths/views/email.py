@@ -10,6 +10,7 @@ from user.models import UserProfile
 from auths.models import EmailVerificationToken
 
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 
 
 def api_response(data=None, message="OK", status_code=200):
@@ -29,6 +30,8 @@ class SendVerificationEmailView(APIView):
     POST /auth/send-email/ - 寄出驗證信到目前登入使用者的 Email
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "send_email"
 
     def post(self, request):
         user = request.user
