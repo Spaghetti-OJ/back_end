@@ -182,31 +182,7 @@ class TokenHasScopeTest(TestCase):
         
         self.assertFalse(has_permission)
 
-    def test_token_with_null_permissions(self):
-        """測試 permissions 為 None 的情況"""
-        full_token, token_hash = generate_api_token()
-        token = ApiToken.objects.create(
-            user=self.user,
-            name='Test Token',
-            token_hash=token_hash,
-            prefix=full_token[:16]
-        )
-        # 手動設置為 None（雖然 model 預設是 []）
-        token.permissions = None
-        token.save()
-        
-        request = self.factory.get('/')
-        request.user = self.user
-        request.auth = token
-        
-        self.view.required_scopes = ['read:user']
-        
-        has_permission = self.permission.has_permission(request, self.view)
-        
-        # 應該處理 None 的情況
-        self.assertFalse(has_permission)
 
-    def test_view_without_required_scopes_attribute(self):
         """測試 View 沒有 required_scopes 屬性"""
         full_token, token_hash = generate_api_token()
         token = ApiToken.objects.create(

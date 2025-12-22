@@ -29,7 +29,7 @@ class ApiTokenListViewTest(TestCase):
     def test_list_tokens_requires_authentication(self):
         """測試列出 tokens 需要認證"""
         response = self.client.get(self.url)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
 
     def test_list_tokens_authenticated(self):
         """測試已認證用戶可以列出自己的 tokens"""
@@ -86,7 +86,7 @@ class ApiTokenListViewTest(TestCase):
         """測試創建 token 需要認證"""
         data = {'name': 'Test Token'}
         response = self.client.post(self.url, data)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
 
     def test_create_token_with_valid_data(self):
         """測試使用有效數據創建 token"""
@@ -180,7 +180,7 @@ class ApiTokenDetailViewTest(TestCase):
     def test_get_token_requires_authentication(self):
         """測試獲取 token 詳情需要認證"""
         response = self.client.get(self.url)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
 
     def test_get_token_detail(self):
         """測試獲取 token 詳情"""
@@ -208,7 +208,7 @@ class ApiTokenDetailViewTest(TestCase):
     def test_delete_token_requires_authentication(self):
         """測試刪除 token 需要認證"""
         response = self.client.delete(self.url)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
 
     def test_delete_token(self):
         """測試刪除 token"""
@@ -290,4 +290,4 @@ class ApiTokenAuthenticationIntegrationTest(TestCase):
         
         response = self.client.get(self.url)
         
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])

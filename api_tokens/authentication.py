@@ -50,12 +50,23 @@ class ApiTokenAuthentication(BaseAuthentication):
             raise AuthenticationFailed('API Token 已被撤銷')
 
         # 6. (RFC 要求) 更新使用統計
-        # 只有在驗證成功時才更新
-        token.last_used_at = timezone.now()
+        # 使用 F() 表達式進行原子性更新，避免競態條件
+        from django.db.models import F
+        
         # 這裡我們需要判斷 request 的 IP
-        token.last_used_ip = self.get_client_ip(request)
+        client_ip = self.get_client_ip(request)
+        
+        ApiToken.objects.filter(id=token.id).update(
+            last_used_at=timezone.now(),
+            last_used_ip=client_ip,
+            usage_count=F('usage_count') + 1
+        )
+        
+        # 更新記憶體中的物件，以便後續如果有用到也能反映最新狀態 (非必須，但良好的習慣)
+        token.last_used_at = timezone.now()
+        token.last_used_ip = client_ip
         token.usage_count += 1
-        token.save()
+        # token.save()  <-- 不需要再 save，因為 update 已經寫入 DB
 
         # 7. 認證成功！回傳 (User, Auth) tuple
         # request.user 會變成 token.user

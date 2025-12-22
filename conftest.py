@@ -25,3 +25,15 @@ def api_client():
     """提供 Django REST framework 測試客戶端"""
     from rest_framework.test import APIClient
     return APIClient()
+
+@pytest.fixture(autouse=True)
+def override_settings(settings):
+    """強制測試使用本地記憶體 Cache，避免依賴 Redis"""
+    settings.CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    }
+    settings.CELERY_BROKER_URL = 'memory://'
+    settings.CELERY_RESULT_BACKEND = 'cache+memory://'
+
