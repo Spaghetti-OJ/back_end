@@ -192,3 +192,72 @@ def test_sandbox_checksum_and_meta(api_client, teacher, course, settings):
     # meta 錯誤 token
     res_meta_bad = api_client.get(f"/problem/{p.id}/meta", {'token': 'wrong'})
     assert res_meta_bad.status_code == 401
+
+
+@pytest.mark.django_db
+def test_sandbox_testdata_download(api_client, teacher, course, settings):
+    """Test the new /problem/<pk>/testdata endpoint for sandbox test data downloads."""
+    # 設定 sandbox token
+    settings.SANDBOX_TOKEN = "test-sandbox-token"
+    
+    p = Problems.objects.create(
+        title="TestDataDownload",
+        description="test",
+        difficulty="medium",
+        is_public=True,
+        creator_id=teacher,
+        course_id=course,
+    )
+    
+    # 建立測資 zip 檔案
+    mem = BytesIO()
+    with zipfile.ZipFile(mem, 'w') as zf:
+        zf.writestr('0001.in', 'test input 1')
+        zf.writestr('0001.out', 'test output 1')
+        zf.writestr('0101.in', 'test input 2')
+        zf.writestr('0101.out', 'test output 2')
+    mem.seek(0)
+    rel = os.path.join('testcases', f'p{p.id}', 'problem.zip')
+    _storage.save(rel, mem)
+    
+    # Test 1: 成功下載（使用正確 token）
+    res = api_client.get(f"/problem/{p.id}/testdata", {'token': settings.SANDBOX_TOKEN})
+    assert res.status_code == 200
+    assert res['Content-Type'] == 'application/zip'
+    assert 'attachment' in res['Content-Disposition']
+    assert f'problem-{p.id}-package.zip' in res['Content-Disposition']
+    
+    # 驗證下載的 zip 內容正確
+    downloaded = BytesIO(b''.join(res.streaming_content))
+    with zipfile.ZipFile(downloaded, 'r') as zf:
+        assert '0001.in' in zf.namelist()
+        assert '0001.out' in zf.namelist()
+        assert zf.read('0001.in') == b'test input 1'
+    
+    # Test 2: 錯誤的 token (401)
+    res_bad = api_client.get(f"/problem/{p.id}/testdata", {'token': 'invalid-token'})
+    assert res_bad.status_code == 401
+    body = res_bad.json()
+    assert 'Invalid sandbox token' in body['message']
+    
+    # Test 3: 未提供 token (401)
+    res_no_token = api_client.get(f"/problem/{p.id}/testdata")
+    assert res_no_token.status_code == 401
+    
+    # Test 4: SANDBOX_TOKEN 未設定 (401)
+    settings.SANDBOX_TOKEN = None
+    res_no_config = api_client.get(f"/problem/{p.id}/testdata", {'token': 'any-token'})
+    assert res_no_config.status_code == 401
+    
+    # Test 5: 測資檔案不存在 (404)
+    settings.SANDBOX_TOKEN = "test-sandbox-token"
+    p2 = Problems.objects.create(
+        title="NoTestData",
+        description="no data",
+        difficulty="easy",
+        is_public=True,
+        creator_id=teacher,
+        course_id=course,
+    )
+    res_404 = api_client.get(f"/problem/{p2.id}/testdata", {'token': settings.SANDBOX_TOKEN})
+    assert res_404.status_code == 404

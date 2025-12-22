@@ -11,8 +11,6 @@ from .views.api import (
     ProblemTestCaseChecksumView, ProblemTestCaseMetaView,
     ProblemSubtaskListCreateView, ProblemSubtaskDetailView,
     ProblemTestCaseListCreateView, ProblemTestCaseDetailView, ProblemTestCaseZipUploadView,
-    ProblemSubtaskListCreateView, ProblemSubtaskDetailView,
-    ProblemTestCaseListCreateView, ProblemTestCaseDetailView, ProblemTestCaseZipUploadView,
 )
 from .views.sandbox import ProblemTestCasePackageView
 

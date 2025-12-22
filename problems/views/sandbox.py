@@ -1,5 +1,4 @@
 from rest_framework.views import APIView
-from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.http import FileResponse, Http404
 from django.conf import settings
@@ -20,11 +19,7 @@ class ProblemTestCasePackageView(APIView):
         # 從環境變數或 settings 讀取 SANDBOX_TOKEN
         token_expected = getattr(settings, 'SANDBOX_TOKEN', os.environ.get('SANDBOX_TOKEN'))
         
-        if not token_expected:
-            # 若系統未設定 Token，則拒絕所有存取以策安全
-            return api_response(None, "Sandbox token not configured on server", status_code=500)
-
-        if token_req != token_expected:
+        if not token_expected or token_req != token_expected:
             return api_response(None, "Invalid sandbox token", status_code=401)
 
         problem = get_object_or_404(Problems, pk=pk)
