@@ -47,6 +47,7 @@ DJANGO_SECRET_KEY=dev-secret
 ALLOWED_HOSTS=127.0.0.1,localhost
 DB_ENGINE=sqlite
 CORS_ALLOWED_ORIGINS=http://localhost:5173
+CSRF_TRUSTED_ORIGINS=http://localhost:5173
 
 # Celery 設定
 CELERY_BROKER_URL=redis://127.0.0.1:6379/0
@@ -66,6 +67,7 @@ SANDBOX_API_KEY=happylittle7
 - `ALLOWED_HOSTS`: 允許的主機名稱，多個用逗號分隔
 - `DB_ENGINE`: 資料庫引擎，開發用 `sqlite`，正式環境用 `postgresql`
 - `CORS_ALLOWED_ORIGINS`: CORS 允許的來源，前端位址
+- `CSRF_TRUSTED_ORIGINS`: CSRF 信任的來源 (如用 Session Auth)
 
 **Celery 設定：**
 - `CELERY_BROKER_URL`: Celery 訊息佇列位址，使用 Redis database 0
