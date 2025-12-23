@@ -1479,12 +1479,15 @@ class SubmissionCallbackAPIView(APIView):
                 
                 # 4. 建立 SubmissionResult 記錄
                 for test_result in test_results:
+                    # 轉換 status 為字串格式（SubmissionResult 使用字串）
+                    result_status = test_result.get('status', 'runtime_error')
+                    
                     SubmissionResult.objects.create(
-                        submission_id=submission,
+                        submission=submission,  # 使用 submission 而非 submission_id
                         problem_id=submission.problem_id,
                         test_case_id=test_result.get('test_case_id'),
                         test_case_index=test_result.get('test_case_index', 0),
-                        status=status_map.get(test_result.get('status'), -2),
+                        status=result_status,  # SubmissionResult 的 status 是字串類型
                         execution_time=test_result.get('execution_time'),
                         memory_usage=test_result.get('memory_usage'),
                         score=test_result.get('score', 0),

@@ -94,7 +94,7 @@ def submit_to_sandbox(submission):
             'checker_name': 'diff',
             'use_static_analysis': False,  # TODO: 從 assignment 設定取得
             'priority': 0,  # 一般優先級
-            'callback_url': f'{settings.BACKEND_BASE_URL}/api/submissions/callback/',  # Sandbox 判題完成後回傳結果的 URL
+            'callback_url': f'{settings.BACKEND_BASE_URL}/submissions/callback/',  # Sandbox 判題完成後回傳結果的 URL
         }
         
         # 5. 準備檔案
@@ -184,9 +184,9 @@ def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_dat
             'checker_name': 'diff',
             'use_static_analysis': False,
             'priority': -1,  # 低優先級（自定義測試不影響正式提交）
-            'callback_url': f'{settings.BACKEND_BASE_URL}/api/submissions/custom-test-callback/',  # Custom test callback URL
+            'callback_url': f'{settings.BACKEND_BASE_URL}/submissions/custom-test-callback/',  # Custom test callback URL
         }
-        
+        # POST {url}
         # 準備檔案
         filename = f'solution.{get_file_extension(language)}'
         files = {
