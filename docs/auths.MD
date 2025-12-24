@@ -429,6 +429,31 @@ POST /auth/activity/
 
 ---
 
+### 使用者提交活動統計 (Contribution Graph)
+
+```http
+GET /auth/stats/submission-activity/<uuid:user_id>/
+```
+
+**權限：** 已認證使用者
+
+**用途：** 取得指定使用者過去一年內的每日提交次數，用於繪製類似 GitHub 的 Contribution Graph。
+
+**成功回應 (200 OK)：**
+```json
+{
+  "status": "success",
+  "data": {
+    "2023-01-01": 5,
+    "2023-01-02": 0,
+    "2023-01-03": 12
+  },
+  "message": "Submission activity retrieved successfully."
+}
+```
+
+---
+
 ## 管理員專用 API
 
 > ⚠️ **權限要求：** 以下端點僅限管理員 (`is_staff=True`) 使用
