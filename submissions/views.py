@@ -1372,3 +1372,246 @@ def get_custom_test_result(request, custom_test_id):
             message=f'查詢失敗: {str(e)}',
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+# ====================
+# Sandbox Callback API
+# ====================
+
+class SubmissionCallbackAPIView(APIView):
+    """
+    接收 Sandbox 判題結果的 callback endpoint
+    
+    Sandbox 判題完成後會 POST 到這個 endpoint
+    URL: POST /api/submissions/callback/
+    """
+    permission_classes = [permissions.AllowAny]  # Sandbox 不需要 JWT 認證
+    
+    def post(self, request):
+        """
+        處理 Sandbox 回傳的判題結果
+        
+        預期的 JSON payload:
+        {
+            "submission_id": "uuid",
+            "status": "accepted" | "wrong_answer" | "time_limit_exceeded" | ...,
+            "score": 100,
+            "execution_time": 123,  // 毫秒
+            "memory_usage": 1024,   // KB
+            "test_results": [
+                {
+                    "test_case_id": 1,
+                    "test_case_index": 1,
+                    "status": "accepted",
+                    "execution_time": 50,
+                    "memory_usage": 512,
+                    "score": 10,
+                    "max_score": 10,
+                    "error_message": null
+                },
+                // ... more test results
+            ]
+        }
+        """
+        import logging
+        from .models import Submission, SubmissionResult
+        from django.conf import settings
+        
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # 1. 驗證請求來源（API Key）
+            api_key = request.headers.get('X-API-KEY')
+            expected_key = getattr(settings, 'SANDBOX_API_KEY', '')
+            
+            if expected_key and api_key != expected_key:
+                logger.warning(f'Invalid API key from callback: {api_key}')
+                return api_response(
+                    message='Unauthorized',
+                    status_code=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            # 2. 解析 payload
+            data = request.data
+            submission_id = data.get('submission_id')
+            judge_status = data.get('status')
+            total_score = data.get('score', 0)
+            execution_time = data.get('execution_time', 0)
+            memory_usage = data.get('memory_usage', 0)
+            test_results = data.get('test_results', [])
+            
+            logger.info(f'Received callback for submission {submission_id}: status={judge_status}, score={total_score}')
+            
+            if not submission_id:
+                return api_response(
+                    message='Missing submission_id',
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # 3. 更新 Submission
+            with transaction.atomic():
+                try:
+                    submission = Submission.objects.select_for_update().get(id=submission_id)
+                except Submission.DoesNotExist:
+                    logger.error(f'Submission not found: {submission_id}')
+                    return api_response(
+                        message='Submission not found',
+                        status_code=status.HTTP_404_NOT_FOUND
+                    )
+                
+                # 轉換狀態碼（Submission 使用字串狀態碼）
+                status_map = {
+                    'accepted': '0',  # AC
+                    'wrong_answer': '1',  # WA
+                    'compile_error': '2',  # CE
+                    'time_limit_exceeded': '3',  # TLE
+                    'memory_limit_exceeded': '4',  # MLE
+                    'runtime_error': '5',  # RE
+                }
+                submission.status = status_map.get(judge_status, '-1')  # 預設 -1 (pending)
+                submission.score = total_score
+                submission.execution_time = execution_time
+                submission.memory_usage = memory_usage
+                submission.judged_at = timezone.now()
+                submission.save()
+                
+                logger.info(f'Updated submission {submission_id}: status={submission.status}, score={total_score}')
+                
+                # 4. 建立 SubmissionResult 記錄
+                for test_result in test_results:
+                    # 轉換 status 為字串格式（SubmissionResult 使用字串）
+                    result_status = test_result.get('status', 'runtime_error')
+                    
+                    SubmissionResult.objects.create(
+                        submission=submission,  # 使用 submission 而非 submission_id
+                        problem_id=submission.problem_id,
+                        test_case_id=test_result.get('test_case_id'),
+                        test_case_index=test_result.get('test_case_index', 0),
+                        status=result_status,  # SubmissionResult 的 status 是字串類型
+                        execution_time=test_result.get('execution_time'),
+                        memory_usage=test_result.get('memory_usage'),
+                        score=test_result.get('score', 0),
+                        max_score=test_result.get('max_score', 100),
+                        error_message=test_result.get('error_message'),
+                    )
+                
+                logger.info(f'Created {len(test_results)} test results for submission {submission_id}')
+                
+                # 5. TODO: 更新 User_problem_stats (之後實現)
+                # update_user_problem_stats(submission)
+            
+            return api_response(
+                data={'submission_id': str(submission_id)},
+                message='Callback processed successfully',
+                status_code=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(f'Callback processing error: {str(e)}')
+            import traceback
+            logger.error(traceback.format_exc())
+            return api_response(
+                message=f'Internal server error: {str(e)}',
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class CustomTestCallbackAPIView(APIView):
+    """
+    接收 Sandbox Custom Test 結果的 callback endpoint
+    
+    Sandbox 完成自定義測試後會 POST 到這個 endpoint
+    URL: POST /api/submissions/custom-test-callback/
+    """
+    permission_classes = [permissions.AllowAny]  # Sandbox 不需要 JWT 認證
+    
+    def post(self, request):
+        """
+        處理 Sandbox 回傳的自定義測試結果
+        
+        預期的 JSON payload:
+        {
+            "submission_id": "selftest-uuid",
+            "status": "completed" | "error",
+            "stdout": "output text",
+            "stderr": "error text",
+            "execution_time": 123,  // 毫秒
+            "memory_usage": 1024,   // KB
+            "exit_code": 0
+        }
+        """
+        import logging
+        from .models import CustomTest
+        from django.conf import settings
+        
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # 1. 驗證請求來源（API Key）
+            api_key = request.headers.get('X-API-KEY')
+            expected_key = getattr(settings, 'SANDBOX_API_KEY', '')
+            
+            if expected_key and api_key != expected_key:
+                logger.warning(f'Invalid API key from custom test callback: {api_key}')
+                return api_response(
+                    message='Unauthorized',
+                    status_code=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            # 2. 解析 payload
+            data = request.data
+            test_id = data.get('submission_id')  # 實際上是 custom test ID
+            test_status = data.get('status')
+            stdout = data.get('stdout', '')
+            stderr = data.get('stderr', '')
+            execution_time = data.get('execution_time', 0)
+            memory_usage = data.get('memory_usage', 0)
+            exit_code = data.get('exit_code', 0)
+            
+            logger.info(f'Received custom test callback for {test_id}: status={test_status}')
+            
+            if not test_id:
+                return api_response(
+                    message='Missing submission_id',
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # 3. 更新 CustomTest
+            with transaction.atomic():
+                try:
+                    custom_test = CustomTest.objects.select_for_update().get(id=test_id)
+                except CustomTest.DoesNotExist:
+                    logger.error(f'CustomTest not found: {test_id}')
+                    return api_response(
+                        message='CustomTest not found',
+                        status_code=status.HTTP_404_NOT_FOUND
+                    )
+                
+                # 更新測試結果（CustomTest 使用字串狀態碼）
+                custom_test.status = 'completed' if test_status == 'completed' else 'error'
+                custom_test.actual_output = stdout
+                custom_test.execution_time = execution_time
+                custom_test.memory_usage = memory_usage
+                custom_test.completed_at = timezone.now()
+                
+                if stderr or exit_code != 0:
+                    custom_test.error_message = stderr or f'Exit code: {exit_code}'
+                
+                custom_test.save()
+                
+                logger.info(f'Updated custom test {test_id}: status={custom_test.status}')
+            
+            return api_response(
+                data={'test_id': str(test_id)},
+                message='Custom test callback processed successfully',
+                status_code=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(f'Custom test callback processing error: {str(e)}')
+            import traceback
+            logger.error(traceback.format_exc())
+            return api_response(
+                message=f'Internal server error: {str(e)}',
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

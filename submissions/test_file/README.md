@@ -218,7 +218,7 @@ python submissions/test_file/test_sandbox_celery.py
 
 # 獲取 Token 並測試完整流程
 python submissions/test_file/get_test_token.py
-python submissions/test_file/test_sandbox_integration.py
+python back_end/submissions/test_file/test_sandbox_direct.py
 ```
 
 ---

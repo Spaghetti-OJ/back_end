@@ -30,13 +30,7 @@ python manage.py makemigrations
 python manage.py migrate
 ```
 
-### 4. 啟動伺服器
-
-```bash
-python manage.py runserver
-```
-
-### 5. 環境檔 `.env`
+### 4. 環境檔 `.env`
 
 請複製 `.env.example` 為 `.env`，並依需求調整：
 
@@ -77,13 +71,151 @@ SANDBOX_API_KEY=happylittle7
 - `SANDBOX_API_URL`: Sandbox 判題系統 API 位址
 - `SANDBOX_TIMEOUT`: API 請求超時時間（秒）
 - `SANDBOX_API_KEY`: Sandbox API 認證金鑰
-
+- `BACKEND_BASE_URL` = Backend 公開網址（用於 Sandbox callback）
 #### 注意事項
 
 - SQLite 用於本機測試；正式環境將改為 **PostgreSQL**
-- Redis 需要另外啟動：`redis-server`
-- Celery Worker 需要另外啟動：`celery -A back_end worker --loglevel=info`
 - 請勿將 `.env` 提交到 Git，已加入 `.gitignore`
+
+---
+
+## 啟動必要服務
+
+本專案需要以下服務同時運行，**建議開啟 4 個終端視窗**分別執行：
+
+### 終端 1: Redis（訊息佇列）
+
+Redis 用於 Celery 的訊息佇列和結果儲存。
+
+#### 方法 1: 使用 Docker（推薦）
+
+```bash
+# 確保 Docker Desktop 已啟動（看到頂部選單欄的 Docker 圖示）
+
+# 啟動 Redis 容器
+docker-compose -f docker-compose.redis.yml up -d
+
+# 檢查 Redis 是否運行
+docker ps | grep redis
+```
+
+#### 方法 2: 本機安裝 Redis
+
+```bash
+# macOS 使用 Homebrew
+brew install redis
+brew services start redis
+
+# 或手動啟動
+redis-server
+```
+
+**驗證 Redis 是否運行：**
+```bash
+redis-cli ping
+# 應該回傳: PONG
+```
+
+---
+
+### 終端 2: Celery Worker（非同步任務處理）
+
+Celery 用於處理非同步任務（如提交判題、郵件發送等）。
+
+```bash
+# 確保已啟動 Redis
+# 啟動 Celery Worker
+celery -A back_end worker -l info
+
+# 看到以下訊息表示成功：
+# [tasks]
+#   . submissions.tasks.submit_to_sandbox_task
+#   . submissions.tasks.submit_selftest_to_sandbox_task
+```
+
+**注意事項：**
+- Celery Worker 不會自動重新載入程式碼
+- 修改 `tasks.py` 或相關程式碼後，需要**重啟 Celery Worker**
+- 使用 `Ctrl+C` 停止，然後重新啟動
+
+---
+
+### 終端 3: Django 開發伺服器
+
+```bash
+python manage.py runserver
+```
+
+Django 會在 `http://localhost:8000` 啟動。
+
+**API 文件：**
+- Swagger UI: `http://localhost:8000/api/schema/swagger-ui/`
+- ReDoc: `http://localhost:8000/api/schema/redoc/`
+
+---
+
+### 終端 4: 測試或其他命令
+
+保留一個終端用於執行測試、資料庫操作等。
+
+```bash
+# 執行測試
+pytest
+
+# 建立超級使用者
+python manage.py createsuperuser
+
+# 進入 Django Shell
+python manage.py shell
+```
+
+---
+
+## 快速啟動檢查清單
+
+開發前請確認以下服務都已啟動：
+
+- [ ] **Docker Desktop** 已開啟（如果使用 Docker 版 Redis）
+- [ ] **Redis** 正在運行
+  ```bash
+  redis-cli ping  # 應回傳 PONG
+  ```
+- [ ] **Celery Worker** 正在運行
+  ```bash
+  # 檢查終端是否顯示 "celery@... ready."
+  ```
+- [ ] **Django Server** 正在運行
+  ```bash
+  curl http://localhost:8000/api/  # 應回傳 API 資訊
+  ```
+
+---
+
+## 常見問題
+
+### Q: Redis 連線失敗 "Connection refused"
+**A:** 
+1. 確認 Redis 是否啟動：`docker ps | grep redis` 或 `redis-cli ping`
+2. 檢查 `.env` 中的 `CELERY_BROKER_URL` 設定是否正確
+3. 如果使用 Docker，確保 Docker Desktop 已啟動
+
+### Q: Celery 找不到任務
+**A:**
+1. 確認 Redis 已啟動
+2. 檢查 `celery -A back_end worker -l info` 啟動日誌中是否有顯示任務列表
+3. 修改程式碼後需要重啟 Celery Worker
+
+### Q: Django 啟動失敗
+**A:**
+1. 確認已執行 `python manage.py migrate`
+2. 檢查 `.env` 檔案是否存在且設定正確
+3. 確認虛擬環境已啟動
+
+### Q: Docker daemon 無法連接
+**A:**
+1. 手動開啟 Docker Desktop 應用程式
+2. 等待 Docker 圖示出現在頂部選單欄且停止轉動
+3. 執行 `docker info` 確認 Docker 已啟動
 
 ---
 

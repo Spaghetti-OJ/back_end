@@ -12,10 +12,11 @@ import requests
 import json
 from io import BytesIO
 import hashlib
+from django.conf import settings
 
 # Sandbox API 配置
-SANDBOX_API_URL = "http://34.81.90.111:8000"
-SANDBOX_API_KEY = "happylittle7"  # 從沙盒管理員獲取的 API Key
+SANDBOX_API_URL = getattr(settings, 'SANDBOX_API_URL', 'http://34.81.90.111:8000')
+SANDBOX_API_KEY = getattr(settings, 'SANDBOX_API_KEY', '')  # API Key
 
 def submit_test_code_to_sandbox():
     """直接向 Sandbox 發送測試提交"""

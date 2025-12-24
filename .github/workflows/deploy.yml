@@ -5,6 +5,7 @@ on:
     branches:
       - deploy/add-email-sender
       - dev
+      - feat/api-SandBox
 
 concurrency: deploy-dev
 

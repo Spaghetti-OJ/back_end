@@ -252,4 +252,8 @@ CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 分鐘硬限制
 SANDBOX_API_URL = os.getenv('SANDBOX_API_URL', 'http://34.81.90.111:8000')
 SANDBOX_TIMEOUT = int(os.getenv('SANDBOX_TIMEOUT', '30'))  # API 請求超時（秒）
 SANDBOX_API_KEY = os.getenv('SANDBOX_API_KEY', '')  # API Key for authentication
-SANDBOX_CALLBACK_URL = os.getenv('SANDBOX_CALLBACK_URL', 'http://localhost:8000/api/submission/callback/')
+
+# ====================
+# Backend Configuration
+# ====================
+BACKEND_BASE_URL = os.getenv('BACKEND_BASE_URL', 'http://localhost:8000')  # Backend 公開網址（用於 Sandbox callback）
