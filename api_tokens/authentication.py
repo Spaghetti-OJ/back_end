@@ -62,10 +62,8 @@ class ApiTokenAuthentication(BaseAuthentication):
             usage_count=F('usage_count') + 1
         )
         
-        # 更新記憶體中的物件，以便後續如果有用到也能反映最新狀態 (非必須，但良好的習慣)
-        token.last_used_at = timezone.now()
-        token.last_used_ip = client_ip
-        token.usage_count += 1
+        # 從資料庫重新載入，確保記憶體中的物件與 DB 狀態一致
+        token.refresh_from_db(fields=['last_used_at', 'last_used_ip', 'usage_count'])
         # token.save()  <-- 不需要再 save，因為 update 已經寫入 DB
 
         # 7. 認證成功！回傳 (User, Auth) tuple
