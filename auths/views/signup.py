@@ -34,7 +34,7 @@ class RegisterView(generics.CreateAPIView):
         return api_response(data=data, status_code=201)
 
 class MeView(APIView):
-    permission_classes = [IsAuthenticated]
+    #permission_classes = [IsAuthenticated]
     skip_email_verification = True
 
     def get(self, request):

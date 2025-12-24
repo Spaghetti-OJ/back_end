@@ -1,4 +1,5 @@
 from rest_framework.permissions import BasePermission
+from user.models import UserProfile
 
 class IsEmailVerified(BasePermission):
     message = "Email not verified."
@@ -11,4 +12,4 @@ class IsEmailVerified(BasePermission):
         if getattr(view, "skip_email_verification", False):
             return True
 
-        return getattr(user, "is_email_verified", False)
+        return UserProfile.objects.filter(user=user, email_verified=True).exists()
