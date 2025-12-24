@@ -52,7 +52,7 @@ def api_response(data=None, message="OK", status_code=200):
     )
 
 class ChangePasswordView(APIView):
-    permission_classes = [IsAuthenticated]
+    #permission_classes = [IsAuthenticated]
     skip_email_verification = True
 
     def post(self, request):
@@ -154,6 +154,7 @@ class ResetPasswordView(APIView):
     前端帶 token + new_password 來真正重設密碼。
     """
     permission_classes = [AllowAny]
+    skip_email_verification = True
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "reset_pw"
 

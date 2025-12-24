@@ -22,6 +22,7 @@ User = get_user_model()
 
 class MeProfileView(APIView):
     #permission_classes = [IsAuthenticated, IsEmailVerified]
+    skip_email_verification = True
 
     def get(self, request):
         # 盡量一次取回關聯
