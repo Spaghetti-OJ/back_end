@@ -5,6 +5,8 @@ from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 from auths.serializers.signup import RegisterSerializer, MeSerializer
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 User = get_user_model()
 
@@ -39,3 +41,7 @@ class MeView(APIView):
         user = request.user
         data = MeSerializer(user).data
         return api_response(data=data, message="Get current user")
+    
+class LoginView(TokenObtainPairView):
+    permission_classes = [AllowAny]
+    skip_email_verification = True
