@@ -5,6 +5,8 @@ from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 from auths.serializers.signup import RegisterSerializer, MeSerializer
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 User = get_user_model()
 
@@ -20,6 +22,7 @@ class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
+    skip_email_verification = True
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -31,9 +34,14 @@ class RegisterView(generics.CreateAPIView):
         return api_response(data=data, status_code=201)
 
 class MeView(APIView):
-    permission_classes = [IsAuthenticated]
+    #permission_classes = [IsAuthenticated]
+    skip_email_verification = True
 
     def get(self, request):
         user = request.user
         data = MeSerializer(user).data
         return api_response(data=data, message="Get current user")
+    
+class LoginView(TokenObtainPairView):
+    permission_classes = [AllowAny]
+    skip_email_verification = True
