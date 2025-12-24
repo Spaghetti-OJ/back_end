@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
+from rest_framework.permissions import AllowAny
 
 def api_response(data=None, message="OK", status_code=200):
     status_str = "ok" if 200 <= status_code < 400 else "error"
@@ -18,7 +19,9 @@ class SessionRevokeView(APIView):
     預設需帶 Authorization: Bearer <access>（IsAuthenticated）
     refresh 可從 JSON body 或（若採 Cookie 流程）從 Cookie 取得。
     """
-    permission_classes = [permissions.IsAuthenticated]
+    #permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [AllowAny]
+    skip_email_verification = True
 
     def post(self, request):
         # 1) 優先從 JSON body 讀 refresh
