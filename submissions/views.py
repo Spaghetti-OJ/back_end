@@ -899,6 +899,13 @@ def ranking_view(request):
             # 總提交數量
             total_submission_count = user_submissions.count()
             
+            # 獲取用戶頭像
+            try:
+                profile = user.userprofile
+                avatar_url = profile.avatar.url if profile.avatar else None
+            except:
+                avatar_url = None
+            
             # 組裝用戶資料（參照 NOJ 格式）
             user_data = {
                 'user': {
@@ -906,6 +913,7 @@ def ranking_view(request):
                     'username': user.username,
                     'real_name': getattr(user, 'real_name', user.username),
                     'email': user.email,
+                    'avatar': avatar_url,
                     'is_active': user.is_active,
                     'date_joined': user.date_joined.isoformat() if user.date_joined else None
                 },
