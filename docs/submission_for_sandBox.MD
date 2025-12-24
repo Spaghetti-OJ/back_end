@@ -21,8 +21,8 @@
 
 ### Callback URLs
 
-- **正式提交**: `{BACKEND_BASE_URL}/api/submissions/callback/`
-- **自定義測試**: `{BACKEND_BASE_URL}/api/submissions/custom-test-callback/`
+- **正式提交**: `{BACKEND_BASE_URL}/submission/callback/`
+- **自定義測試**: `{BACKEND_BASE_URL}/submission/custom-test-callback/`
 
 其中 `BACKEND_BASE_URL` 會在 Backend 發送提交請求時，透過 `callback_url` 欄位提供完整網址。
 
@@ -47,7 +47,7 @@ X-API-KEY: your-sandbox-api-key
 ### Endpoint
 
 ```
-POST {BACKEND_BASE_URL}/api/submissions/callback/
+POST {BACKEND_BASE_URL}/submission/callback/
 ```
 
 ### Request Headers
@@ -106,14 +106,16 @@ X-API-KEY: your-sandbox-api-key
 
 #### status 可能的值
 
-| 狀態值 | 說明 | Backend 對應代碼 |
-|--------|------|------------------|
-| `accepted` | 完全正確 (AC) | 2 |
-| `wrong_answer` | 答案錯誤 (WA) | 3 |
-| `time_limit_exceeded` | 超過時間限制 (TLE) | 4 |
-| `memory_limit_exceeded` | 超過記憶體限制 (MLE) | 5 |
-| `runtime_error` | 執行時錯誤 (RE) | 6 |
-| `compile_error` | 編譯錯誤 (CE) | 7 |
+| 狀態值 | 說明 | Backend 內部狀態碼 |
+|--------|------|-------------------|
+| `accepted` | 完全正確 (AC) | '0' |
+| `wrong_answer` | 答案錯誤 (WA) | '1' |
+| `compile_error` | 編譯錯誤 (CE) | '2' |
+| `time_limit_exceeded` | 超過時間限制 (TLE) | '3' |
+| `memory_limit_exceeded` | 超過記憶體限制 (MLE) | '4' |
+| `runtime_error` | 執行時錯誤 (RE) | '5' |
+
+**注意**: Backend 內部狀態碼僅供參考，Sandbox 只需要發送上述字串狀態值即可。
 
 #### test_results 陣列中的物件
 
@@ -181,7 +183,7 @@ X-API-KEY: your-sandbox-api-key
 ### Endpoint
 
 ```
-POST {BACKEND_BASE_URL}/api/submissions/custom-test-callback/
+POST {BACKEND_BASE_URL}/submission/custom-test-callback/
 ```
 
 ### Request Headers
@@ -331,7 +333,7 @@ result = {
 }
 
 send_submission_callback(
-    backend_url="https://noj-backend-dev.little7.pp.ua/api/submissions/callback/",
+    backend_url="https://noj-backend-dev.little7.pp.ua/submission/callback/",
     api_key="your-api-key",
     result_data=result
 )
@@ -341,7 +343,7 @@ send_submission_callback(
 
 ```bash
 # 正式提交 Callback
-curl -X POST "https://noj-backend-dev.little7.pp.ua/api/submissions/callback/" \
+curl -X POST "https://noj-backend-dev.little7.pp.ua/submission/callback/" \
   -H "Content-Type: application/json" \
   -H "X-API-KEY: your-api-key" \
   -d '{
@@ -365,7 +367,7 @@ curl -X POST "https://noj-backend-dev.little7.pp.ua/api/submissions/callback/" \
   }'
 
 # 自定義測試 Callback
-curl -X POST "https://noj-backend-dev.little7.pp.ua/api/submissions/custom-test-callback/" \
+curl -X POST "https://noj-backend-dev.little7.pp.ua/submission/custom-test-callback/" \
   -H "Content-Type: application/json" \
   -H "X-API-KEY: your-api-key" \
   -d '{
