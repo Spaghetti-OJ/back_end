@@ -1459,16 +1459,16 @@ class SubmissionCallbackAPIView(APIView):
                         status_code=status.HTTP_404_NOT_FOUND
                     )
                 
-                # 轉換狀態碼
+                # 轉換狀態碼（Submission 使用字串狀態碼）
                 status_map = {
-                    'accepted': 2,  # AC
-                    'wrong_answer': 3,  # WA
-                    'time_limit_exceeded': 4,  # TLE
-                    'memory_limit_exceeded': 5,  # MLE
-                    'runtime_error': 6,  # RE
-                    'compile_error': 7,  # CE
+                    'accepted': '0',  # AC
+                    'wrong_answer': '1',  # WA
+                    'compile_error': '2',  # CE
+                    'time_limit_exceeded': '3',  # TLE
+                    'memory_limit_exceeded': '4',  # MLE
+                    'runtime_error': '5',  # RE
                 }
-                submission.status = status_map.get(judge_status, -2)  # 預設 -2 (unknown)
+                submission.status = status_map.get(judge_status, '-1')  # 預設 -1 (pending)
                 submission.score = total_score
                 submission.execution_time = execution_time
                 submission.memory_usage = memory_usage
@@ -1587,8 +1587,8 @@ class CustomTestCallbackAPIView(APIView):
                         status_code=status.HTTP_404_NOT_FOUND
                     )
                 
-                # 更新測試結果
-                custom_test.status = 2 if test_status == 'completed' else 3  # 2=completed, 3=error
+                # 更新測試結果（CustomTest 使用字串狀態碼）
+                custom_test.status = 'completed' if test_status == 'completed' else 'error'
                 custom_test.actual_output = stdout
                 custom_test.execution_time = execution_time
                 custom_test.memory_usage = memory_usage
