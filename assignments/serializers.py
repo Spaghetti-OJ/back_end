@@ -72,16 +72,15 @@ class HomeworkCreateSerializer(serializers.Serializer):
         return attrs
 # ---------- 詳情輸出 ----------
 class HomeworkDetailSerializer(serializers.Serializer):
-    # 指定的輸出格式
     message = serializers.CharField()
     name = serializers.CharField()
     start = serializers.IntegerField(allow_null=True)
     end = serializers.IntegerField(allow_null=True)
     problemIds = serializers.ListField(child=serializers.IntegerField())
     markdown = serializers.CharField(allow_blank=True)
-    studentStatus = serializers.CharField()
+    studentStatus = serializers.DictField()
     penalty = serializers.CharField(allow_blank=True)
-
+    
     @staticmethod
     def from_instance(hw: Assignments, problem_ids: List[int], is_teacher_or_ta: bool, penalty_text: str = ""):
         return {
