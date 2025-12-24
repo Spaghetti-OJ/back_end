@@ -53,6 +53,7 @@ def api_response(data=None, message="OK", status_code=200):
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
+    skip_email_verification = True
 
     def post(self, request):
         serializer = ChangePasswordSerializer(
@@ -79,6 +80,7 @@ class ForgotPasswordView(APIView):
     使用者輸入 username，如果有「已驗證的 email」就寄出重設密碼信。
     """
     permission_classes = [AllowAny]
+    skip_email_verification = True
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "send_email"
 

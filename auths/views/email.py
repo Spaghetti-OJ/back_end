@@ -30,6 +30,7 @@ class SendVerificationEmailView(APIView):
     POST /auth/send-email/ - 寄出驗證信到目前登入使用者的 Email
     """
     permission_classes = [IsAuthenticated]
+    skip_email_verification = True
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "send_email"
 
@@ -103,6 +104,7 @@ class VerifyEmailView(APIView):
 
     authentication_classes = []
     permission_classes = []
+    skip_email_verification = True
 
     def post(self, request):
         token_str = request.data.get("token")

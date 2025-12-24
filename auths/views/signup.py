@@ -20,6 +20,7 @@ class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
+    skip_email_verification = True
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -32,6 +33,7 @@ class RegisterView(generics.CreateAPIView):
 
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
+    skip_email_verification = True
 
     def get(self, request):
         user = request.user
