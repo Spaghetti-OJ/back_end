@@ -7,6 +7,7 @@ from .views import activity
 from .views.check import CheckAvailabilityView
 from .views.email import SendVerificationEmailView, VerifyEmailView
 from .views.password import ChangePasswordView, ForgotPasswordView, ResetPasswordView
+from .views.stats import UserSubmissionActivityView
 
 urlpatterns = [
     path('login-logs/', login_logs.LoginLogListView.as_view(), name='login-log-list-self'),
@@ -26,4 +27,5 @@ urlpatterns = [
     path("change-password/", ChangePasswordView.as_view(), name="auth-change-password"),
     path("forgot-password/", ForgotPasswordView.as_view(), name="forgot_password"),
     path("reset-password/", ResetPasswordView.as_view(), name="reset_password"),
+    path('stats/submission-activity/<uuid:user_id>/', UserSubmissionActivityView.as_view(), name='user-submission-activity'),
 ]
