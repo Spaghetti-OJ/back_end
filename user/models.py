@@ -28,6 +28,12 @@ class User(AbstractUser):
     # date_joined = models.DateTimeField(default=timezone.now)
     # last_login = models.DateTimeField(blank=True, null=True)
 
+    def is_email_verified(self) -> bool:
+        try:
+            return bool(self.UserProfile.email_verified)
+        except Exception:
+            return False
+
     def __str__(self):
         return f"{self.username} ({self.identity})"
 
