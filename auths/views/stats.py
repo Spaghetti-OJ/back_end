@@ -28,9 +28,13 @@ class UserSubmissionActivityView(APIView):
             # allowing any authenticated user to query any user seems okay for a "profile" page feature if it's meant to be public features.
             # But safe bet: allow anyone to view anyone's stats (GitHub style public profile).
             
-            # Calculate date range: last 365 days
+            # Calculate date range: last calendar year
             end_date = timezone.now()
-            start_date = end_date - timedelta(days=365)
+            try:
+                start_date = end_date.replace(year=end_date.year - 1)
+            except ValueError:
+                # Handle leap day (Feb 29) when the previous year has no Feb 29
+                start_date = end_date.replace(month=2, day=28, year=end_date.year - 1)
 
             # Query submissions
             daily_counts = (
