@@ -15,7 +15,7 @@ def api_response(data=None, message="OK", status_code=200):
 User = get_user_model()
 
 class CheckAvailabilityView(APIView):
-    permission_classes = [IsAuthenticated]
+    skip_email_verification = True
 
     def post(self, request, item):
         item = item.lower()

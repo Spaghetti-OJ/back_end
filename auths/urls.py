@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import login_logs 
-from .views.signup import RegisterView, MeView, LoginView
+from .views.signup import RegisterView, MeView, LoginView, RefreshView, VerifyView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from .views.revoke import SessionRevokeView
 from .views import activity
@@ -15,8 +15,8 @@ urlpatterns = [
     path('signup/', RegisterView.as_view(), name='register'),
     path('session/', LoginView.as_view(), name='token_obtain_pair'),
     path('session/revoke/', SessionRevokeView.as_view(), name='auth-session-revoke'),
-    path("refresh/", TokenRefreshView.as_view(), name="token_refresh"), 
-    path("verify/", TokenVerifyView.as_view(), name="token_verify"),
+    path("refresh/", RefreshView.as_view(), name="token_refresh"), 
+    path("verify/", VerifyView.as_view(), name="token_verify"),
     path('me/', MeView.as_view(), name='me'),
     path('activity/', activity.UserActivityCreateView.as_view(), name='activity-create'),
     path('activity/<uuid:user_id>/', activity.UserActivityListView.as_view(), name='user-activity-list'),
