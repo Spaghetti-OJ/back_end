@@ -155,8 +155,12 @@ class HomeworkDetailView(APIView):
             .filter(course_id=course)
             .select_related("user_id")
         )
-        users = [m.user_id for m in members]  # user object list
+        users = [m.user_id for m in members]  # user object list（依 Course_members）
 
+        # 確保主授老師也在 users 清單中（即使他/她沒有出現在 Course_members）
+        teacher_user = getattr(course, "teacher_id", None)
+        if teacher_user is not None and teacher_user not in users:
+            users.append(teacher_user)
         # 1) studentStatus 骨架：每人每題預設值
         student_status = {}
         for u in users:
