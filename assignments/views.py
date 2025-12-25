@@ -177,6 +177,7 @@ class HomeworkDetailView(APIView):
                 .select_related("user")
                 .only("id", "problem_id", "user_id", "status", "score", "created_at")
                 .order_by("created_at")  # 讓 submissionIds 按時間排序（可改 -created_at）
+                .iterator(chunk_size=2000)  # 使用 iterator 分批讀取，避免一次載入所有 submissions
             )
 
             # NOJ status code -> text（你要 problemStatus 有值）
