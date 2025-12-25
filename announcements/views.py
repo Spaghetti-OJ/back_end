@@ -10,7 +10,7 @@ from .serializers import (
     SystemAnnouncementSerializer,
 )
 
-PUBLIC_DISCUSSION_COURSE_NAME = "公開討論區"
+PUBLIC_DISCUSSION_COURSE_NAME = "Public"
 PUBLIC_DISCUSSION_COURSE_ALIAS_ID = "1"
 
 
@@ -35,6 +35,10 @@ class CourseAnnouncementBaseView(generics.GenericAPIView):
         course_identifier = str(course_id)
         cached_course = getattr(self, "_course_cache", None)
         cached_key = getattr(self, "_course_cache_key", None)
+        #rint("DEBUG course_identifier =", course_identifier)
+        #rint("DEBUG PUBLIC_DISCUSSION_COURSE_ALIAS_ID =", PUBLIC_DISCUSSION_COURSE_ALIAS_ID)
+        #rint("DEBUG PUBLIC_DISCUSSION_COURSE_NAME =", PUBLIC_DISCUSSION_COURSE_NAME)
+
         if cached_course and cached_key == course_identifier:
             return cached_course
 
@@ -76,6 +80,8 @@ class CourseAnnouncementListView(CourseAnnouncementBaseView):
     """
 
     def get(self, request, *args, **kwargs):
+        print("kwargs =", kwargs)
+        print("course_id =", repr(kwargs.get("course_id")))
         course_id = kwargs.get("course_id")
         course = self._get_course(course_id=course_id)
         if course is None:
