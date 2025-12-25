@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework import status
 from django.contrib.auth import get_user_model
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 
 from rest_framework.response import Response
 
@@ -15,6 +15,7 @@ def api_response(data=None, message="OK", status_code=200):
 User = get_user_model()
 
 class CheckAvailabilityView(APIView):
+    permission_classes = [AllowAny]
     skip_email_verification = True
 
     def post(self, request, item):

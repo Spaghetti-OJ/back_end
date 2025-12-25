@@ -8,6 +8,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
 from auths.models import UserActivity, LoginLog
+from user.models import UserProfile
 
 User = get_user_model()
 
@@ -129,10 +130,12 @@ class UserActivityViewTest(TestCase):
             password='admin123',
             is_staff=True
         )
+        UserProfile.objects.update_or_create(user=self.user, defaults={'email_verified': True})
+        UserProfile.objects.update_or_create(user=self.admin, defaults={'email_verified': True})
 
     def test_create_activity_requires_authentication(self):
         """測試創建活動記錄需要認證"""
-        url = reverse('user-activity-create')
+        self.url = reverse('activity-create')
         data = {
             'activity_type': 'view_problem',
             'description': 'Viewed problem 1'
@@ -144,7 +147,7 @@ class UserActivityViewTest(TestCase):
     def test_create_activity(self):
         """測試創建活動記錄"""
         self.client.force_authenticate(user=self.user)
-        url = reverse('user-activity-create')
+        self.url = reverse('activity-create')
         
         data = {
             'activity_type': 'view_problem',
@@ -207,10 +210,12 @@ class LoginLogViewTest(TestCase):
             password='admin123',
             is_staff=True
         )
+        UserProfile.objects.update_or_create(user=self.user, defaults={'email_verified': True})
+        UserProfile.objects.update_or_create(user=self.admin, defaults={'email_verified': True})
 
     def test_list_own_login_logs_requires_authentication(self):
         """測試列出自己的登入日誌需要認證"""
-        url = reverse('login-logs')
+        url = reverse('login-log-list-self')
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
@@ -224,7 +229,7 @@ class LoginLogViewTest(TestCase):
         )
         
         self.client.force_authenticate(user=self.user)
-        url = reverse('login-logs')
+        url = reverse('login-log-list-self')
         
         response = self.client.get(url)
         
@@ -233,7 +238,7 @@ class LoginLogViewTest(TestCase):
 
     def test_list_user_login_logs_requires_admin(self):
         """測試列出特定使用者登入日誌需要管理員權限"""
-        url = reverse('user-login-logs', kwargs={'user_id': self.user.id})
+        url = reverse('user-login-log-list', kwargs={'user_id': self.user.id})
         
         # 普通使用者無法訪問
         self.client.force_authenticate(user=self.user)
@@ -249,7 +254,7 @@ class LoginLogViewTest(TestCase):
         )
         
         self.client.force_authenticate(user=self.admin)
-        url = reverse('user-login-logs', kwargs={'user_id': self.user.id})
+        url = reverse('user-login-log-list', kwargs={'user_id': self.user.id})
         
         response = self.client.get(url)
         
@@ -257,7 +262,7 @@ class LoginLogViewTest(TestCase):
 
     def test_list_suspicious_activities_requires_admin(self):
         """測試列出異常登入需要管理員權限"""
-        url = reverse('suspicious-activities')
+        url = reverse('suspicious-activity-list')
         
         self.client.force_authenticate(user=self.user)
         response = self.client.get(url)
@@ -273,7 +278,7 @@ class LoginLogViewTest(TestCase):
         )
         
         self.client.force_authenticate(user=self.admin)
-        url = reverse('suspicious-activities')
+        url = reverse('suspicious-activity-list')
         
         response = self.client.get(url)
         
@@ -294,14 +299,14 @@ class SessionRevokeViewTest(TestCase):
 
     def test_revoke_requires_authentication(self):
         """測試撤銷 session 需要認證"""
-        url = reverse('session-revoke')
+        url = reverse('auth-session-revoke')
         response = self.client.post(url, {}, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_revoke_without_refresh_token(self):
         """測試沒有提供 refresh token"""
         self.client.force_authenticate(user=self.user)
-        url = reverse('session-revoke')
+        url = reverse('auth-session-revoke')
         
         response = self.client.post(url, {}, format='json')
         

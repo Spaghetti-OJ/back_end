@@ -15,7 +15,7 @@ class UserSubmissionActivityView(APIView):
     """
     Get user's daily submission counts for the past year.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    # permission_classes = [permissions.IsAuthenticated]  # Removed to use global default
 
     def get(self, request, user_id):
         try:
