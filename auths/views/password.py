@@ -16,13 +16,14 @@ from django.utils import timezone
 import secrets
 from user.models import UserProfile
 from rest_framework.throttling import ScopedRateThrottle
+from django.db import transaction
 
 User = get_user_model()
 
 RESET_TOKEN_LIFETIME_MINUTES = 60
 
 def send_password_reset_email(to_email: str, reset_url: str):
-    subject = "重設密碼連結"
+    subject = "重設密碼連結（一小時內有效）"
     message = (
         "您好，\n\n"
         "我們收到您重設密碼的申請。請點擊以下連結重設密碼：\n"
@@ -110,29 +111,30 @@ class ForgotPasswordView(APIView):
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
-        # ⚠️ 依你的實際欄位名稱調整：email / email_verified
         email = getattr(user, "email", None)
 
         if not email or not profile.email_verified:
             return api_response(
                 data=None,
-                message="此帳號尚未綁定或驗證信箱，無法使用密碼恢復。",
+                message="此帳號尚未綁定或驗證信箱，無法使用密碼恢復，請聯絡管理員。",
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
-        # 3) 產生 token、寫入 DB
+        # 3) 產生 token、寫入 DB（✅ 重寄時作廢舊 token）
         token = secrets.token_urlsafe(32)
         now = timezone.now()
         expires_at = now + timezone.timedelta(minutes=RESET_TOKEN_LIFETIME_MINUTES)
 
-        # 清掉此 user 過期且未使用的 token（可留可不留）
-        PasswordResetToken.objects.filter(user=user, used=False, expires_at__lt=now).delete()
+        with transaction.atomic():
+            PasswordResetToken.objects.filter(user=user, used=False).update(
+                used=True,
+            )
 
-        PasswordResetToken.objects.create(
-            user=user,
-            token=token,
-            expires_at=expires_at,
-        )
+            PasswordResetToken.objects.create(
+                user=user,
+                token=token,
+                expires_at=expires_at,
+            )
 
         # 4) 組出前端重設密碼連結
         frontend_base = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000")
@@ -167,39 +169,45 @@ class ResetPasswordView(APIView):
 
         now = timezone.now()
 
-        # 1) 找 token
-        try:
-            prt = PasswordResetToken.objects.select_related("user").get(token=token)
-        except PasswordResetToken.DoesNotExist:
-            return api_response(
-                data=None,
-                message="無效的重設連結。",
-                status_code=status.HTTP_400_BAD_REQUEST,
+        with transaction.atomic():
+            try:
+                prt = (
+                    PasswordResetToken.objects
+                    .select_related("user")
+                    .select_for_update()
+                    .get(token=token)
+                )
+            except PasswordResetToken.DoesNotExist:
+                return api_response(
+                    data=None,
+                    message="無效的重設連結。",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if prt.used:
+                return api_response(
+                    data=None,
+                    message="此重設連結已被使用。",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if prt.expires_at < now:
+                return api_response(
+                    data=None,
+                    message="此重設連結已過期。",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # 3) 更新密碼
+            user = prt.user
+            user.set_password(new_password)
+            user.save()
+
+            # 4) ✅ 作廢此 user 其他未使用 token（包含這顆）
+            PasswordResetToken.objects.filter(user=user, used=False).update(
+                used=True,
+                # used_at=now,  # <- 有這欄位才打開
             )
-
-        # 2) 檢查 used / expired
-        if prt.used:
-            return api_response(
-                data=None,
-                message="此重設連結已被使用。",
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if prt.expires_at < now:
-            return api_response(
-                data=None,
-                message="此重設連結已過期。",
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # 3) 更新密碼
-        user = prt.user
-        user.set_password(new_password)
-        user.save()
-
-        # 4) token 作廢
-        prt.used = True
-        prt.save()
 
         return api_response(
             data=None,

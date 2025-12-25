@@ -5,11 +5,7 @@ from user.models import UserProfile
 User = get_user_model()
 
 class RegisterSerializer(serializers.ModelSerializer):
-    role = serializers.ChoiceField(
-        source="identity",
-        choices=[c.value for c in User.Identity],
-        required=True,
-    )
+    role = serializers.CharField(source="identity", read_only=True)
 
     student_id = serializers.CharField(
         source="userprofile.student_id", required=False, allow_blank=True, allow_null=True
@@ -28,6 +24,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         password = validated_data.pop("password")
 
         user = User(**validated_data)
+        user.identity = User.Identity.STUDENT
         user.set_password(password)
         user.save()
 

@@ -11,6 +11,8 @@ from auths.models import EmailVerificationToken
 
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
+from django.db import transaction
+from rest_framework import permissions
 
 
 def api_response(data=None, message="OK", status_code=200):
@@ -29,7 +31,6 @@ class SendVerificationEmailView(APIView):
     """
     POST /auth/send-email/ - 寄出驗證信到目前登入使用者的 Email
     """
-    #permission_classes = [IsAuthenticated]
     skip_email_verification = True
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "send_email"
@@ -56,12 +57,21 @@ class SendVerificationEmailView(APIView):
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
-        # 3. 產生 token，存 DB
-        token_str = uuid.uuid4().hex
-        EmailVerificationToken.objects.create(
-            user=user,
-            token=token_str,
-        )
+        # 3. 產生 token（重點：先作廢舊 token）
+        with transaction.atomic():
+            EmailVerificationToken.objects.filter(
+                user=user,
+                used=False,
+            ).update(
+                used=True,
+                # used_at=timezone.now(),  # <- 有這欄位才打開
+            )
+
+            token_str = uuid.uuid4().hex
+            EmailVerificationToken.objects.create(
+                user=user,
+                token=token_str,
+            )
 
         # 4. 組驗證連結
         frontend_base = getattr(settings, "FRONTEND_BASE_URL", "http://127.0.0.1:3000")
@@ -103,7 +113,7 @@ class VerifyEmailView(APIView):
     """
 
     authentication_classes = []
-    #permission_classes = []
+    permission_classes = [permissions.AllowAny]
     skip_email_verification = True
 
     def post(self, request):
