@@ -104,20 +104,44 @@ cURL 測試範例：
 
 成功回應（200 OK）：
 
-    {
-      "message": "get homework",
-      "name": "HW1 - Intro",
-      "start": null,
-      "end": null,
-      "problemIds": [101, 102],
-      "markdown": "第一份作業內容",
-      "studentStatus": "teacher_or_ta",
-      "penalty": ""
+```json
+{
+  "data": {
+    "end": 1682976900,
+    "markdown": "....",
+    "name": "TestIP",
+    "penalty": "",
+    "problemIds": [57, 307],
+    "start": 1682386556,
+    "studentStatus": {
+      "40947016S": {
+        "307": {
+          "problemStatus": null,
+          "score": 0,
+          "submissionIds": []
+        },
+        "57": {
+          "problemStatus": "wrong_answer",
+          "score": 40,
+          "submissionIds": ["<sub_id1>", "<sub_id2>"]
+        }
+      },
+      "JacobLinCool": {
+        "307": {
+          "problemStatus": "accepted",
+          "score": 100,
+          "submissionIds": ["<sub_id3>"]
+        }
+      }
     }
+  },
+  "message": "get homework",
+  "status": "ok"
+}
 
 找不到（404）：（DEBUG=False 通常為）
 
-    {"detail": "Not found."}
+  {"detail": "Not found."}
 
 cURL 測試範例：
 
@@ -139,8 +163,8 @@ cURL 測試範例：
 | ------------ | -------------- | -------------------------------------------------------- |
 | name         | string         | 新作業名稱（與同課程其他作業重名時回 400）               |
 | markdown     | string         | 新作業說明                                               |
-| start        | string or null | 新開始時間（ISO 8601；後端轉 `_start_dt`）               |
-| end          | string or null | 新結束時間（ISO 8601；後端轉 `_end_dt`）                 |
+| start | int or null | epoch seconds | 新開始時間                                            |
+| end | int or null | epoch seconds | 新結束時間                                           |
 | problem_ids  | array<int>     | 重新指定題目（會先刪除舊綁定，再依序重建 `order_index`） |
 
 成功回應（200）：

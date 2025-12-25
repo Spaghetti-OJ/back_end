@@ -13,6 +13,7 @@ from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from collections import defaultdict
+from .serializers import to_epoch_from_dt
 import datetime
 
 from assignments.models import Assignments, Assignment_problems
@@ -49,6 +50,24 @@ def is_course_member(user, course) -> bool:
     判斷使用者是否為該課程成員（學生 / TA / 老師都算）
     """
     return Course_members.objects.filter(course_id=course, user_id=user).exists()
+def require_course_member_or_staff(request_user, course):
+    """
+    規則：
+      - teacher/TA：放行
+      - 其他：必須是 course member 才放行
+    回傳：
+      - None 代表放行
+      - Response(api_response) 代表拒絕
+    """
+    if is_teacher_or_ta(request_user, course):
+        return None
+    if is_course_member(request_user, course):
+        return None
+    return api_response(
+        data=None,
+        message="permission denied: user is not a member of this course",
+        status_code=status.HTTP_403_FORBIDDEN,
+    )
 
 # --------- 統一回傳格式 ---------
 def api_response(data=None, message="OK", status_code=200):
@@ -116,56 +135,136 @@ class HomeworkDetailView(APIView):
 
     def get(self, request, homework_id: int):
         hw = self._get_hw(homework_id)
-        probs = collect_problem_ids(hw)
-        status_flag = is_teacher_or_ta(request.user, hw.course)
-        data = HomeworkDetailSerializer.from_instance(hw, probs, status_flag, penalty_text="")
-        return Response(data, status=status.HTTP_200_OK)
+        course = hw.course
 
-    @transaction.atomic
-    def put(self, request, homework_id: int):
-        hw = self._get_hw(homework_id)
-        if not is_teacher_or_ta(request.user, hw.course):
-            return Response("user must be the teacher or ta of this course", status=status.HTTP_403_FORBIDDEN)
+        # 權限：至少要是課程成員（學生/TA/老師都算）
+        if not is_course_member(request.user, course) and not is_teacher_or_ta(request.user, course):
+            return api_response(
+                data=None,
+                message="permission denied: user is not a member of this course",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
 
-        ser = HomeworkUpdateSerializer(data=request.data, partial=True)
-        ser.is_valid(raise_exception=True)
+        # 作業底下有哪些題目
+        problem_ids = collect_problem_ids(hw)
 
-        new_name = ser.validated_data.get("name", None)
-        if new_name and Assignments.objects.filter(course=hw.course, title=new_name).exclude(pk=hw.pk).exists():
-            return Response("homework exists in this course", status=status.HTTP_400_BAD_REQUEST)
+        #  全班成員（只限這門課的成員）
+        # 這裡會取出課程成員（包含學生/TA/老師，依Course_members 的資料）
+        members = (
+            Course_members.objects
+            .filter(course_id=course)
+            .select_related("user_id")
+        )
+        users = [m.user_id for m in members]  # user object list（依 Course_members）
 
-        if new_name is not None:
-            hw.title = new_name
-        if "markdown" in ser.validated_data:
-            hw.description = ser.validated_data.get("markdown") or ""
-        if "_start_dt" in ser.validated_data:
-            hw.start_time = ser.validated_data["_start_dt"]
-        if "_end_dt" in ser.validated_data:
-            hw.due_time = ser.validated_data["_end_dt"]
-        hw.save()
+        # 確保主授老師也在 users 清單中（即使他/她沒有出現在 Course_members）
+        teacher_user = getattr(course, "teacher_id", None)
+        if teacher_user is not None and teacher_user not in users:
+            users.append(teacher_user)
+        # 1) studentStatus 骨架：每人每題預設值
+        student_status = {}
+        for u in users:
+            uname = u.username
+            student_status[uname] = {}
+            for pid in problem_ids:
+                student_status[uname][str(pid)] = {
+                    "problemStatus": None,
+                    "score": 0,
+                    "submissionIds": [],
+                }
 
-        if "problem_ids" in ser.validated_data:
-            pids = ser.validated_data.get("problem_ids") or []
-            hw.assignment_problems.all().delete()
-            for idx, pid in enumerate(pids, start=1):
-                Assignment_problems.objects.create(
-                    assignment=hw,
-                    problem_id=pid,
-                    order_index=idx,
-                    weight="1.00",
-                    special_judge=False,
-                )
+        # 2) 查 submissions（只查：本作業題目 + 本課程成員）
+        if problem_ids and users:
+            qs = (
+                Submission.objects
+                .filter(problem_id__in=problem_ids, user__in=users)
+                .select_related("user")
+                .only("id", "problem_id", "user_id", "status", "score", "created_at")
+                .order_by("created_at")  # 讓 submissionIds 按時間排序（可改 -created_at）
+                .iterator(chunk_size=2000)  # 使用 iterator 分批讀取，避免一次載入所有 submissions
+            )
 
-        return Response("Update homework Success", status=status.HTTP_200_OK)
+            # NOJ status code -> text（你要 problemStatus 有值）
+            def status_text(code: str):
+                m = {
+                    "-2": None,
+                    "-1": "pending",
+                    "0": "accepted",
+                    "1": "wrong_answer",
+                    "2": "compilation_error",
+                    "3": "time_limit_exceeded",
+                    "4": "memory_limit_exceeded",
+                    "5": "runtime_error",
+                    "6": "judge_error",
+                    "7": "output_limit_exceeded",
+                }
+                return m.get(str(code), None)
 
-    @transaction.atomic
-    def delete(self, request, homework_id: int):
-        hw = self._get_hw(homework_id)
-        if not is_teacher_or_ta(request.user, hw.course):
-            return Response("user must be the teacher or ta of this course", status=status.HTTP_403_FORBIDDEN)
-        hw.delete()
-        return Response("Delete homework Success", status=status.HTTP_200_OK)
+            # 我們用「最好狀態」概念來填 problemStatus：
+            # - 只要出現 accepted -> 就是 accepted
+            # - 否則取最後一次非 pending 的狀態（若都 pending -> pending）
+            status_rank = {
+                None: 0,
+                "pending": 1,
+                "wrong_answer": 2,
+                "compilation_error": 2,
+                "runtime_error": 2,
+                "time_limit_exceeded": 2,
+                "memory_limit_exceeded": 2,
+                "output_limit_exceeded": 2,
+                "judge_error": 2,
+                "accepted": 3,
+            }
 
+            best_score = {}       # (uname, pid) -> int
+            best_status = {}      # (uname, pid) -> str|None
+
+            for sub in qs:
+                uname = sub.user.username
+                pid = str(sub.problem_id)
+
+                # 保護：如果某人/題目不在骨架（理論上不會）
+                cell = student_status.get(uname, {}).get(pid)
+                if cell is None:
+                    continue
+
+                # submissionIds 全部列出
+                cell["submissionIds"].append(str(sub.id))
+
+                # score：取最高分（最直覺）
+                sc = int(sub.score or 0)
+                prev_sc = best_score.get((uname, pid), 0)
+                if sc > prev_sc:
+                    best_score[(uname, pid)] = sc
+                    cell["score"] = sc
+
+                # problemStatus：用 rank 選「最好」的
+                st = status_text(sub.status)
+                prev_st = best_status.get((uname, pid))
+                if status_rank.get(st, 0) >= status_rank.get(prev_st, 0):
+                    best_status[(uname, pid)] = st
+
+            # 回填 problemStatus
+            for (uname, pid), st in best_status.items():
+                student_status[uname][pid]["problemStatus"] = st
+
+        payload = {
+            "end": to_epoch_from_dt(hw.due_time),
+            "markdown": hw.description or "",
+            "name": hw.title,
+            "penalty": "",                 
+            "problemIds": problem_ids,
+            "start": to_epoch_from_dt(hw.start_time),
+            "studentStatus": student_status,
+        }
+
+        #  api_response 形狀
+        return api_response(
+            data=payload,
+            message="get homework",
+            status_code=status.HTTP_200_OK,
+        )
+    
 # --------- NEW: GET /course/<course_name>/homework ---------
 class CourseHomeworkListView(APIView):
     permission_classes = [IsAuthenticated]
@@ -175,7 +274,9 @@ class CourseHomeworkListView(APIView):
             course = Courses.objects.get(pk=course_id)  # UUID or int 都能吃
         except Courses.DoesNotExist:
             return Response("course not exists", status=status.HTTP_404_NOT_FOUND)
-
+        deny = require_course_member_or_staff(request.user, course)
+        if deny is not None:
+            return deny
         is_staff_like = is_teacher_or_ta(request.user, course)
 
         # 取該課程所有作業
@@ -693,29 +794,20 @@ class HomeworkScoreboardView(APIView):
         )
 
     def check_permission(self, request, assignment: Assignments):
-        """
-        檢查使用者是否為課程成員（student / ta / teacher）
-        """
         user = request.user
         course = assignment.course
 
-        # 1. 如果課程有 teacher 欄位，先檢查是不是教師
-        is_teacher = getattr(course, "teacher_id", None) == user.id
+        # ✅ teacher/TA 放行；否則必須是成員
+        if is_teacher_or_ta(user, course):
+            return None
+        if is_course_member(user, course):
+            return None
 
-        # 2. 再檢查 Course_members（student / ta / teacher）
-        is_member = Course_members.objects.filter(
-            course_id=course,   
-            user_id=user,       
-        ).exists()
-
-        if not (is_teacher or is_member):
-            return api_response(
-                data=None,
-                message="permission denied: user is not a member of this course",
-                status_code=403,
-            )
-
-        return None
+        return api_response(
+            data=None,
+            message="permission denied: user is not a member of this course",
+            status_code=403,
+        )
 
     def get(self, request, homework_id: int):
         # 1. 取出作業
@@ -849,263 +941,78 @@ class HomeworkScoreboardView(APIView):
     
 class HomeworkSubmissionsListView(APIView):
     """
-    GET /homework/{homework_id}/submissions — 取得作業的所有提交
+    GET /homework/{homework_id}/submissions
 
     權限：
-      - 老師 / TA：可以看該作業所有學生的 submissions
-      - 學生：只能看到自己在這份作業的 submissions
+      - 老師 / TA：可看該課程成員的所有 submissions
+      - 學生：只能看自己 submissions
+      - 非課程成員：403
 
-    支援的 query 參數（可選）：
-      - ?user_id=<UUID>  （只有老師 / TA 有效，用來篩某個學生）
-      - ?status=<str>    （依 Submission.status 篩，例如 'accepted' / 'wrong_answer' 等）
+    query（可選）：
+      - ?user_id=<UUID>（只有老師/TA可用）
+      - ?status=<str>   （Submission.status 篩選，例如 '0','1','-1'...）
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request, homework_id: int):
-        # 1) 找作業（Assignments.id）
-        try:
-            hw = (
-                Assignments.objects
-                .select_related("course")
-                .prefetch_related("assignment_problems")
-                .get(pk=homework_id)
-            )
-        except Assignments.DoesNotExist:
-            return api_response(
-                data=None,
-                message="homework not exists",
-                status_code=status.HTTP_404_NOT_FOUND,
-            )
+        # 1) 找 homework + course
+        hw = get_object_or_404(
+            Assignments.objects.select_related("course").prefetch_related("assignment_problems"),
+            pk=homework_id,
+        )
+        course = hw.course
 
-        # 2) 權限檢查：沿用你原本的 is_teacher_or_ta
-        if not is_teacher_or_ta(request.user, hw.course):
+        # 2) 權限判斷
+        staff_like = is_teacher_or_ta(request.user, course)
+        member_like = is_course_member(request.user, course) or staff_like
+
+        if not member_like:
             return api_response(
                 data=None,
-                message="user must be the teacher or ta of this course",
+                message="permission denied: user is not a member of this course",
                 status_code=status.HTTP_403_FORBIDDEN,
             )
 
-        # 3) 抓作業題目列表
-        problems_qs = Assignment_problems.objects.filter(
-            assignment=hw,
-            is_active=True,
-        ).select_related("problem")
-
-        problems = list(problems_qs)
-        problem_ids = [p.problem_id for p in problems]
-
-        # 如果沒有題目 → 回傳空統計
-        if not problems:
-            payload = {
-                "homework_id": hw.id,
-                "course_id": hw.course_id,
-                "title": hw.title,
-                "description": hw.description,
-                "start_time": hw.start_time,
-                "due_time": hw.due_time,
-                "problem_count": 0,
-                "overview": {
-                    "participant_count": 0,
-                    "total_submission_count": 0,
-                    "avg_submissions_per_user": 0.0,
-                    "avg_total_score": 0.0,
-                    "max_total_score": 0,
-                    "solved_all_problem_user_count": 0,
-                    "partially_solved_user_count": 0,
-                    "unsolved_all_problem_user_count": 0,
-                },
-                "problems": [],
-            }
-            serializer = HomeworkStatsSerializer(payload)
-            return api_response(
-                data=serializer.data,
-                message="取得作業統計成功（目前作業沒有題目）",
-                status_code=status.HTTP_200_OK,
-            )
-
-        # 4) 用 UserProblemStats 當統計基礎
-        stats_qs = UserProblemStats.objects.filter(
-            assignment_id=hw.id,
-            problem_id__in=problem_ids,
-        ).select_related("user", "best_submission")
-
-        # 4-1) 整體 overview
-        participant_count = stats_qs.values("user_id").distinct().count()
-        total_submission_count = (
-            stats_qs.aggregate(total=Sum("total_submissions"))["total"] or 0
-        )
-
-        from collections import defaultdict
-        user_summary = defaultdict(
-            lambda: {
-                "total_score": 0,
-                "max_total": 0,
-                "solved_count": 0,
-            }
-        )
-
-        for s in stats_qs:
-            u = s.user_id
-            user_summary[u]["total_score"] += s.best_score
-            user_summary[u]["max_total"] += s.max_possible_score
-            if s.solve_status == "solved":
-                user_summary[u]["solved_count"] += 1
-
-        user_count = len(user_summary)
-        if user_count > 0:
-            avg_total_score = sum(
-                v["total_score"] for v in user_summary.values()
-            ) / user_count
-        else:
-            avg_total_score = 0.0
-
-        total_problems = len(problems)
-        max_total_score = 100 * total_problems  # 先假設每題滿分 100
-
-        solved_all_problem_user_count = 0
-        partially_solved_user_count = 0
-        unsolved_all_problem_user_count = 0
-
-        if total_problems > 0:
-            for v in user_summary.values():
-                if v["solved_count"] == 0:
-                    unsolved_all_problem_user_count += 1
-                elif v["solved_count"] == total_problems:
-                    solved_all_problem_user_count += 1
-                else:
-                    partially_solved_user_count += 1
-
-        avg_submissions_per_user = (
-            float(total_submission_count) / participant_count
-            if participant_count > 0
-            else 0.0
-        )
-
-        overview = {
-            "participant_count": participant_count,
-            "total_submission_count": total_submission_count,
-            "avg_submissions_per_user": avg_submissions_per_user,
-            "avg_total_score": avg_total_score,
-            "max_total_score": max_total_score,
-            "solved_all_problem_user_count": solved_all_problem_user_count,
-            "partially_solved_user_count": partially_solved_user_count,
-            "unsolved_all_problem_user_count": unsolved_all_problem_user_count,
-        }
-
-        # 4-2) 每題的統計
-        stats_by_problem = {p.problem_id: [] for p in problems}
-        for s in stats_qs:
-            stats_by_problem[s.problem_id].append(s)
-
-        problem_stats_list = []
-        for ap in problems:
-            s_list = stats_by_problem.get(ap.problem_id, [])
-
-            participant_ids_p = {s.user_id for s in s_list}
-            participant_count_p = len(participant_ids_p)
-            total_submission_count_p = sum(s.total_submissions for s in s_list)
-
-            if participant_count_p > 0:
-                avg_attempts_per_user = (
-                    float(total_submission_count_p) / participant_count_p
-                )
-            else:
-                avg_attempts_per_user = 0.0
-
-            if s_list:
-                avg_score_p = sum(s.best_score for s in s_list) / len(s_list)
-            else:
-                avg_score_p = 0.0
-
-            ac_user_count = sum(1 for s in s_list if s.solve_status == "solved")
-            partial_user_count = sum(1 for s in s_list if s.solve_status == "partial")
-            unsolved_user_count = sum(1 for s in s_list if s.solve_status == "unsolved")
-
-            first_ac_time = min(
-                (s.first_ac_time for s in s_list if s.first_ac_time is not None),
-                default=None,
-            )
-
-            problem_stats_list.append(
-                {
-                    "problem_id": ap.problem_id,
-                    "order_index": ap.order_index,
-                    "weight": ap.weight,
-                    "title": str(ap.problem),
-                    "participant_count": participant_count_p,
-                    "total_submission_count": total_submission_count_p,
-                    "avg_attempts_per_user": avg_attempts_per_user,
-                    "avg_score": avg_score_p,
-                    "ac_user_count": ac_user_count,
-                    "partial_user_count": partial_user_count,
-                    "unsolved_user_count": unsolved_user_count,
-                    "first_ac_time": first_ac_time,
-                }
-            )
-
-        # 5) 組 payload → serializer 驗證 → api_response
-        payload = {
-            "homework_id": hw.id,
-            "course_id": hw.course_id,
-            "title": hw.title,
-            "description": hw.description,
-            "start_time": hw.start_time,
-            "due_time": hw.due_time,
-            "problem_count": len(problems),
-            "overview": overview,
-            "problems": problem_stats_list,
-        }
-
-        serializer = HomeworkStatsSerializer(payload)
-        return api_response(
-            data=serializer.data,
-            message="取得作業統計成功",
-            status_code=status.HTTP_200_OK,
-        )
-        # 2) 判斷是否為老師 / TA
-        is_staff_like = is_teacher_or_ta(request.user, hw.course)
-
-        # 3) 找出這份作業底下的 problem_id 列表（Assignment_problems.problem_id）
+        # 3) homework 底下有哪些 problem
         problem_ids = collect_problem_ids(hw)
         if not problem_ids:
             return api_response(
-                data={
-                    "homeworkId": hw.id,  # ✅ 保留原本的 homeworkId
-                    "items": [],
-                },
+                data={"homeworkId": hw.id, "items": []},
                 message="get submissions",
                 status_code=status.HTTP_200_OK,
             )
 
-        # 4) 以 problem_id 篩選 submissions（Submissions.problem_id）
+        # 4) 限制「只能看本課程成員」的 submissions（避免撈到外課/外部使用者）
+        course_member_ids = Course_members.objects.filter(
+            course_id=course
+        ).values_list("user_id", flat=True)
+
         qs = (
             Submission.objects
-            .filter(problem_id__in=problem_ids)
+            .filter(problem_id__in=problem_ids, user_id__in=course_member_ids)
             .select_related("user")
             .order_by("-created_at")
         )
 
-        # 5) 權限：學生只能看到自己的 submission
-        if not is_staff_like:
+        # 5) 學生只能看自己的 submissions
+        if not staff_like:
             qs = qs.filter(user=request.user)
 
-        # 6) 額外 query 參數篩選
+        # 6) query 篩選（老師/TA 才能用 user_id 篩別人）
         user_id = request.query_params.get("user_id")
-        if user_id and is_staff_like:
+        if user_id and staff_like:
             qs = qs.filter(user_id=user_id)
 
         status_param = request.query_params.get("status")
         if status_param is not None:
             qs = qs.filter(status=status_param)
 
-        # 7) 序列化輸出
+        # 7) serialize
         ser = HomeworkSubmissionListItemSerializer(qs, many=True)
-        data = {
-            "homeworkId": hw.id,  # ✅ 頂層 key 用 homeworkId
-            "items": ser.data,
-        }
+
         return api_response(
-            data=data,
+            data={"homeworkId": hw.id, "items": ser.data},
             message="get submissions",
             status_code=status.HTTP_200_OK,
         )
+
