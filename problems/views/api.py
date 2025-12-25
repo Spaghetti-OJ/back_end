@@ -50,7 +50,13 @@ import re
 class ProblemsViewSet(viewsets.ModelViewSet):
     queryset = Problems.objects.all().order_by("-created_at")
     serializer_class = ProblemSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+
+    def get_permissions(self):
+        from rest_framework.permissions import AllowAny
+        if self.request.method == 'GET':
+            return [AllowAny()]
+        # POST/PUT/PATCH/DELETE 使用全域預設：登入 + email verified
+        return []
 
     def perform_create(self, serializer):
         serializer.save(creator_id=self.request.user)
@@ -62,12 +68,13 @@ class ProblemsViewSet(viewsets.ModelViewSet):
 class SubtasksViewSet(viewsets.ModelViewSet):
     queryset = Problem_subtasks.objects.all().order_by("problem_id", "subtask_no")
     serializer_class = SubtaskSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
 
     def get_permissions(self):
-        if self.request.method in ("POST", "PUT", "PATCH", "DELETE"):
-            return [IsAuthenticated()]
-        return super().get_permissions()
+        from rest_framework.permissions import AllowAny
+        if self.request.method == 'GET':
+            return [AllowAny()]
+        # POST/PUT/PATCH/DELETE 使用全域預設：登入 + email verified
+        return []
 
     def perform_create(self, serializer):
         problem = serializer.validated_data["problem_id"]
@@ -151,7 +158,6 @@ class ProblemSubtaskDetailView(APIView):
     DELETE /problem/<problemId>/subtasks/<subtaskId> — 刪除子題
     權限：題目擁有者或課程 TA/教師/管理員。
     """
-    permission_classes = [IsAuthenticated]
 
     def _get_subtask_with_permission(self, problem_id: int, subtask_id: int, user):
         subtask = get_object_or_404(Problem_subtasks, pk=subtask_id)
@@ -184,12 +190,13 @@ class ProblemSubtaskDetailView(APIView):
 class TestCasesViewSet(viewsets.ModelViewSet):
     queryset = Test_cases.objects.all().order_by("subtask_id", "idx")
     serializer_class = TestCaseSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
 
     def get_permissions(self):
-        if self.request.method in ("POST", "PUT", "PATCH", "DELETE"):
-            return [IsAuthenticated()]
-        return super().get_permissions()
+        from rest_framework.permissions import AllowAny
+        if self.request.method == 'GET':
+            return [AllowAny()]
+        # POST/PUT/PATCH/DELETE 使用全域預設：登入 + email verified
+        return []
 
     def _ensure_owner(self, subtask):
         problem = subtask.problem_id
@@ -276,7 +283,6 @@ class ProblemTestCaseDetailView(APIView):
     DELETE /problem/<problemId>/test-cases/<caseId> — 刪除測資
     權限：owner / 課程 TA / 教師 / 管理員。
     """
-    permission_classes = [IsAuthenticated]
 
     def _get_case_with_permission(self, problem_id: int, case_id: int, user):
         case = get_object_or_404(Test_cases, pk=case_id)
@@ -307,7 +313,13 @@ class TagListCreateView(APIView):
     """GET /tags/ 取得所有標籤
     POST /tags/ 建立新標籤（需要登入，建議僅教師/管理員；此處暫允任何登入使用者）
     """
-    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        from rest_framework.permissions import AllowAny
+        if self.request.method == 'GET':
+            return [AllowAny()]
+        # POST 使用全域預設：登入 + email verified
+        return []
 
     def get(self, request):
         tags = Tags.objects.all().order_by('name')
@@ -331,7 +343,6 @@ def _has_problem_manage_permission(problem, user) -> bool:
 
 
 class ProblemTestCaseUploadInitiateView(APIView):
-    permission_classes = [IsAuthenticated]
 
     def post(self, request, pk: int):
         problem = get_object_or_404(Problems, pk=pk)
@@ -364,7 +375,6 @@ class ProblemTestCaseUploadInitiateView(APIView):
 
 
 class ProblemTestCaseUploadCompleteView(APIView):
-    permission_classes = [IsAuthenticated]
 
     def post(self, request, pk: int):
         problem = get_object_or_404(Problems, pk=pk)
@@ -428,7 +438,6 @@ class ProblemTestCaseUploadCompleteView(APIView):
 
 
 class ProblemTestCaseDownloadView(APIView):
-    permission_classes = [IsAuthenticated]
 
     def get(self, request, pk: int):
         problem = get_object_or_404(Problems, pk=pk)
@@ -458,7 +467,6 @@ class ProblemTestCaseZipUploadView(APIView):
       - 將 zip 存到 `MEDIA_ROOT/testcases/p<problem.id>/problem.zip`。
       - 回傳保存路徑。
     """
-    permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, pk: int):
@@ -676,7 +684,6 @@ class ProblemTagAddView(APIView):
     權限：題目擁有者 / 課程 TA / 教師 / 管理員
     若標籤已存在於題目，回傳 400。
     """
-    permission_classes = [IsAuthenticated]
 
     def _get_problem_for_modify(self, problem_id, user):
         problem = get_object_or_404(Problems, pk=problem_id)
@@ -723,7 +730,6 @@ class ProblemTagRemoveView(APIView):
     權限：題目擁有者 / 課程 TA / 教師 / 管理員
     若關聯不存在則回傳 404。
     """
-    permission_classes = [IsAuthenticated]
 
     def _get_problem_for_modify(self, problem_id, user):
         problem = get_object_or_404(Problems, pk=problem_id)
@@ -863,7 +869,6 @@ class ProblemDetailView(APIView):
 
     權限：需求書標示需登入；故此處強制 IsAuthenticated。針對非公開題目沿用既有權限檢查。
     """
-    permission_classes = [IsAuthenticated]
 
     LANGUAGE_BIT_MAP = {
         'c': 1,
@@ -1021,7 +1026,6 @@ class ProblemStatsView(APIView):
     權限：需要登入
     回傳：AC 用戶、嘗試用戶、平均分數、標準差、分數分布、狀態統計、top10執行時間/記憶體
     """
-    permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
         # Defensive: some dependent apps/tables may be missing while local migrations are being fixed.
@@ -1094,7 +1098,6 @@ class ProblemHighScoreView(APIView):
     GET /api/problem/<id>/high-score — 取得使用者在該題目的最高分數
     需要登入；回傳該使用者在此題的最高分
     """
-    permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
         try:
@@ -1121,7 +1124,6 @@ class ProblemManageView(APIView):
     """
     # 允許已登入；實際權限在 post() 內判斷：
     # admin/teacher 直接允許；否則需為該 course 的 TA
-    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         serializer = ProblemSerializer(data=request.data, context={"request": request})
@@ -1189,8 +1191,6 @@ class ProblemCloneView(APIView):
       - 200: { message: "Success.", data: { problemId: 新題目ID } }
       - 403: { message: "Problem can not view." }
     """
-
-    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         user = request.user
@@ -1326,7 +1326,6 @@ class ProblemCloneView(APIView):
 
 
 @api_view(['POST', 'DELETE'])
-@permission_classes([IsAuthenticated])
 def problem_like_toggle(request, pk):
     """POST /problem/<id>/like - 按讚
     DELETE /problem/<id>/like - 取消按讚
@@ -1377,7 +1376,6 @@ def problem_likes_count(request, pk):
 
 class UserLikedProblemsView(generics.ListAPIView):
     """GET /user/likes - 列出已按讚的題目（需登入）"""
-    permission_classes = [IsAuthenticated]
     serializer_class = ProblemStudentSerializer
     pagination_class = ProblemPagination
 
@@ -1402,7 +1400,7 @@ class UserLikedProblemsView(generics.ListAPIView):
 # PUT/DELETE /api/problem/manage/<id> — 修改/刪除題目
 # GET /api/problem/manage/<id> — 管理員視角題目詳情
 class ProblemManageDetailView(APIView):
-    permission_classes = [IsTeacherOrAdmin, IsAuthenticated]
+    permission_classes = [IsTeacherOrAdmin]
 
     def get_object_for_modify(self, pk, user):
         """用於 PUT/DELETE，檢查修改/刪除權限。
