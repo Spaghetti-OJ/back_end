@@ -35,15 +35,11 @@ class CourseAnnouncementBaseView(generics.GenericAPIView):
         course_identifier = str(course_id)
         cached_course = getattr(self, "_course_cache", None)
         cached_key = getattr(self, "_course_cache_key", None)
-        #rint("DEBUG course_identifier =", course_identifier)
-        #rint("DEBUG PUBLIC_DISCUSSION_COURSE_ALIAS_ID =", PUBLIC_DISCUSSION_COURSE_ALIAS_ID)
-        #rint("DEBUG PUBLIC_DISCUSSION_COURSE_NAME =", PUBLIC_DISCUSSION_COURSE_NAME)
-
         if cached_course and cached_key == course_identifier:
             return cached_course
 
-        if course_identifier == PUBLIC_DISCUSSION_COURSE_ALIAS_ID:
-            course = Courses.objects.filter(name=PUBLIC_DISCUSSION_COURSE_NAME).first()
+        if course_identifier == PUBLIC_DISCUSSION_COURSE_ALIAS_ID:  
+            course = Courses.objects.filter(pk=PUBLIC_DISCUSSION_COURSE_ALIAS_ID).first()
             if course is None:
                 return None
             self._course_cache = course
@@ -54,6 +50,7 @@ class CourseAnnouncementBaseView(generics.GenericAPIView):
             course = Courses.objects.get(pk=course_id)
         except Courses.DoesNotExist:
             return None
+
         self._course_cache = course
         self._course_cache_key = course_identifier
         return course
