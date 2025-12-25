@@ -22,7 +22,7 @@ User = get_user_model()
 RESET_TOKEN_LIFETIME_MINUTES = 60
 
 def send_password_reset_email(to_email: str, reset_url: str):
-    subject = "重設密碼連結"
+    subject = "重設密碼連結（一小時內有效）"
     message = (
         "您好，\n\n"
         "我們收到您重設密碼的申請。請點擊以下連結重設密碼：\n"
@@ -116,7 +116,7 @@ class ForgotPasswordView(APIView):
         if not email or not profile.email_verified:
             return api_response(
                 data=None,
-                message="此帳號尚未綁定或驗證信箱，無法使用密碼恢復。",
+                message="此帳號尚未綁定或驗證信箱，無法使用密碼恢復，請聯絡管理員。",
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
