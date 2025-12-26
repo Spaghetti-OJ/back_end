@@ -58,6 +58,55 @@ class ProblemsViewSet(viewsets.ModelViewSet):
         # POST/PUT/PATCH/DELETE 使用全域預設：登入 + email verified
         return []
 
+    def get_queryset(self):
+        # 舊前端可能使用 router 路徑：/problem/router/problems
+        # 這裡強化過濾邏輯，與 ProblemListView 保持一致，避免未加入課程者看到 course-only 題目
+        from django.db.models import Q
+        qs = Problems.objects.all().select_related('creator_id', 'course_id').prefetch_related('tags', 'subtasks')
+
+        # 篩選：difficulty
+        difficulty = self.request.query_params.get('difficulty')
+        if difficulty:
+            qs = qs.filter(difficulty=difficulty)
+
+        # 篩選：is_public（僅接受既定值）
+        visibility = self.request.query_params.get('is_public')
+        if visibility in ('public', 'course', 'hidden'):
+            qs = qs.filter(is_public=visibility)
+
+        # 篩選：course_id（帶入時需課程成員或管理員/教師）
+        course_id = self.request.query_params.get('course_id')
+        user = getattr(self.request, 'user', None)
+        if course_id:
+            qs = qs.filter(course_id=course_id)
+            if not getattr(user, 'is_authenticated', False):
+                # 直接擋下，避免洩漏課程題目清單
+                return Problems.objects.none()
+            is_staff_like = bool(getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False) or getattr(user, 'identity', None) in ['admin', 'teacher'])
+            if not is_staff_like:
+                try:
+                    cid = int(course_id)
+                except (TypeError, ValueError):
+                    cid = None
+                from courses.models import Course_members
+                is_member = cid is not None and Course_members.objects.filter(course_id_id=cid, user_id=user).exists()
+                if not is_member:
+                    # 非成員時不回任何資料
+                    return Problems.objects.none()
+
+        # 一般權限過濾
+        if not getattr(user, 'is_authenticated', False):
+            qs = qs.filter(is_public__in=['public', True, 1])
+        elif not (getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False) or getattr(user, 'identity', None) in ['admin', 'teacher']):
+            from courses.models import Course_members
+            user_courses = Course_members.objects.filter(user_id=user).values_list('course_id', flat=True)
+            qs = qs.filter(
+                Q(is_public__in=['public', True, 1]) | Q(creator_id=user) | Q(is_public='course', course_id__in=user_courses)
+            )
+
+        ordering = self.request.query_params.get('ordering', '-created_at')
+        return qs.order_by(ordering)
+
     def perform_create(self, serializer):
         serializer.save(creator_id=self.request.user)
 
@@ -809,10 +858,26 @@ class ProblemListView(APIView):
         if visibility in ('public','course','hidden'):
             queryset = queryset.filter(is_public=visibility)
         
-        # 篩選：course_id
+        # 篩選：course_id（若帶入 course_id，需驗證課程成員或管理員/教師）
         course_id = request.query_params.get('course_id')
         if course_id:
             queryset = queryset.filter(course_id=course_id)
+            user = request.user
+            # 未登入則不允許瀏覽特定課程的題目清單
+            if not user.is_authenticated:
+                return api_response(None, "Authentication required.", status_code=401)
+            # 管理員/教師視為允許（沿用既有規則）
+            is_staff_like = bool(getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False) or getattr(user, 'identity', None) in ['admin', 'teacher'])
+            if not is_staff_like:
+                try:
+                    cid = int(course_id)
+                except (TypeError, ValueError):
+                    cid = None
+                from courses.models import Course_members
+                is_member = cid is not None and Course_members.objects.filter(course_id_id=cid, user_id=user).exists()
+                if not is_member:
+                    # 針對課程頁的題目列表，非成員一律擋下
+                    return api_response(None, "You are not in this course.", status_code=403)
         
     # 權限過濾：未登入或非 owner/課程成員只能看 is_public=public
         user = request.user
@@ -869,6 +934,8 @@ class ProblemDetailView(APIView):
 
     權限：需求書標示需登入；故此處強制 IsAuthenticated。針對非公開題目沿用既有權限檢查。
     """
+
+    permission_classes = []  # 允許匿名，實際權限在內部依題目可見性檢查
 
     LANGUAGE_BIT_MAP = {
         'c': 1,
