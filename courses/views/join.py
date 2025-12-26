@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from rest_framework import generics, permissions, status
+from rest_framework import generics, status
 from rest_framework.exceptions import ErrorDetail
 
 from ..common.responses import api_response
@@ -16,7 +16,6 @@ class CourseJoinView(generics.GenericAPIView):
      - POST /course/<join_code>/join
     """
 
-    permission_classes = [permissions.IsAuthenticated]
     serializer_class = CourseJoinSerializer
 
     def post(self, request, join_code, *args, **kwargs):

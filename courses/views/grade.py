@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from rest_framework import permissions, status
+from rest_framework import status
 from rest_framework.views import APIView
 from ..common.responses import api_response
 
@@ -22,7 +22,6 @@ class CourseGradeView(APIView):
      - POST /course/<course_id>/grade/<student>/ 新增成績（教師/助教/管理員）
     """
 
-    permission_classes = [permissions.IsAuthenticated]
     serializer_class = CourseGradeListSerializer
     create_serializer_class = CourseGradeCreateSerializer
     delete_serializer_class = CourseGradeDeleteSerializer

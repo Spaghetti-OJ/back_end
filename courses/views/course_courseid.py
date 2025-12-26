@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from rest_framework import generics, permissions, status
+from rest_framework import generics, status
 from rest_framework.response import Response
 from ..common.responses import api_response
 
@@ -22,7 +22,6 @@ class CourseDetailView(generics.GenericAPIView):
        - 其他課程需為課程成員或管理員
     """
 
-    permission_classes = [permissions.IsAuthenticated]
     serializer_class = CourseDetailSerializer
 
     def get(self, request, course_id, *args, **kwargs):

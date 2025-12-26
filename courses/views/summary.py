@@ -1,7 +1,6 @@
 from collections import Counter, defaultdict
 
 from django.db.models import Count
-from rest_framework import permissions
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.views import APIView
 from ..common.responses import api_response
@@ -20,7 +19,6 @@ class CourseSummaryView(APIView):
      - GET /course/summary 取得所有課程的統計資訊（僅管理員）
     """
 
-    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         if getattr(request.user, "identity", None) != "admin":
