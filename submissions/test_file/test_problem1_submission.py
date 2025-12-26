@@ -29,9 +29,30 @@ import requests
 PROBLEM_ID = 1
 SANDBOX_API_URL = getattr(settings, 'SANDBOX_API_URL', 'http://34.81.90.111:8000')
 SANDBOX_API_KEY = getattr(settings, 'SANDBOX_API_KEY', '') or os.getenv('SANDBOX_API_KEY', '')
+SANDBOX_TOKEN = getattr(settings, 'SANDBOX_TOKEN', None) or os.getenv('SANDBOX_TOKEN', '')
+BACKEND_BASE_URL = getattr(settings, 'BACKEND_BASE_URL', 'http://localhost:8000')
 
 # 如果 API Key 仍未設定，可在此處手動填入（僅供測試）
 # SANDBOX_API_KEY = 'your-sandbox-api-key-here'
+
+
+def print_env_variables():
+    """顯示讀取到的環境變數"""
+    print("\n" + "=" * 60)
+    print("  環境變數設定")
+    print("=" * 60)
+    print(f"SANDBOX_API_URL     : {SANDBOX_API_URL}")
+    print(f"SANDBOX_API_KEY     : {'[已設定]' if SANDBOX_API_KEY else '[未設定]'} (長度: {len(SANDBOX_API_KEY)})")
+    print(f"SANDBOX_TOKEN       : {'[已設定]' if SANDBOX_TOKEN else '[未設定]'} (長度: {len(SANDBOX_TOKEN) if SANDBOX_TOKEN else 0})")
+    print(f"BACKEND_BASE_URL    : {BACKEND_BASE_URL}")
+    print(f"MEDIA_ROOT          : {settings.MEDIA_ROOT}")
+    
+    # 顯示原始環境變數（未經 settings 處理）
+    print("\n--- 原始環境變數 ---")
+    print(f"os.getenv('SANDBOX_API_URL')    : {os.getenv('SANDBOX_API_URL', '[未設定]')}")
+    print(f"os.getenv('SANDBOX_API_KEY')    : {'[已設定]' if os.getenv('SANDBOX_API_KEY') else '[未設定]'}")
+    print(f"os.getenv('SANDBOX_TOKEN')      : {'[已設定]' if os.getenv('SANDBOX_TOKEN') else '[未設定]'}")
+    print(f"os.getenv('BACKEND_BASE_URL')   : {os.getenv('BACKEND_BASE_URL', '[未設定]')}")
 
 
 def print_section(title):
@@ -357,6 +378,9 @@ def main():
 ║           Problem 1 提交測試 - 診斷 Sandbox 連線                 ║
 ╚══════════════════════════════════════════════════════════════════╝
     """)
+    
+    # 顯示環境變數設定
+    print_env_variables()
     
     # 步驟 1: 檢查題目
     problem = check_problem_exists()
