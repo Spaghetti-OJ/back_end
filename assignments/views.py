@@ -4,7 +4,6 @@ from django.db import transaction
 from django.http import Http404
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 from rest_framework import status, permissions
 from django.db.models import Max,Sum
 from django.db.models import Sum, Count, Max, Q
@@ -83,8 +82,6 @@ def api_response(data=None, message="OK", status_code=200):
 
 # --------- POST /homework/ ---------
 class HomeworkCreateView(APIView):
-    permission_classes = [IsAuthenticated]
-
     @transaction.atomic
     def post(self, request):
         ser = HomeworkCreateSerializer(data=request.data)
@@ -125,8 +122,6 @@ class HomeworkCreateView(APIView):
 
 # --------- GET/PUT/DELETE /homework/<id> ---------
 class HomeworkDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
     def _get_hw(self, pk: int) -> Assignments:
         try:
             return Assignments.objects.select_related("course").get(pk=pk)
@@ -267,8 +262,6 @@ class HomeworkDetailView(APIView):
     
 # --------- NEW: GET /course/<course_name>/homework ---------
 class CourseHomeworkListView(APIView):
-    permission_classes = [IsAuthenticated]
-
     def get(self, request, course_id):
         try:
             course = Courses.objects.get(pk=course_id)  # UUID or int 都能吃
@@ -315,7 +308,6 @@ class AddProblemsToHomeworkView(APIView):
       404: "homework not exists"
       400: 參數錯誤（如題目皆不存在）
     """
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, homework_id: int):
         # 1) 找作業
@@ -424,7 +416,6 @@ class HomeworkDeadlineUpdateAPIView(APIView):
         "end": "2025-12-31T23:59:59Z"  # ISO 8601, 或 null
       }
     """
-    permission_classes = [IsAuthenticated]
 
     def put(self, request, homework_id: int):
         # 1) 先把作業抓出來，連同 course 一次 select_related
@@ -496,8 +487,6 @@ class HomeworkDeadlineView(APIView):
       - 其餘欄位：沿用 Assignments table（id, course_id）
       - 新增欄位：is_overdue, server_time
     """
-
-    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, homework_id: int):
         # 1) 先把作業抓出來，連同 course 一次 select_related
@@ -581,8 +570,6 @@ class HomeworkStatsView(APIView):
       ]
     }
     """
-
-    permission_classes = [IsAuthenticated]
 
     def get(self, request, homework_id: int):
         # 1) 找作業
@@ -786,7 +773,6 @@ class HomeworkScoreboardView(APIView):
     GET /homework/<homework_id>/scoreboard/
     取得某份作業的排行榜
     """
-    permission_classes = [IsAuthenticated]
 
     def get_assignment(self, homework_id: int) -> Assignments:
         return get_object_or_404(
@@ -952,8 +938,6 @@ class HomeworkSubmissionsListView(APIView):
       - ?user_id=<UUID>（只有老師/TA可用）
       - ?status=<str>   （Submission.status 篩選，例如 '0','1','-1'...）
     """
-    permission_classes = [IsAuthenticated]
-
     def get(self, request, homework_id: int):
         # 1) 找 homework + course
         hw = get_object_or_404(
