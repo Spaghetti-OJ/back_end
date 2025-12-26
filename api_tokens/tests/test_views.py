@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 from rest_framework import status
 from api_tokens.models import ApiToken
 from api_tokens.services import generate_api_token
+from user.models import UserProfile
 
 User = get_user_model()
 
@@ -24,6 +25,7 @@ class ApiTokenListViewTest(TestCase):
             email='test@example.com',
             password='testpass123'
         )
+        UserProfile.objects.update_or_create(user=self.user, defaults={'email_verified': True})
         self.url = reverse('api-token-list')
 
     def test_list_tokens_requires_authentication(self):
@@ -57,6 +59,7 @@ class ApiTokenListViewTest(TestCase):
             email='other@example.com',
             password='testpass123'
         )
+        UserProfile.objects.update_or_create(user=other_user, defaults={'email_verified': True})
         
         # 為當前用戶創建 token
         full_token1, token_hash1 = generate_api_token()
@@ -168,6 +171,7 @@ class ApiTokenDetailViewTest(TestCase):
             email='test@example.com',
             password='testpass123'
         )
+        UserProfile.objects.update_or_create(user=self.user, defaults={'email_verified': True})
         full_token, token_hash = generate_api_token()
         self.token = ApiToken.objects.create(
             user=self.user,
@@ -199,6 +203,7 @@ class ApiTokenDetailViewTest(TestCase):
             email='other@example.com',
             password='testpass123'
         )
+        UserProfile.objects.update_or_create(user=other_user, defaults={'email_verified': True})
         
         self.client.force_authenticate(user=other_user)
         response = self.client.get(self.url)
@@ -229,6 +234,7 @@ class ApiTokenDetailViewTest(TestCase):
             email='other@example.com',
             password='testpass123'
         )
+        UserProfile.objects.update_or_create(user=other_user, defaults={'email_verified': True})
         
         self.client.force_authenticate(user=other_user)
         response = self.client.delete(self.url)
@@ -260,6 +266,7 @@ class ApiTokenAuthenticationIntegrationTest(TestCase):
             email='test@example.com',
             password='testpass123'
         )
+        UserProfile.objects.update_or_create(user=self.user, defaults={'email_verified': True})
         self.full_token, token_hash = generate_api_token()
         self.token = ApiToken.objects.create(
             user=self.user,

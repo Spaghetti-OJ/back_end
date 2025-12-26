@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from user.permissions import IsEmailVerified
 from rest_framework.authentication import SessionAuthentication
 
 # API Token 紀錄活動(預留)
@@ -29,7 +30,7 @@ class UserActivityCreateView(APIView):
     記錄使用者活動。
     """
     authentication_classes = [SessionAuthentication] 
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]  # Removed to use global default (IsAuthenticated + IsEmailVerified)
 
     def post(self, request):
         serializer = UserActivitySerializer(data=request.data)
@@ -71,7 +72,7 @@ class UserActivityListView(APIView):
     查看特定使用者的活動記錄 (僅限管理員)。
     """
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser] 
+    permission_classes = [IsAdminUser, IsEmailVerified] 
 
     def get(self, request, user_id):
         activities = UserActivity.objects.filter(user__id=user_id).order_by('-created_at')

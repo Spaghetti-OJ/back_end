@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 from datetime import timedelta
 from submissions.models import Submission
+from user.models import UserProfile
 
 User = get_user_model()
 
@@ -12,6 +13,8 @@ class UserSubmissionActivityViewTest(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='testuser', email='test@example.com', password='password')
         self.other_user = User.objects.create_user(username='otheruser', email='other@example.com', password='password')
+        UserProfile.objects.update_or_create(user=self.user, defaults={'email_verified': True})
+        UserProfile.objects.update_or_create(user=self.other_user, defaults={'email_verified': True})
         
         # URL
         self.url_name = 'user-submission-activity'

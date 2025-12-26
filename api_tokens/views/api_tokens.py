@@ -37,7 +37,7 @@ class ApiTokenListView(APIView):
     """
 
     authentication_classes = [ApiTokenAuthentication, JWTAuthentication, SessionAuthentication]
-    permission_classes = [IsAuthenticated, TokenHasScope]
+    # permission_classes = [IsAuthenticated, TokenHasScope] # Removed to use global default
 
     def get(self, request):
         tokens = ApiToken.objects.filter(user=request.user)
@@ -73,7 +73,7 @@ class ApiTokenDetailView(APIView):
     """
     
     authentication_classes = [ApiTokenAuthentication, JWTAuthentication, SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated] # Removed to use global default
 
     def get_object(self, request, tokenId):
         try:
