@@ -400,6 +400,8 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
     """
     GET /submission/ - 獲取提交列表
     POST /submission/ - 創建新提交
+    POST /submission/ - 還沒實作黑名單
+
     """
     
     permission_classes = [permissions.IsAuthenticated]
@@ -412,6 +414,27 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
     def get_queryset(self):
         queryset = Submission.objects.select_related('user').order_by('-created_at')
         return self.get_viewable_submissions(self.request.user, queryset)
+    
+    def get_client_ip(self, request):
+        """獲取客戶端 IP"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0].strip()
+        else:
+            ip = request.META.get('REMOTE_ADDR', 'unknown')
+        return ip
+    
+    def is_ip_blacklisted(self, ip):
+        """檢查 IP 是否在黑名單中"""
+        # TODO: 實作 IP 黑名單邏輯
+        # 可以從資料庫、Redis 或配置文件讀取黑名單
+        # 範例：
+        # from django.core.cache import cache
+        # blacklist = cache.get('ip_blacklist', set())
+        # return ip in blacklist
+        
+        # 目前暫時返回 False（不阻擋任何 IP）
+        return False
     
     def post(self, request, *args, **kwargs):
         """創建新提交 (NOJ 兼容版本)"""
@@ -447,12 +470,100 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                 # 其他驗證錯誤
                 return api_response(data=None, message="invalid data!", status_code=status.HTTP_400_BAD_REQUEST)
             
-            # TODO: 添加其他 NOJ 檢查
-            # - problem permission denied
-            # - homework hasn't start
-            # - Invalid IP address
-            # - quota check: "you have used all your quotas"
-            # - rate limiting: "Submit too fast!" + waitFor
+            # 額外的安全檢查
+            problem_id = serializer.validated_data['problem_id']
+            user = request.user
+            
+            # 1. Rate Limiting - 提交速率限制（每分鐘最多 10 次）
+            from django.core.cache import cache
+            rate_limit_key = f"submission_rate:{user.id}"
+            current_count = cache.get(rate_limit_key, 0)
+            
+            if current_count >= 10:
+                # 計算等待時間
+                ttl = cache.ttl(rate_limit_key)
+                wait_for = max(ttl, 1) if ttl else 60
+                return api_response(
+                    data={'waitFor': wait_for},
+                    message="Submit too fast!",
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS
+                )
+            
+            # 增加計數
+            cache.set(rate_limit_key, current_count + 1, 60)  # 60 秒過期
+            
+            # 2. IP 黑名單檢查
+            client_ip = self.get_client_ip(request)
+            if self.is_ip_blacklisted(client_ip):
+                logger.warning(f'Blocked submission from blacklisted IP: {client_ip}')
+                return api_response(
+                    data=None,
+                    message="Invalid IP address",
+                    status_code=status.HTTP_403_FORBIDDEN
+                )
+            
+            # 3. Quota 檢查 - 檢查用戶是否還有提交配額
+            from .models import UserProblemQuota
+            try:
+                quota = UserProblemQuota.objects.get(
+                    user=user,
+                    problem_id=problem_id,
+                    assignment_id__isnull=True  # 全域配額
+                )
+                if quota.remaining_attempts == 0:
+                    return api_response(
+                        data=None,
+                        message="you have used all your quotas",
+                        status_code=status.HTTP_403_FORBIDDEN
+                    )
+                # 減少配額（如果不是無限制）
+                if quota.remaining_attempts > 0:
+                    quota.remaining_attempts -= 1
+                    quota.save()
+            except UserProblemQuota.DoesNotExist:
+                # 沒有配額限制，允許提交
+                pass
+            
+            # 4. 題目權限檢查
+            from problems.models import Problems
+            try:
+                problem = Problems.objects.get(id=problem_id)
+                
+                # 檢查題目可見性
+                if problem.is_public == 'hidden':
+                    # Hidden 題目只有創建者和管理員可以提交
+                    if problem.creator_id != user and not user.is_staff:
+                        return api_response(
+                            data=None,
+                            message="problem permission denied",
+                            status_code=status.HTTP_403_FORBIDDEN
+                        )
+                elif problem.is_public == 'course':
+                    # Course 題目需要檢查是否在課程中
+                    from courses.models import Courses
+                    try:
+                        course = problem.course_id
+                        # 檢查用戶是否是課程成員（學生或老師）
+                        if course.teacher_id != user:
+                            # 檢查是否是學生
+                            from courses.models import Course_students
+                            if not Course_students.objects.filter(
+                                course_id=course,
+                                student_id=user
+                            ).exists():
+                                return api_response(
+                                    data=None,
+                                    message="problem permission denied",
+                                    status_code=status.HTTP_403_FORBIDDEN
+                                )
+                    except:
+                        pass
+            except Problems.DoesNotExist:
+                return api_response(
+                    data=None,
+                    message="Unexisted problem id.",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
             
             submission = serializer.save()
             
