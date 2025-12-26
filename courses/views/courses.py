@@ -1,5 +1,5 @@
 from django.db.models import Q
-from rest_framework import generics, permissions, status
+from rest_framework import generics, status
 from rest_framework.exceptions import ErrorDetail
 from ..common.responses import api_response
 
@@ -19,8 +19,6 @@ class CourseListCreateView(generics.GenericAPIView):
      - PUT /course/ 編輯課程（擁有者/管理員）
      - DELETE /course/ 刪除課程（擁有者/管理員）
     """
-
-    permission_classes = [permissions.IsAuthenticated]
 
     def get_serializer_class(self):
         if self.request.method == "GET":

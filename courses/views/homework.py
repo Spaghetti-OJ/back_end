@@ -1,5 +1,5 @@
 from rest_framework.views import APIView
-from rest_framework import status, permissions
+from rest_framework import status
 from ..common.responses import api_response
 
 from courses.models import Courses, Course_members
@@ -12,7 +12,6 @@ def is_teacher_or_ta(user, course) -> bool:
     return Course_members.objects.filter(course_id=course, user_id=user, role=Course_members.Role.TA).exists()
 
 class CourseHomeworkListByIdView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, course_id):
         try:

@@ -16,7 +16,6 @@ PUBLIC_DISCUSSION_COURSE_ALIAS_ID = "1"
 
 class CourseAnnouncementBaseView(generics.GenericAPIView):
     serializer_class = SystemAnnouncementSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
     def get_permissions(self):
         course_id = self.kwargs.get("course_id")
@@ -103,7 +102,6 @@ class AnnouncementCreateView(generics.GenericAPIView):
     """
 
     serializer_class = AnnouncementCreateSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
