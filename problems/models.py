@@ -69,6 +69,17 @@ class Problems(models.Model):
     # --- Solution code for test generation (not editorials) ---
     solution_code = models.TextField(blank=True, null=True, help_text="Optional: reference solution code used for test generation.")
     solution_code_language = models.CharField(max_length=50, blank=True, null=True, help_text="Optional: language of solution code. Required if solution code is provided.")
+    # --- Custom checker settings ---
+    use_custom_checker = models.BooleanField(
+        default=False, 
+        help_text="Whether to use a custom checker instead of the default diff comparison."
+    )
+    checker_name = models.CharField(
+        max_length=100, 
+        default='diff', 
+        blank=True, 
+        help_text="Name of the checker to use. 'diff' is the standard default checker when use_custom_checker is False. Common values: 'diff' (exact text match, default), 'float' (floating-point comparison), 'token' (token-based), 'custom' (problem-specific)."
+    )
     creator_id = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_problems')
     course_id = models.ForeignKey('courses.Courses', on_delete=models.PROTECT, null=False, blank=False, related_name='courses')
     created_at = models.DateTimeField(default=timezone.now)

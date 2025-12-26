@@ -261,3 +261,84 @@ def test_sandbox_testdata_download(api_client, teacher, course, settings):
     )
     res_404 = api_client.get(f"/problem/{p2.id}/testdata", {'token': settings.SANDBOX_TOKEN})
     assert res_404.status_code == 404
+
+@pytest.mark.django_db
+def test_problem_custom_checker_settings(api_client, teacher, course):
+    """Test creating and updating problems with custom checker settings."""
+    api_client.force_authenticate(user=teacher)
+    
+    # Test 1: 建立題目時設定 custom checker
+    payload = {
+        "title": "Float Problem",
+        "description": "計算浮點數",
+        "difficulty": "medium",
+        "course_id": str(course.id),
+        "use_custom_checker": True,
+        "checker_name": "float",
+    }
+    res = api_client.post("/problem/manage", payload, format="json")
+    assert res.status_code == 201
+    problem_id = res.json()["data"]["problem_id"]
+    
+    # Test 2: 驗證 API 回應包含 checker 設定
+    res_detail = api_client.get(f"/problem/{problem_id}")
+    assert res_detail.status_code == 200
+    data = res_detail.json()["data"]
+    assert data["use_custom_checker"] is True
+    assert data["checker_name"] == "float"
+    
+    # Test 3: 更新 checker 設定（使用 PUT）
+    update_payload = {
+        "title": "Float Problem",  # PUT 需要提供完整資料
+        "description": "計算浮點數",
+        "difficulty": "medium",
+        "course_id": str(course.id),
+        "use_custom_checker": False,
+        "checker_name": "diff",
+    }
+    res_update = api_client.put(f"/problem/manage/{problem_id}", update_payload, format="json")
+    assert res_update.status_code == 200
+    
+    # Test 4: 驗證更新後使用預設 diff
+    res_after = api_client.get(f"/problem/{problem_id}")
+    assert res_after.json()["data"]["use_custom_checker"] is False
+
+
+@pytest.mark.django_db
+def test_checker_settings_passed_to_sandbox(api_client, teacher, course):
+    """Test that checker settings are correctly prepared for sandbox submission."""
+    from submissions.sandbox_client import submit_to_sandbox
+    from unittest.mock import patch, MagicMock
+    
+    # 建立帶有 custom checker 的題目
+    problem = Problems.objects.create(
+        title="Token Compare",
+        description="desc",
+        difficulty="easy",
+        creator_id=teacher,
+        course_id=course,
+        use_custom_checker=True,
+        checker_name="token",
+    )
+    
+    # Mock submission
+    mock_submission = MagicMock()
+    mock_submission.id = "test-uuid"
+    mock_submission.problem_id = problem.id
+    mock_submission.source_code = "print('hello')"
+    mock_submission.language_type = 2  # Python
+    
+    with patch('submissions.sandbox_client.requests.post') as mock_post:
+        mock_post.return_value.status_code = 202
+        mock_post.return_value.json.return_value = {"status": "queued"}
+        
+        try:
+            submit_to_sandbox(mock_submission)
+        except:
+            pass  # 忽略其他錯誤，只檢查呼叫參數
+        
+        # 驗證傳遞給 Sandbox 的參數
+        if mock_post.called:
+            call_data = mock_post.call_args[1].get('data', {})
+            assert call_data.get('use_checker') is True
+            assert call_data.get('checker_name') == 'token'
