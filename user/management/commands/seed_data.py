@@ -106,7 +106,7 @@ class Command(BaseCommand):
 
     def seed_minimal(self):
         """Seed with minimal data for quick testing."""
-        admin = self.create_users(admin_only=True)
+        self.create_users(admin_only=True)
         teacher = self.create_teacher()
         students = self.create_students(count=3)
         
@@ -114,14 +114,14 @@ class Command(BaseCommand):
         self.add_course_members(course, students)
         
         tags = self.create_tags()
-        problems = self.create_problems(course, teacher, tags, count=3)
+        self.create_problems(course, teacher, tags, count=3)
         
         self.stdout.write(self.style.SUCCESS('   Minimal data seeded!'))
 
     def seed_full(self):
         """Seed with full demo data."""
         # Create users
-        admin = self.create_admin()
+        self.create_admin()
         teachers = self.create_teachers(count=3)
         tas = self.create_tas(count=5)
         students = self.create_students(count=20)
@@ -696,6 +696,10 @@ public class Main {
                 attempt_number=random.randint(1, 5),
             )
             
+            # Create submission results for each test case
+            if status != '-1':  # Only create results if not pending
+                self.create_submission_results(submission, problem, status)
+            
             # Update problem statistics
             problem.total_submissions += 1
             if status == '0':
@@ -705,6 +709,86 @@ public class Main {
             submissions.append(submission)
         
         return submissions
+
+    def create_submission_results(self, submission, problem, overall_status):
+        """Create submission results for each test case of a problem."""
+        # Get test cases for this problem
+        subtasks = Problem_subtasks.objects.filter(problem_id=problem)
+        test_cases = Test_cases.objects.filter(subtask_id__in=subtasks).order_by('subtask_id', 'idx')
+        
+        if not test_cases.exists():
+            return
+        
+        # Map overall status to result statuses
+        result_status_map = {
+            '0': 'accepted',           # AC
+            '1': 'wrong_answer',       # WA
+            '3': 'time_limit_exceeded',# TLE
+            '4': 'memory_limit_exceeded', # MLE
+            '5': 'runtime_error',      # RE
+        }
+        
+        total_test_cases = test_cases.count()
+        score_per_case = submission.max_score // total_test_cases if total_test_cases > 0 else 0
+        
+        for idx, test_case in enumerate(test_cases, 1):
+            # Determine status for this test case
+            if overall_status == '0':
+                # All test cases passed
+                tc_status = 'accepted'
+                tc_score = score_per_case
+                solve_status = 'solved'
+            elif overall_status == '2':
+                # Compilation error - no results
+                continue
+            else:
+                # Randomly decide if this test case passed or failed
+                if random.random() < 0.5:
+                    tc_status = 'accepted'
+                    tc_score = score_per_case
+                    solve_status = 'solved'
+                else:
+                    tc_status = result_status_map.get(overall_status, 'wrong_answer')
+                    tc_score = 0
+                    solve_status = 'unsolved'
+            
+            SubmissionResult.objects.create(
+                problem_id=problem.id,
+                submission=submission,
+                test_case_id=test_case.id,
+                test_case_index=idx,
+                status=tc_status,
+                execution_time=random.randint(10, 500) if tc_status != 'time_limit_exceeded' else random.randint(1000, 3000),
+                memory_usage=random.randint(256000, 512000) if tc_status == 'memory_limit_exceeded' else random.randint(1000, 30000),
+                score=tc_score,
+                max_score=score_per_case,
+                output_preview=self._generate_output_preview(tc_status),
+                error_message=self._generate_error_message(tc_status),
+                solve_status=solve_status,
+            )
+
+    def _generate_output_preview(self, status):
+        """Generate sample output preview based on status."""
+        if status == 'accepted':
+            return random.choice(['5', 'Hello, World!', '8', 'Yes', '55'])
+        elif status == 'wrong_answer':
+            return random.choice(['4', 'hello world', '7', 'No', '54'])
+        return None
+
+    def _generate_error_message(self, status):
+        """Generate error message based on status."""
+        if status == 'runtime_error':
+            return random.choice([
+                'Segmentation fault (core dumped)',
+                'IndexError: list index out of range',
+                'java.lang.ArrayIndexOutOfBoundsException',
+                'RuntimeError: maximum recursion depth exceeded',
+            ])
+        elif status == 'time_limit_exceeded':
+            return 'Time limit exceeded'
+        elif status == 'memory_limit_exceeded':
+            return 'Memory limit exceeded'
+        return None
 
     def create_drafts(self, student, problems, count=2):
         """Create code drafts for a student."""
