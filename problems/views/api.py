@@ -1008,6 +1008,9 @@ class ProblemDetailView(APIView):
             'fillInTemplate': fill_in_template,
             'submitCount': submit_count,
             'highScore': high_score,
+            # Custom checker settings
+            'use_custom_checker': getattr(problem, 'use_custom_checker', False),
+            'checker_name': getattr(problem, 'checker_name', 'diff'),
         }
 
         return api_response(data, "Problem can view.", status_code=200)
