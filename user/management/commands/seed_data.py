@@ -106,7 +106,7 @@ class Command(BaseCommand):
 
     def seed_minimal(self):
         """Seed with minimal data for quick testing."""
-        admin = self.create_users(admin_only=True)
+        self.create_users(admin_only=True)
         teacher = self.create_teacher()
         students = self.create_students(count=3)
         
@@ -114,14 +114,14 @@ class Command(BaseCommand):
         self.add_course_members(course, students)
         
         tags = self.create_tags()
-        problems = self.create_problems(course, teacher, tags, count=3)
+        self.create_problems(course, teacher, tags, count=3)
         
         self.stdout.write(self.style.SUCCESS('   Minimal data seeded!'))
 
     def seed_full(self):
         """Seed with full demo data."""
         # Create users
-        admin = self.create_admin()
+        self.create_admin()
         teachers = self.create_teachers(count=3)
         tas = self.create_tas(count=5)
         students = self.create_students(count=20)
