@@ -1235,7 +1235,7 @@ curl -X POST "http://127.0.0.1:8000/auth/change-password/" \
 ## POST /auth/forgot-password/
 
 **說明**：
-使用者輸入自己的 `username`。若該帳號已綁定且**已驗證**信箱，系統會寄出「重設密碼」信件到 `User.email`（或你專案綁定信箱欄位），信內包含可用來重設密碼的連結（含一次性 token）。
+使用者需同時輸入正確的 `username` 與 `email`。若兩者皆正確，且該帳號已綁定並**完成信箱驗證**，系統將寄出一封「重設密碼」信件至該帳號的信箱。信件中包含一組一次性且有時效性的重設密碼連結（含 token）。
 
 > 典型使用時機：登入頁面點選「忘記密碼」後呼叫。
 
@@ -1253,32 +1253,48 @@ curl -X POST "http://127.0.0.1:8000/auth/change-password/" \
 
 #### Body（JSON）
 
-| 欄位         | 型別     |  必填 | 說明    |
-| ---------- | ------ | :-: | ----- |
-| `username` | string |  ✅  | 使用者帳號 |
+| 欄位         | 型別     |  必填 | 說明           |
+| ---------- | ------ | :-: | ------------ |
+| `username` | string |  ✅  | 使用者帳號        |
+| `email`    | string |  ✅  | 與帳號綁定的電子郵件信箱 |
 
 #### 範例
 
 ```json
-{ "username": "momomo" }
+{
+  "username": "momomo",
+  "email": "momomo@example.com"
+}
 ```
+
+---
 
 ### Success Response
 
 * **Status**：`200 OK`
 
 ```json
-{ "data": null, "message": "已寄出重設密碼信，請至驗證信箱查收。", "status": "ok" }
+{
+  "data": null,
+  "message": "已寄出重設密碼信，請至驗證信箱查收。",
+  "status": "ok"
+}
 ```
+
+---
 
 ### Error Responses
 
-#### 找不到使用者
+#### 帳號或信箱不正確
 
-* **Status**：`404 Not Found`
+* **Status**：`400 Bad Request`
 
 ```json
-{ "data": null, "message": "找不到此使用者。", "status": "error" }
+{
+  "data": null,
+  "message": "帳號或信箱不正確。",
+  "status": "error"
+}
 ```
 
 #### 尚未綁定或尚未驗證信箱
@@ -1286,24 +1302,35 @@ curl -X POST "http://127.0.0.1:8000/auth/change-password/" \
 * **Status**：`400 Bad Request`
 
 ```json
-{ "data": null, "message": "此帳號尚未綁定或驗證信箱，無法使用密碼恢復。", "status": "error" }
+{
+  "data": null,
+  "message": "此帳號尚未綁定或驗證信箱，無法使用密碼恢復。",
+  "status": "error"
+}
 ```
+
+---
 
 ### Curl 範例
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/auth/forgot-password/" \
   -H "Content-Type: application/json" \
-  -d '{"username":"momomo"}'
+  -d '{
+    "username": "momomo",
+    "email": "momomo@example.com"
+  }'
 ```
+
+---
 
 ### 寄信內容（概念）
 
-信件會包含重設連結，通常類似：
+信件中會包含一組用於重設密碼的連結，格式通常如下：
 
 * `http://localhost:3000/reset-password?token=<TOKEN>`
 
-其中 `<TOKEN>` 為一次性 token，需在有效期限內使用。
+其中 `<TOKEN>` 為一次性且具有效期限的重設密碼 token，僅能使用一次。
 
 ---
 
