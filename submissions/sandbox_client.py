@@ -90,7 +90,7 @@ def submit_to_sandbox(submission):
             'file_hash': submission.code_hash,
             'time_limit': time_limit,
             'memory_limit': memory_limit,
-            'use_checker': problem.use_checker,
+            'use_checker': problem.use_custom_checker,
             'checker_name': problem.checker_name or 'diff',
             'use_static_analysis': False,  # TODO: 從 assignment 設定取得
             'priority': 0,  # 一般優先級

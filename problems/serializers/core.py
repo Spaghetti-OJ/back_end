@@ -87,7 +87,7 @@ class ProblemSerializer(serializers.ModelSerializer):
             # solution code fields for test generation
             "solution_code", "solution_code_language",
             # custom checker settings
-            "use_checker", "checker_name",
+            "use_custom_checker", "checker_name",
             "creator_id", "course_id", "course_name",
             "created_at", "updated_at",
             "tags", "tag_ids",
@@ -195,7 +195,7 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
             "sample_input", "sample_output", "hint",
             "subtask_description", "supported_languages",
             # custom checker settings
-            "use_checker", "checker_name",
+            "use_custom_checker", "checker_name",
             "creator_id", "course_id",
             "created_at", "updated_at",
             "tags", "tag_ids", "subtasks",

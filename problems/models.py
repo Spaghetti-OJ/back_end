@@ -70,8 +70,16 @@ class Problems(models.Model):
     solution_code = models.TextField(blank=True, null=True, help_text="Optional: reference solution code used for test generation.")
     solution_code_language = models.CharField(max_length=50, blank=True, null=True, help_text="Optional: language of solution code. Required if solution code is provided.")
     # --- Custom checker settings ---
-    use_checker = models.BooleanField(default=False, help_text="Whether to use a custom checker for judging.")
-    checker_name = models.CharField(max_length=100, default='diff', blank=True, help_text="Name of the checker to use (e.g., 'diff', 'float', 'custom'). Defaults to 'diff'.")
+    use_custom_checker = models.BooleanField(
+        default=False, 
+        help_text="Whether to use a custom checker instead of the default diff comparison."
+    )
+    checker_name = models.CharField(
+        max_length=100, 
+        default='diff', 
+        blank=True, 
+        help_text="Name of the checker to use. Only applies when use_custom_checker is True. Common values: 'float' (floating-point comparison), 'token' (token-based), 'custom' (problem-specific)."
+    )
     creator_id = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_problems')
     course_id = models.ForeignKey('courses.Courses', on_delete=models.PROTECT, null=False, blank=False, related_name='courses')
     created_at = models.DateTimeField(default=timezone.now)
