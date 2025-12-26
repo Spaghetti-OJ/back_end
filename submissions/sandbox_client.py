@@ -9,6 +9,9 @@ import logging
 from io import BytesIO
 from django.conf import settings
 
+from problems.services.storage import get_problem_testcase_hash
+
+
 logger = logging.getLogger(__name__)
 
 # Sandbox API 設定
@@ -58,6 +61,7 @@ def submit_to_sandbox(submission):
         
     Raises:
         requests.RequestException: API 請求失敗
+        ValueError: 題目測資包不存在
     """
     from problems.models import Problems, Problem_subtasks
     
@@ -71,7 +75,7 @@ def submit_to_sandbox(submission):
             time_limit = subtask.time_limit_ms / 1000.0  # 轉換成秒
         else:
             time_limit = 1.0  # 預設 1 秒
-            
+        
         if subtask and subtask.memory_limit_mb:
             memory_limit = subtask.memory_limit_mb * 1024  # 轉換成 KB
         else:
@@ -80,66 +84,54 @@ def submit_to_sandbox(submission):
         # 3. 轉換語言代碼
         language = convert_language_code(submission.language_type)
         
-        # 4. 組裝 payload（multipart/form-data）
+        # 4. 取得題目包 hash
+        problem_hash = get_problem_testcase_hash(submission.problem_id)
+        if not problem_hash:
+            raise ValueError(f"Problem {submission.problem_id} has no testcase package")
+        
+        # 5. 組裝 payload（multipart/form-data）
         data = {
             'submission_id': str(submission.id),
             'problem_id': str(submission.problem_id),
-            'problem_hash': f'TODO_HASH_{submission.problem_id}',  # TODO: 實現題目包管理後取得真實 hash
-            'mode': 'normal',  # 目前只支援 single file
+            'problem_hash': problem_hash,
+            'mode': 'normal',
             'language': language,
             'file_hash': submission.code_hash,
             'time_limit': time_limit,
             'memory_limit': memory_limit,
-            # 只有在啟用自訂 checker 時才使用設定的 checker_name，否則強制使用 'diff'
-            'use_checker': problem.use_custom_checker,
-            'checker_name': problem.checker_name if problem.use_custom_checker else 'diff',
-            'use_static_analysis': False,  # TODO: 從 assignment 設定取得
-            'priority': 0,  # 一般優先級
-            'callback_url': f'{settings.BACKEND_BASE_URL}/submissions/callback/',  # Sandbox 判題完成後回傳結果的 URL
+            'use_checker': getattr(problem, 'use_custom_checker', False),
+            'checker_name': getattr(problem, 'checker_name', 'diff') or 'diff',
+            'use_static_analysis': False,
+            'priority': 0,
+            'callback_url': f'{settings.BACKEND_BASE_URL}/submissions/callback/',
         }
         
-        # 5. 準備檔案
-        filename = f'solution.{get_file_extension(language)}'
-        file_content = submission.source_code.encode('utf-8')
+        # 6. 準備程式碼檔案
+        source_code = submission.source_code or ''
+        file_extension = get_file_extension(submission.language_type)
         files = {
-            'file': (filename, BytesIO(file_content), 'text/plain')
+            'file': (f'solution{file_extension}', BytesIO(source_code.encode('utf-8')), 'text/plain')
         }
         
-        # 6. 發送請求
-        url = f'{SANDBOX_API_URL}/api/v1/submissions'
-        logger.info(f'Submitting to Sandbox: submission_id={submission.id}, problem_id={submission.problem_id}')
-        
-        # 準備 headers（包含認證）
+        # 7. 發送請求
         headers = {}
-        if SANDBOX_API_KEY:
-            headers['X-API-KEY'] = SANDBOX_API_KEY
+        api_key = getattr(settings, 'SANDBOX_API_KEY', None)
+        if api_key:
+            headers['X-API-KEY'] = api_key
         
         response = requests.post(
-            url,
+            f'{settings.SANDBOX_API_URL}/api/v1/submissions',
             data=data,
             files=files,
             headers=headers,
-            timeout=SANDBOX_TIMEOUT
+            timeout=getattr(settings, 'SANDBOX_TIMEOUT', 30)
         )
         
-        # 7. 檢查回應
         response.raise_for_status()
-        result = response.json()
-        
-        logger.info(f'Sandbox response: {result}')
-        return result
+        return response.json()
         
     except Problems.DoesNotExist:
-        logger.error(f'Problem not found: problem_id={submission.problem_id}')
-        raise ValueError(f'Problem {submission.problem_id} not found')
-        
-    except requests.RequestException as e:
-        logger.error(f'Sandbox API error: {str(e)}')
-        raise
-        
-    except Exception as e:
-        logger.error(f'Unexpected error submitting to sandbox: {str(e)}')
-        raise
+        raise ValueError(f"Problem {submission.problem_id} does not exist")
 
 
 def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_data):

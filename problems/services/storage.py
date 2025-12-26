@@ -30,3 +30,37 @@ def save_testcase_file(problem_id: int, subtask_id: int, idx: int, kind: str, fi
 
 def open_testcase_file(rel_path: str):
     return _storage.open(rel_path, "rb")
+
+def get_problem_testcase_hash(problem_id: int) -> str | None:
+    """
+    取得題目測資包的 SHA256 hash 值
+    
+    Args:
+        problem_id: 題目 ID
+        
+    Returns:
+        str: 測資包的 SHA256 hash，若不存在則回傳 None
+    """
+    rel = os.path.join("testcases", f"p{problem_id}", "problem.zip")
+    if not _storage.exists(rel):
+        return None
+    
+    with _storage.open(rel, 'rb') as f:
+        return _sha256_of_fileobj(f)
+
+
+def get_problem_testcase_path(problem_id: int) -> str | None:
+    """
+    取得題目測資包的路徑
+    
+    Args:
+        problem_id: 題目 ID
+        
+    Returns:
+        str: 測資包路徑，若不存在則回傳 None
+    """
+    rel = os.path.join("testcases", f"p{problem_id}", "problem.zip")
+    if not _storage.exists(rel):
+        return None
+    
+    return _storage.path(rel)
