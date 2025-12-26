@@ -4,25 +4,28 @@ import uuid
 from decimal import Decimal
 
 class Submission(models.Model):
-    # Language choices - enum
+    # Language choices - enum (NOJ 兼容：0=C, 1=C++, 2=Python, 跳過 PDF, 3=Java, 4=JavaScript)
     LANGUAGE_CHOICES = [
-        ('c', 'C'),
-        ('cpp', 'C++'),
-        ('java', 'Java'),
-        ('python', 'Python'),
-        ('javascript', 'JavaScript'),
+        (0, 'C'),
+        (1, 'C++'), 
+        (2, 'Python'),
+        # PDF (原本是 3) 跳過，因為我們不支援手寫題
+        (3, 'Java'),
+        (4, 'JavaScript'),
     ]
     
-    # Status choices - enum
+    # Status choices - enum (使用數字編碼，兼容 NOJ 標準)
     STATUS_CHOICES = [
-        ('pending', 'Pending'), # schema.sql 有一個 judge 重複了，所以我刪掉了
-        ('accepted', 'Accepted'),
-        ('wrong_answer', 'Wrong Answer'),
-        ('time_limit_exceeded', 'Time Limit Exceeded'),
-        ('memory_limit_exceeded', 'Memory Limit Exceeded'),
-        ('runtime_error', 'Runtime Error'),
-        ('compilation_error', 'Compilation Error'),
-        ('system_error', 'System Error'), # 此處我加了一個system_error狀態，原本schema沒有寫，但我覺得需要
+        ('-2', 'Pending before upload'),              # 兼容舊的 NOJ，還沒有 code 的 submission
+        ('-1', 'Pending'),              # 等待判題
+        ('0', 'Accepted'),              # AC - 答案正確
+        ('1', 'Wrong Answer'),          # WA - 答案錯誤
+        ('2', 'Compilation Error'),     # CE - 編譯錯誤
+        ('3', 'Time Limit Exceeded'),   # TLE - 超過時間限制
+        ('4', 'Memory Limit Exceeded'), # MLE - 超過記憶體限制
+        ('5', 'Runtime Error'),         # RE - 執行時錯誤
+        ('6', 'Judge Error'),           # JE - 判題系統錯誤
+        ('7', 'Output Limit Exceeded'), # OLE - 輸出超過限制
     ]
     # Primary key - UUID
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -31,8 +34,7 @@ class Submission(models.Model):
     problem_id = models.IntegerField()  # 直接關聯題目 ID
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)  # 使用 Django 內建 User
     # Core fields
-    language_type = models.CharField(
-        max_length=20,
+    language_type = models.IntegerField(
         choices=LANGUAGE_CHOICES,
         null=False,
         blank=False
@@ -44,7 +46,7 @@ class Submission(models.Model):
     status = models.CharField(
         max_length=30,
         choices=STATUS_CHOICES,
-        default='pending'
+        default='-1'  # 預設為 Pending 狀態
     )
     score = models.IntegerField(default=0)
     max_score = models.IntegerField(default=100)
@@ -58,6 +60,7 @@ class Submission(models.Model):
 
     # Submission metadata
     is_late = models.BooleanField(default=False)
+    is_custom_test = models.BooleanField(default=False)  # 標記是否為自訂測試
     penalty_applied = models.DecimalField(
         max_digits=5, 
         decimal_places=2, 
@@ -89,7 +92,7 @@ class Submission(models.Model):
     @property # 我的判斷是這不能被隨意更新跟刪除
     def is_judged(self):
         """檢查是否已經判題完成"""
-        return self.status not in ['pending', 'judging']
+        return self.status not in ['-2', '-1']  # No Code 和 Pending 表示尚未判題
     
     @property # 我的判斷是這不能被隨意更新跟刪除
     def execution_time_seconds(self):
@@ -327,11 +330,11 @@ class CustomTest(models.Model):
     """自定義測試"""
     
     LANGUAGE_CHOICES = [
-        ('c', 'C'),
-        ('cpp', 'C++'),
-        ('java', 'Java'),
-        ('python', 'Python'),
-        ('javascript', 'JavaScript'),
+        (0, 'C'),
+        (1, 'C++'),
+        (2, 'Python'),
+        (3, 'Java'),
+        (4, 'JavaScript'),
     ]
     
     STATUS_CHOICES = [
@@ -349,7 +352,7 @@ class CustomTest(models.Model):
     problem_id = models.IntegerField()
     
     # Core fields
-    language_type = models.CharField(max_length=15, choices=LANGUAGE_CHOICES)
+    language_type = models.IntegerField(choices=LANGUAGE_CHOICES)
     source_code = models.TextField()
     input_data = models.TextField(null=True, blank=True)
     expected_output = models.TextField(null=True, blank=True)
@@ -375,48 +378,6 @@ class CustomTest(models.Model):
     
     def __str__(self):
         return f"Custom Test {self.id} - {self.user.username} - Problem {self.problem_id}"
-
-
-class CodeDraft(models.Model):
-    """程式碼草稿"""
-    
-    LANGUAGE_CHOICES = [
-        ('c', 'C'),
-        ('cpp', 'C++'),
-        ('java', 'Java'),
-        ('python', 'Python'),
-        ('javascript', 'JavaScript'),
-    ]
-    
-    # Primary key - UUID
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
-    # Foreign keys
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    problem_id = models.IntegerField()
-    assignment_id = models.IntegerField(null=True, blank=True)  # 可選的作業關聯
-    
-    # Core fields
-    language_type = models.CharField(max_length=15, choices=LANGUAGE_CHOICES)
-    source_code = models.TextField()
-    title = models.CharField(max_length=255, null=True, blank=True)
-    auto_saved = models.BooleanField(default=False)
-    
-    # Timestamps
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        indexes = [
-            models.Index(fields=['user', 'problem_id', 'updated_at']),
-            models.Index(fields=['user', 'assignment_id', 'updated_at']),
-        ]
-        ordering = ['-updated_at']
-        db_table = 'code_drafts'
-    
-    def __str__(self):
-        title_info = f" - {self.title}" if self.title else ""
-        return f"Draft {self.id} - {self.user.username} - Problem {self.problem_id}{title_info}"
 
 
 class Editorial(models.Model):

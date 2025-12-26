@@ -1,21 +1,87 @@
 from django.contrib import admin
-from .models import ApiToken, UserActivity, LoginLog
+from .models import LoginLog, UserActivity 
 
-@admin.register(ApiToken)
-class ApiTokenAdmin(admin.ModelAdmin):
-    list_display = ('user', 'name', 'prefix', 'created_at', 'expires_at', 'is_active')
-    list_filter = ('is_active', 'created_at')
-    search_fields = ('user__username', 'name')
-    readonly_fields = ('prefix', 'token_hash')
-
-@admin.register(UserActivity)
-class UserActivityAdmin(admin.ModelAdmin):
-    list_display = ('user', 'activity_type', 'description', 'created_at', 'ip_address', 'success')
-    list_filter = ('activity_type', 'created_at', 'success')
-    search_fields = ('user__username', 'description')
+# ==============================================================================
+# 1. 註冊 LoginLog
+# ==============================================================================
 
 @admin.register(LoginLog)
 class LoginLogAdmin(admin.ModelAdmin):
-    list_display = ('username', 'login_status', 'ip_address', 'created_at')
-    list_filter = ('login_status', 'created_at')
-    search_fields = ('username', 'ip_address')
+    """
+    客製化 LoginLog 在 Django Admin 中的顯示方式。
+    日誌應為唯讀 (Read-Only)。
+    """
+    
+    
+    list_display = (
+        'username', 
+        'login_status', 
+        'ip_address', 
+        'created_at',
+        'user'  
+    )
+    
+    list_filter = (
+        'login_status', 
+        'created_at'   
+    )
+    
+    search_fields = ('username', 'ip_address', 'user__username')
+    
+    date_hierarchy = 'created_at'
+    
+    #read-only
+    readonly_fields = (
+        'user', 'username', 'login_status', 'ip_address', 
+        'user_agent', 'location', 'created_at'
+    )
+
+    # permission
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+        
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+# ==============================================================================
+# 2. 註冊 UserActivity (使用者活動)
+# ==============================================================================
+
+@admin.register(UserActivity)
+class UserActivityAdmin(admin.ModelAdmin):
+    """
+    客製化 UserActivity 在 Django Admin 中的顯示方式。
+    日誌應為唯讀 (Read-Only)。
+    """
+
+    list_display = (
+        'user', 
+        'activity_type', 
+        'success', 
+        'ip_address', 
+        'created_at',
+        'content_object' 
+    )
+    
+    list_filter = (
+        'activity_type',
+        'success',       
+        'created_at'
+    )
+    
+    search_fields = ('user__username', 'description', 'ip_address', 'object_id')
+
+    readonly_fields = (
+        'user', 'activity_type', 'content_type', 'object_id',
+        'description', 'ip_address', 'user_agent', 'metadata',
+        'success', 'created_at'
+    )
+    
+    def has_add_permission(self, request):
+        return False
+    
+    def has_change_permission(self, request, obj=None):
+        return False

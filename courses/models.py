@@ -10,15 +10,19 @@ def _random_code(n: int = 7) -> str:
     return "".join(secrets.choice(ALPHABET) for _ in range(n))
 
 class Courses(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.BigAutoField(primary_key=True)
 
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
 
+    # 注意：資料庫現有欄位名為 teacher_id（非 teacher_id_id），
+    # 因欄位命名為 teacher_id + ForeignKey，Django 會預期欄位 teacher_id_id。
+    # 為了與既有資料庫對齊且不改 schema，明確指定 db_column='teacher_id'。
     teacher_id = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="courses_taught",
+        db_column='teacher_id',
     )
 
     join_code = models.CharField(
@@ -114,6 +118,35 @@ class Course_members(models.Model):
 
     def __str__(self):
         return f"{self.user_id} in {self.course_id} ({self.role})"
+
+
+class CourseGrade(models.Model):
+    course = models.ForeignKey(
+        Courses,
+        on_delete=models.CASCADE,
+        related_name="grades",
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="course_grades",
+    )
+
+    title = models.CharField(max_length=200)
+    content = models.TextField(blank=True)
+    score = models.JSONField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "course_grades"
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["course", "student"]),
+        ]
+
+    def __str__(self):
+        return f"{self.student} - {self.title} ({self.score})"
     
 class Announcements(models.Model):
     id = models.BigAutoField(primary_key=True)

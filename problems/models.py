@@ -35,7 +35,19 @@ class Problems(models.Model):
     title = models.CharField(max_length=200)
     difficulty = models.CharField(max_length=10, choices=Difficulty.choices, default=Difficulty.MEDIUM)
     max_score = models.IntegerField(default=100)
-    is_public = models.BooleanField(default=False)
+    class Visibility(models.TextChoices):
+        HIDDEN = 'hidden', 'Hidden'
+        COURSE = 'course', 'Course only'
+        PUBLIC = 'public', 'Public'
+
+    # Visibility of problem: hidden (only owner/admin), course (course members), public (everyone)
+    # Keep field name `is_public` for backward compatibility, but store tri-state choice value.
+    is_public = models.CharField(
+        max_length=10,
+        choices=Visibility.choices,
+        default=Visibility.HIDDEN,
+        db_index=True,
+    )
     total_submissions = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     accepted_submissions = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     acceptance_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(0), MaxValueValidator(100)])
@@ -54,8 +66,11 @@ class Problems(models.Model):
     hint = models.TextField(blank=True, null=True)
     subtask_description = models.TextField(blank=True, null=True)
     supported_languages = models.JSONField(default=default_supported_langs)
+    # --- Solution code for test generation (not editorials) ---
+    solution_code = models.TextField(blank=True, null=True, help_text="Optional: reference solution code used for test generation.")
+    solution_code_language = models.CharField(max_length=50, blank=True, null=True, help_text="Optional: language of solution code. Required if solution code is provided.")
     creator_id = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_problems')
-    course_id = models.ForeignKey('courses.Courses', on_delete=models.SET_NULL, null=True, blank=True, related_name='courses')
+    course_id = models.ForeignKey('courses.Courses', on_delete=models.PROTECT, null=False, blank=False, related_name='courses')
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     tags = models.ManyToManyField('Tags', through='Problem_tags', related_name='problems')
@@ -64,6 +79,17 @@ class Problems(models.Model):
         indexes = [
             models.Index(fields=['difficulty']),
             models.Index(fields=['is_public']),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                # If solution_code is empty or null, ok; otherwise solution_code_language must be present (not empty, not null)
+                check=(
+                    models.Q(solution_code__isnull=True) |
+                    models.Q(solution_code='') |
+                    (~models.Q(solution_code_language__isnull=True) & ~models.Q(solution_code_language=''))
+                ),
+                name='chk_solution_lang_required_when_code_present'
+            ),
         ]
 
     def __str__(self):
@@ -78,6 +104,13 @@ class Problems(models.Model):
         self.acceptance_rate = round(Decimal(rate), 2)
         if save:
             self.save(update_fields=['acceptance_rate'])
+
+    def clean(self):
+        # Enforce: if solution_code has content, solution_code_language must be provided
+        code = (self.solution_code or '').strip()
+        lang = (self.solution_code_language or '').strip()
+        if code and not lang:
+            raise ValidationError({'solution_code_language': '當提供 solution code 時，必須指定其語言。'})
 
 
 class Problem_subtasks(models.Model):
@@ -204,3 +237,29 @@ class Problem_tags(models.Model):
 
     def __str__(self):
         return f"{self.problem_id.id}-{self.tag_id.id}"
+
+
+class ProblemLike(models.Model):
+    """使用者對題目的按讚紀錄
+
+    類似於 `EditorialLike`，用於追蹤使用者對題目的按讚，以支援“我按過的題目列表”。
+    """
+
+    id = models.AutoField(primary_key=True)
+    problem = models.ForeignKey(Problems, on_delete=models.CASCADE, related_name='likes')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'problem_likes'
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['problem', 'user'], name='unique_problem_user_like')
+        ]
+        indexes = [
+            models.Index(fields=['problem', 'user']),
+            models.Index(fields=['user', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"Like Problem {self.problem.id} by {self.user.username}" 

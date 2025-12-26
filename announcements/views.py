@@ -1,0 +1,220 @@
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
+
+from courses.models import Announcements, Courses, Course_members
+
+from .serializers import (
+    AnnouncementCreateSerializer,
+    AnnouncementDeleteSerializer,
+    AnnouncementUpdateSerializer,
+    SystemAnnouncementSerializer,
+)
+
+PUBLIC_DISCUSSION_COURSE_NAME = "Public"
+PUBLIC_DISCUSSION_COURSE_ALIAS_ID = "1"
+
+
+class CourseAnnouncementBaseView(generics.GenericAPIView):
+    serializer_class = SystemAnnouncementSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        course_id = self.kwargs.get("course_id")
+        # Early return for public discussion course alias
+        if str(course_id) == PUBLIC_DISCUSSION_COURSE_ALIAS_ID:
+            return [permissions.AllowAny()]
+        # If course_id is None, return default permissions without querying DB
+        if course_id is None:
+            return [permission() for permission in self.permission_classes]
+        course = self._get_course(course_id=course_id)
+        if course and course.name == PUBLIC_DISCUSSION_COURSE_NAME:
+            return [permissions.AllowAny()]
+        return [permission() for permission in self.permission_classes]
+
+    def _get_course(self, *, course_id):
+        course_identifier = str(course_id)
+        cached_course = getattr(self, "_course_cache", None)
+        cached_key = getattr(self, "_course_cache_key", None)
+        if cached_course and cached_key == course_identifier:
+            return cached_course
+
+        if course_identifier == PUBLIC_DISCUSSION_COURSE_ALIAS_ID:  
+            course = Courses.objects.filter(pk=PUBLIC_DISCUSSION_COURSE_ALIAS_ID).first()
+            if course is None:
+                return None
+            self._course_cache = course
+            self._course_cache_key = course_identifier
+            return course
+
+        try:
+            course = Courses.objects.get(pk=course_id)
+        except Courses.DoesNotExist:
+            return None
+
+        self._course_cache = course
+        self._course_cache_key = course_identifier
+        return course
+
+
+def _user_has_grade_permission(user, course: Courses) -> bool:
+    if getattr(user, "identity", None) == "admin":
+        return True
+
+    if course.teacher_id == user:
+        return True
+
+    return Course_members.objects.filter(
+        course_id=course,
+        user_id=user,
+        role__in=[Course_members.Role.TEACHER, Course_members.Role.TA],
+    ).exists()
+
+
+class CourseAnnouncementListView(CourseAnnouncementBaseView):
+    """
+    GET /ann/<course_id>/ann - 取得指定課程公告列表。
+    若 <course_id> 為「公開討論區」課程的 ID，則等同於原系統公告列表。
+    """
+
+    def get(self, request, *args, **kwargs):
+        print("kwargs =", kwargs)
+        print("course_id =", repr(kwargs.get("course_id")))
+        course_id = kwargs.get("course_id")
+        course = self._get_course(course_id=course_id)
+        if course is None:
+            return Response(
+                {"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        queryset = (
+            Announcements.objects.select_related("creator_id")
+            .filter(course_id=course)
+            .order_by("-is_pinned", "-updated_at")
+        )
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({"data": serializer.data})
+
+
+class AnnouncementCreateView(generics.GenericAPIView):
+    """
+    POST /ann/ 建立公告
+    PUT /ann/ 更新公告
+    DELETE /ann/ 刪除公告
+    """
+
+    serializer_class = AnnouncementCreateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"message": "Validation error.", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        course = serializer.validated_data["course_id"]
+        if not _user_has_grade_permission(request.user, course):
+            return Response(
+                {"message": "Permission denied."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        announcement = serializer.save(creator_id=request.user)
+        payload = {
+            "data": {
+                "annId": str(announcement.id),
+                "created_at": int(announcement.created_at.timestamp()),
+            }
+        }
+        return Response(payload, status=status.HTTP_201_CREATED)
+
+    def put(self, request, *args, **kwargs):
+        serializer = AnnouncementUpdateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"message": "Validation error.", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ann_id = serializer.validated_data["annId"]
+        try:
+            announcement = Announcements.objects.select_related("course_id").get(
+                pk=ann_id
+            )
+        except Announcements.DoesNotExist:
+            return Response(
+                {"message": "Announcement not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not _user_has_grade_permission(request.user, announcement.course_id):
+            return Response(
+                {"message": "Permission denied."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        announcement.title = serializer.validated_data["title"]
+        announcement.content = serializer.validated_data["content"]
+        if "is_pinned" in serializer.validated_data:
+            announcement.is_pinned = serializer.validated_data["is_pinned"]
+        announcement.save()
+
+        return Response({"message": "Updated"}, status=status.HTTP_200_OK)
+
+    def delete(self, request, *args, **kwargs):
+        serializer = AnnouncementDeleteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"message": "Validation error.", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ann_id = serializer.validated_data["annId"]
+        try:
+            announcement = Announcements.objects.select_related("course_id").get(
+                pk=ann_id
+            )
+        except Announcements.DoesNotExist:
+            return Response(
+                {"message": "Announcement not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not _user_has_grade_permission(request.user, announcement.course_id):
+            return Response(
+                {"message": "Permission denied."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        announcement.delete()
+        return Response({"message": "Deleted"}, status=status.HTTP_200_OK)
+
+
+class CourseAnnouncementRetrieveView(CourseAnnouncementBaseView):
+    """
+    GET /ann/<course_id>/<ann_id> - 取得單一公告內容。
+    """
+
+    def get(self, request, *args, **kwargs):
+        course_id = kwargs.get("course_id")
+        announcement_id = kwargs.get("ann_id")
+
+        course = self._get_course(course_id=course_id)
+        if course is None:
+            return Response(
+                {"message": "Course not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            announcement = Announcements.objects.select_related("creator_id").get(
+                course_id=course, pk=announcement_id
+            )
+        except Announcements.DoesNotExist:
+            return Response(
+                {"message": "Announcement not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = self.get_serializer(announcement)
+        return Response({"data": [serializer.data]})

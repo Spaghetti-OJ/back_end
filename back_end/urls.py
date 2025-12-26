@@ -18,12 +18,52 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
+from submissions import views as submission_views
+
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('course/', include(('courses.urls', 'courses'), namespace='courses')),
+    path('ann/', include(('announcements.urls'), namespace='announcements')),
     path('user/', include('user.urls')), 
-    path('course/', include('courses.urls')),
+    path('problem/', include('problems.urls')),
     path('auth/', include('auths.urls')),
+    path('editorials/', include('submissions.editorial_urls')),
+    path('submission/', include('submissions.urls')),
+    path('ranking/', submission_views.ranking_view, name='ranking'),
+    path('stats/user/<uuid:user_id>/', submission_views.user_stats_view, name='user-stats-root'),
+    path('api-tokens/', include('api_tokens.urls')),
+    path('profile/', include('profiles.urls')),
+    path('homework/',include('assignments.urls')),
+    # Removed schema_viewer (module not installed); rely on drf_spectacular
+    path('editor/', include('editor.urls')),
+    path('api-auth/', include('rest_framework.urls')),
+    path('copycat/', include('copycat.urls')),
+    
+    ## Swagger API Documentation URLs
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path(
+        "api/schema/swagger-ui/",
+        SpectacularSwaggerView.as_view(url_name="schema"),
+        name="swagger-ui",
+    ),
+    path(
+        "api/schema/redoc/",
+        SpectacularRedocView.as_view(url_name="schema"),
+        name="redoc",
+    ),
+    path("search/", include("search.urls")),
+    path(
+        "course/<int:course_id>/homework/",
+        include(("courses.urls.homework", "homework"), namespace="homework"),
+    ),
 ]
 
 if settings.DEBUG:

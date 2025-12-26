@@ -1,0 +1,116 @@
+name: Deploy to dev
+
+on:
+  push:
+    branches:
+      - deploy/add-email-sender
+      - dev
+      - feat/api-SandBox
+
+concurrency: deploy-dev
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    environment: "backend development deploy"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set deploy paths
+        run: |
+          echo "APP_DIR=$HOME/back_end_deploy" >> "$GITHUB_ENV"
+          echo "VENV_PATH=$HOME/back_end_deploy/.venv" >> "$GITHUB_ENV"
+
+      - name: Ensure app directory exists
+        run: |
+          mkdir -p "${APP_DIR}"
+
+      - name: Ensure venv exists
+        run: |
+          if [ ! -f "${VENV_PATH}/bin/activate" ]; then
+            rm -rf "${VENV_PATH}"
+            python3 -m venv "${VENV_PATH}"
+          fi
+
+      - name: Sync repository to target directory
+        run: |
+          rsync -a --delete --exclude '.git' --exclude '.venv' --exclude '.env' ./ "${APP_DIR}/"
+      - name: Install dependencies
+        run: |
+          cd "${APP_DIR}"
+          source "${VENV_PATH}/bin/activate"
+          pip install --upgrade pip
+          pip install -r requirements.txt --no-cache-dir
+
+      - name: Setup environment
+        env:
+          DJANGO_DEBUG: ${{ secrets.DJANGO_DEBUG }}
+          DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+          ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
+          CSRF_TRUSTED_ORIGINS: ${{ secrets.CSRF_TRUSTED_ORIGINS }}
+          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+          EMAIL_HOST_USER: ${{ secrets.EMAIL_HOST_USER }}
+          EMAIL_HOST_PASSWORD: ${{ secrets.EMAIL_HOST_PASSWORD }}
+          EMAIL_USE_TLS: ${{ secrets.EMAIL_USE_TLS }}
+          DEFAULT_FROM_EMAIL: ${{ secrets.DEFAULT_FROM_EMAIL }}
+          FRONTEND_BASE_URL: ${{ secrets.FRONTEND_BASE_URL }}
+        run: |
+          cd "${APP_DIR}"
+          cat > .env <<EOF
+          DJANGO_DEBUG="${DJANGO_DEBUG}"
+          DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY}"
+          ALLOWED_HOSTS="${ALLOWED_HOSTS}"
+          CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS}"
+          EMAIL_HOST="${EMAIL_HOST}"
+          EMAIL_PORT="${EMAIL_PORT}"
+          EMAIL_HOST_USER="${EMAIL_HOST_USER}"
+          EMAIL_HOST_PASSWORD="${EMAIL_HOST_PASSWORD}"
+          EMAIL_USE_TLS="${EMAIL_USE_TLS}"
+          DEFAULT_FROM_EMAIL="${DEFAULT_FROM_EMAIL}"
+          FRONTEND_BASE_URL="${FRONTEND_BASE_URL}"
+          EOF
+          sed -i 's/^[[:space:]]*//' .env
+
+      - name: Reset migrations
+        run: |
+          cd "${APP_DIR}"
+          source "${VENV_PATH}/bin/activate"
+          # 避免在 runtime 備份資料夾上遞迴刪檔
+          rm -rf backups || true
+          bash reset_migrations.sh
+
+      - name: Make and apply migrations
+        run: |
+          cd "${APP_DIR}"
+          source "${VENV_PATH}/bin/activate"
+          python manage.py makemigrations
+          python manage.py migrate --noinput
+
+      # - name: Collect static files
+      #   run: |
+      #     cd "${APP_DIR}"
+      #     source "${VENV_PATH}/bin/activate"
+      #     python manage.py collectstatic --noinput
+
+      - name: Restart application (dev runserver)
+        run: |
+          # 只需要一行指令重啟服務，Systemd 會負責在背景跑
+          sudo systemctl restart django-dev
+      
+      - name: Create superuser
+        env:
+          DJANGO_SUPERUSER_USERNAME: ${{ secrets.DEV_SUPERUSER_USERNAME }}
+          DJANGO_SUPERUSER_PASSWORD: ${{ secrets.DEV_SUPERUSER_PASSWORD }}
+          DJANGO_SUPERUSER_EMAIL: ${{ secrets.DEV_SUPERUSER_EMAIL }}
+        run: |
+          cd "${APP_DIR}"
+          source "${VENV_PATH}/bin/activate"
+          python manage.py createsuperuser --noinput || true

@@ -20,16 +20,20 @@ hypothesis_settings.register_profile("debug", max_examples=10, verbosity=Verbosi
 profile_name = os.getenv("HYPOTHESIS_PROFILE", "dev")
 hypothesis_settings.load_profile(profile_name)
 
-@pytest.fixture(scope='session')
-def django_db_setup():
-    """設定測試資料庫"""
-    settings.DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': ':memory:'
-    }
-
 @pytest.fixture
 def api_client():
     """提供 Django REST framework 測試客戶端"""
     from rest_framework.test import APIClient
     return APIClient()
+
+@pytest.fixture(autouse=True)
+def override_settings(settings):
+    """強制測試使用本地記憶體 Cache，避免依賴 Redis"""
+    settings.CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    }
+    settings.CELERY_BROKER_URL = 'memory://'
+    settings.CELERY_RESULT_BACKEND = 'cache+memory://'
+

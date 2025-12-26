@@ -30,6 +30,11 @@ DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-change-me")
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
 
+CSRF_TRUSTED_ORIGINS = [h.strip() for h in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if h.strip()]
+
+CORS_ALLOWED_ORIGINS = [h.strip() for h in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if h.strip()]
+CORS_ALLOW_CREDENTIALS = True
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -41,24 +46,51 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'user.apps.UserConfig',
     "rest_framework",
+    "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
+    "drf_spectacular",  
     "corsheaders",
-    "courses",
+    "courses.apps.CoursesConfig",
     "auths",
     "problems",
     "assignments",
     "submissions",
+    "api_tokens",
+    "announcements",
+    "profiles",
+    "editor",
+    "copycat",
+    "search",
 ]
 
 AUTH_USER_MODEL = 'user.User'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        'api_tokens.authentication.ApiTokenAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+        "user.permissions.IsEmailVerified",
+    ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "30/min",     # 未登入
+        "user": "120/min",    # 已登入
+        "send_email": "1/min",     # 例如寄驗證信
+        "reset_pw": "5/hour",   # 重設密碼
+    },
 }
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -93,7 +125,40 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        'ATOMIC_REQUESTS': False,
     }
+}
+
+# Redis Cache Configuration
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/1'),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'SOCKET_CONNECT_TIMEOUT': 0.5,  # 500ms 連線超時
+            'SOCKET_TIMEOUT': 0.5,  # 500ms 操作超時
+            'CONNECTION_POOL_KWARGS': {
+                'max_connections': 50,
+                'retry_on_timeout': True,
+            },
+            'REDIS_CLIENT_KWARGS': {
+                'health_check_interval': 30,
+            },
+        },
+        'KEY_PREFIX': 'noj',
+        'TIMEOUT': 300,  # 預設 5 分鐘
+    }
+}
+
+# Cache TTL settings
+CACHE_TIMEOUTS = {
+    'submission_list': 30,        # 30秒
+    'user_stats': 300,            # 5分鐘
+    'submission_detail': 120,     # 2分鐘
+    'high_score': 600,            # 10分鐘
+    'permission': 60,             # 1分鐘
+    'ranking': 300,               # 5分鐘
 }
 
 
@@ -139,3 +204,56 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),     # 你可調整
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),        # 你可調整
+    "ROTATE_REFRESH_TOKENS": True,                      # 旋轉 refresh（建議開）
+    "BLACKLIST_AFTER_ROTATION": True,                   # 舊 refresh 自動黑名單
+    "UPDATE_LAST_LOGIN": True,                          # 可選
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "New NOJ API Documentation",
+    "DESCRIPTION": "目前後端實作的NOJ API文件(會根據程式碼自動生成)",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+
+}
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
+
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER)
+
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://127.0.0.1:5173")
+# MOSS User ID(環境變數讀取)
+MOSS_USER_ID = int(os.getenv('MOSS_USER_ID', 0))
+# ====================
+# Celery Configuration
+# ====================
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://127.0.0.1:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Asia/Taipei'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 分鐘硬限制
+
+# ====================
+# Sandbox Configuration
+# ====================
+SANDBOX_API_URL = os.getenv('SANDBOX_API_URL', 'http://34.81.90.111:8000')
+SANDBOX_TIMEOUT = int(os.getenv('SANDBOX_TIMEOUT', '30'))  # API 請求超時（秒）
+SANDBOX_API_KEY = os.getenv('SANDBOX_API_KEY', '')  # API Key for authentication
+
+# ====================
+# Backend Configuration
+# ====================
+BACKEND_BASE_URL = os.getenv('BACKEND_BASE_URL', 'http://localhost:8000')  # Backend 公開網址（用於 Sandbox callback）
