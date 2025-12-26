@@ -759,7 +759,7 @@ public class Main {
                 test_case_index=idx,
                 status=tc_status,
                 execution_time=random.randint(10, 500) if tc_status != 'time_limit_exceeded' else random.randint(1000, 3000),
-                memory_usage=random.randint(1000, 30000) if tc_status != 'memory_limit_exceeded' else random.randint(256000, 512000),
+                memory_usage=random.randint(256000, 512000) if tc_status == 'memory_limit_exceeded' else random.randint(1000, 30000),
                 score=tc_score,
                 max_score=score_per_case,
                 output_preview=self._generate_output_preview(tc_status),
