@@ -161,7 +161,6 @@ class BasePermissionMixin:
 
 class EditorialListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
     """題解列表和創建 API"""
-    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         problem_id = self.kwargs['problem_id']
@@ -221,7 +220,6 @@ class EditorialListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
 
 class EditorialDetailView(BasePermissionMixin, generics.RetrieveUpdateDestroyAPIView):
     """題解詳情、更新和刪除 API"""
-    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         problem_id = self.kwargs['problem_id']
@@ -274,7 +272,6 @@ class EditorialDetailView(BasePermissionMixin, generics.RetrieveUpdateDestroyAPI
 
 
 @api_view(['POST', 'DELETE'])
-@permission_classes([permissions.IsAuthenticated])
 def editorial_like_toggle(request, problem_id, solution_id):
     """題解按讚/取消按讚"""
     
@@ -404,7 +401,6 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
 
     """
     
-    permission_classes = [permissions.IsAuthenticated]
     
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -621,7 +617,6 @@ class SubmissionRetrieveUpdateView(BasePermissionMixin, generics.RetrieveUpdateA
     PUT /submission/{id} - 上傳程式碼
     """
     
-    permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'id'
     
     def get_serializer_class(self):
@@ -725,7 +720,6 @@ class SubmissionRetrieveUpdateView(BasePermissionMixin, generics.RetrieveUpdateA
             return api_response(data=None, message="can not find the source file", status_code=status.HTTP_400_BAD_REQUEST)
 
 @api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
 def submission_output_view(request, id, task_no, case_no):
     """
     GET /submission/{id}/output/{task_no}/{case_no}
@@ -792,7 +786,6 @@ class SubmissionListView(BasePermissionMixin, generics.ListAPIView):
     """GET /submission/ - 獲取提交列表"""
     
     serializer_class = SubmissionListSerializer
-    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         queryset = Submission.objects.select_related('user').order_by('-created_at')
@@ -830,7 +823,6 @@ class SubmissionDetailView(BasePermissionMixin, generics.RetrieveAPIView):
     """GET /submission/{id} - 獲取提交詳情"""
     
     serializer_class = SubmissionDetailSerializer
-    permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'id'
     
     def get_queryset(self):
@@ -861,7 +853,6 @@ class SubmissionCodeView(BasePermissionMixin, generics.RetrieveAPIView):
     """GET /submission/{id}/code - 獲取提交程式碼"""
     
     serializer_class = SubmissionCodeSerializer
-    permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'id'
     
     def get_queryset(self):
@@ -896,7 +887,6 @@ class SubmissionStdoutView(BasePermissionMixin, generics.RetrieveAPIView):
     """GET /submission/{id}/stdout - 獲取提交標準輸出"""
     
     serializer_class = SubmissionStdoutSerializer
-    permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'id'
     
     def get_queryset(self):
@@ -924,7 +914,6 @@ class SubmissionStdoutView(BasePermissionMixin, generics.RetrieveAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
 def submission_rejudge(request, id):
     """GET /submission/{id}/rejudge - 重新判題"""
     
@@ -981,7 +970,6 @@ def submission_rejudge(request, id):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
 def ranking_view(request):
     """GET /ranking - 獲取排行榜"""
     
@@ -1045,7 +1033,6 @@ def ranking_view(request):
     except Exception as e:
         return api_response(data=None, message="Some error occurred, please contact the admin", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
 def user_stats_view(request, user_id):
     """
     GET /stats/user/{userId} - 使用者統計
@@ -1169,7 +1156,6 @@ except Exception as e:
 
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
 def submit_custom_test(request, problem_id):
     """
     提交自定義測試（不存資料庫）
@@ -1357,7 +1343,6 @@ def submit_custom_test(request, problem_id):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
 def get_custom_test_result(request, custom_test_id):
     """
     查詢自定義測試結果
