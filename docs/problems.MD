@@ -147,12 +147,12 @@ curl "http://127.0.0.1:8000/problem/30/test-case" -H "Authorization: Bearer $TOK
 
 安全驗證：使用 query string `token` 與後端設定的 `SANDBOX_TOKEN` 比對；不需一般登入權限。若 token 缺失或不符 → 401。
 
-#### 1) 取得 MD5 校驗和
+#### 1) 取得 SHA256 校驗和
 - 路徑：`GET /problem/<problem_id>/checksum?token=<sandbox_token>`
 - 成功回應：
 ```json
 {
-  "data": { "checksum": "d41d8cd98f00b204e9800998ecf8427e" },
+  "data": { "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
   "message": "OK",
   "status": "200"
 }

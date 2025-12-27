@@ -633,9 +633,9 @@ class ProblemTestCaseZipUploadView(APIView):
 
 class ProblemTestCaseChecksumView(APIView):
     """GET /problem/<pk>/checksum (Sandbox 專用)
-    目的：沙盒下載測資 zip 後驗證 MD5 完整性。
+    目的：沙盒下載測資 zip 後驗證 SHA256 完整性。
     驗證：使用 query string `token` 與後端設定的 SANDBOX_TOKEN 比對。
-    回傳：{"checksum": "<md5>"}
+    回傳：{"checksum": "<sha256>"}
     錯誤：401 token 無效；404 題目或測資不存在。
     """
     permission_classes = []  # 以 sandbox token 驗證，不用一般身份驗證
@@ -646,15 +646,14 @@ class ProblemTestCaseChecksumView(APIView):
         if not token_expected or token_req != token_expected:
             return api_response(None, "Invalid sandbox token", status_code=401)
         problem = get_object_or_404(Problems, pk=pk)
-        from ..services.storage import _storage
+        from ..services.storage import _storage, _sha256_of_fileobj
         rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
         if not _storage.exists(rel):
             raise Http404("Test case archive not found")
-        # 計算 MD5
-        import hashlib
+        # 計算 SHA256
         with _storage.open(rel, 'rb') as fh:
-            md5 = hashlib.md5(fh.read()).hexdigest()
-        return api_response({"checksum": md5}, "OK", status_code=200)
+            sha256 = _sha256_of_fileobj(fh)
+        return api_response({"checksum": sha256}, "OK", status_code=200)
 
 
 class ProblemTestCaseMetaView(APIView):
