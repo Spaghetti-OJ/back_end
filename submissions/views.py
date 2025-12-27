@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 from problems.models import Problems, Problem_subtasks, Test_cases
 from user.models import User
 import uuid
+from datetime import datetime
 
 # 統一的 API 響應格式
 def api_response(data=None, message="OK", status_code=200):
@@ -416,8 +417,8 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
         status_filter = self.request.query_params.get('status')
         course_id = self.request.query_params.get('course_id')
         language_type = self.request.query_params.get('language_type')
-        before = self.request.query_params.get('before')  # ISO 8601 格式
-        after = self.request.query_params.get('after')    # ISO 8601 格式
+        before = self.request.query_params.get('before')  # Unix 時間戳記 (秒)
+        after = self.request.query_params.get('after')    # Unix 時間戳記 (秒)
         
         # 套用篩選條件
         if problem_id:
@@ -434,7 +435,10 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                 # 透過課程找到所有題目，再篩選提交
                 problem_ids = Problems.objects.filter(course_id=course_id).values_list('id', flat=True)
                 queryset = queryset.filter(problem_id__in=problem_ids)
-            except Exception:
+            except (ValueError, TypeError) as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f'Invalid course_id parameter: {course_id}, error: {e}')
                 queryset = queryset.none()  # 查詢失敗返回空結果
         
         if language_type:
@@ -445,20 +449,18 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
         
         if before:
             try:
-                from datetime import datetime
-                # 將 Unix 時間戳記轉換為 datetime 物件
-                before_dt = datetime.fromtimestamp(int(before))
-                queryset = queryset.filter(timestamp__lt=before_dt)
-            except (ValueError, TypeError):
+                # 將 Unix 時間戳記轉換為 timezone-aware datetime 物件 (UTC)
+                before_dt = datetime.fromtimestamp(int(before), tz=timezone.utc)
+                queryset = queryset.filter(created_at__lt=before_dt)
+            except (ValueError, TypeError, OSError):
                 pass  # 忽略無效的時間格式
         
         if after:
             try:
-                from datetime import datetime
-                # 將 Unix 時間戳記轉換為 datetime 物件
-                after_dt = datetime.fromtimestamp(int(after))
-                queryset = queryset.filter(timestamp__gt=after_dt)
-            except (ValueError, TypeError):
+                # 將 Unix 時間戳記轉換為 timezone-aware datetime 物件 (UTC)
+                after_dt = datetime.fromtimestamp(int(after), tz=timezone.utc)
+                queryset = queryset.filter(created_at__gt=after_dt)
+            except (ValueError, TypeError, OSError):
                 pass  # 忽略無效的時間格式
         
         return self.get_viewable_submissions(self.request.user, queryset)
