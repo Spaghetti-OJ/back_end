@@ -1148,11 +1148,33 @@ class ProblemStatsView(APIView):
             for row in submissions.values('status').annotate(cnt=Count('id')):
                 status_count[row['status']] = row['cnt']
 
-            # 9. top10執行時間
-            top10_runtime = list(submissions.filter(execution_time__gt=0).order_by('execution_time')[:10].values('id', 'user', 'execution_time', 'score', 'status'))
+            # 9. top10執行時間（含使用者 username，方便前端顯示）
+            runtime_qs = submissions.filter(execution_time__gt=0).select_related('user').order_by('execution_time')[:10]
+            top10_runtime = [
+                {
+                    'id': s.id,
+                    'user': s.user_id,
+                    'username': getattr(s.user, 'username', ''),
+                    'execution_time': s.execution_time,
+                    'score': s.score,
+                    'status': s.status,
+                }
+                for s in runtime_qs
+            ]
 
-            # 10. top10記憶體
-            top10_memory = list(submissions.filter(memory_usage__gt=0).order_by('memory_usage')[:10].values('id', 'user', 'memory_usage', 'score', 'status'))
+            # 10. top10記憶體（含使用者 username）
+            memory_qs = submissions.filter(memory_usage__gt=0).select_related('user').order_by('memory_usage')[:10]
+            top10_memory = [
+                {
+                    'id': s.id,
+                    'user': s.user_id,
+                    'username': getattr(s.user, 'username', ''),
+                    'memory_usage': s.memory_usage,
+                    'score': s.score,
+                    'status': s.status,
+                }
+                for s in memory_qs
+            ]
 
             return api_response({
                 "acUserRatio": [ac_user_count, total_students],
