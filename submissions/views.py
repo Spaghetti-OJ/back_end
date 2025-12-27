@@ -537,23 +537,27 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                 elif problem.is_public == 'course':
                     # Course 題目需要檢查是否在課程中
                     from courses.models import Courses
-                    try:
-                        course = problem.course_id
-                        # 檢查用戶是否是課程成員（學生或老師）
-                        if course.teacher_id != user:
-                            # 檢查是否是學生
-                            from courses.models import Course_students
-                            if not Course_students.objects.filter(
-                                course_id=course,
-                                student_id=user
-                            ).exists():
-                                return api_response(
-                                    data=None,
-                                    message="problem permission denied",
-                                    status_code=status.HTTP_403_FORBIDDEN
-                                )
-                    except:
-                        pass
+                    course = problem.course_id
+                    # 若題目未關聯任何課程，則不應允許提交
+                    if course is None:
+                        return api_response(
+                            data=None,
+                            message="problem permission denied",
+                            status_code=status.HTTP_403_FORBIDDEN
+                        )
+                    # 檢查用戶是否是課程成員（老師或學生）
+                    if course.teacher_id != user:
+                        # 檢查是否是學生
+                        from courses.models import Course_students
+                        if not Course_students.objects.filter(
+                            course_id=course,
+                            student_id=user
+                        ).exists():
+                            return api_response(
+                                data=None,
+                                message="problem permission denied",
+                                status_code=status.HTTP_403_FORBIDDEN
+                            )
             except Problems.DoesNotExist:
                 return api_response(
                     data=None,
