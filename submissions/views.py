@@ -501,21 +501,22 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
             # 3. Quota 檢查 - 檢查用戶是否還有提交配額
             from .models import UserProblemQuota
             try:
-                quota = UserProblemQuota.objects.get(
-                    user=user,
-                    problem_id=problem_id,
-                    assignment_id__isnull=True  # 全域配額
-                )
-                if quota.remaining_attempts == 0:
-                    return api_response(
-                        data=None,
-                        message="you have used all your quotas",
-                        status_code=status.HTTP_403_FORBIDDEN
+                with transaction.atomic():
+                    quota = UserProblemQuota.objects.select_for_update().get(
+                        user=user,
+                        problem_id=problem_id,
+                        assignment_id__isnull=True  # 全域配額
                     )
-                # 減少配額（如果不是無限制）
-                if quota.remaining_attempts > 0:
-                    quota.remaining_attempts -= 1
-                    quota.save()
+                    if quota.remaining_attempts == 0:
+                        return api_response(
+                            data=None,
+                            message="you have used all your quotas",
+                            status_code=status.HTTP_403_FORBIDDEN
+                        )
+                    # 減少配額（如果不是無限制）
+                    if quota.remaining_attempts > 0:
+                        quota.remaining_attempts -= 1
+                        quota.save()
             except UserProblemQuota.DoesNotExist:
                 # 沒有配額限制，允許提交
                 pass
