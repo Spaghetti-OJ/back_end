@@ -80,7 +80,7 @@ class CopycatView(APIView):
 
         # 3. 驗證語言
         if language.lower() not in LANG_DB_MAP:
-             return api_response(None, f"不支援的語言: {language}", status_code=400)
+            return api_response(None, f"不支援的語言: {language}", status_code=400)
 
         # 4. 防止重複任務 (使用 get_or_create 防止 Race Condition)
         report, created = CopycatReport.objects.get_or_create(
