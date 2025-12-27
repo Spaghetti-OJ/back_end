@@ -53,7 +53,7 @@ Authorization: Bearer <your_jwt_token>
         "published_at": "2025-11-02T08:00:00Z",
         "author": "550e8400-e29b-41d4-a716-446655440001"
     },
-    "message": "OK",
+    "message": "獲取題解列表成功",
     "status": "ok"
 }
 ```
@@ -93,7 +93,7 @@ Authorization: Bearer <your_jwt_token>
             "author": "550e8400-e29b-41d4-a716-446655440001"
         }
     ],
-    "message": "OK",
+    "message": "獲取題解列表成功",
     "status": "ok"
 }
 ```
@@ -142,7 +142,7 @@ Authorization: Bearer <your_jwt_token>
         "published_at": "2025-11-01T08:00:00Z",
         "author": "550e8400-e29b-41d4-a716-446655440001"
     },
-    "message": "OK",
+    "message": "獲取題解列表成功",
     "status": "ok"
 }
 ```
