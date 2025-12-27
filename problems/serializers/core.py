@@ -74,6 +74,7 @@ class ProblemSerializer(serializers.ModelSerializer):
         allow_null=False
     )
     course_name = serializers.CharField(source="course_id.name", read_only=True)
+    submit_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Problems
@@ -90,7 +91,7 @@ class ProblemSerializer(serializers.ModelSerializer):
             "use_custom_checker", "checker_name",
             "creator_id", "course_id", "course_name",
             "created_at", "updated_at",
-            "tags", "tag_ids",
+            "tags", "tag_ids", "submit_count",
         ]
         read_only_fields = [
             "acceptance_rate", "like_count", "view_count",
