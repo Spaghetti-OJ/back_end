@@ -238,6 +238,18 @@ curl -X PUT http://localhost:8000/submission/a1b2c3d4-5678-90ab-cdef-1234567890a
 **查詢參數**:
 - `page` (可選): 頁碼，預設 1
 - `page_size` (可選): 每頁數量，預設 20
+- `problem_id` (可選): 篩選特定題目的提交
+- `username` (可選): 篩選特定使用者的提交
+- `status` (可選): 篩選判題狀態（如 "0"=AC, "1"=WA, "2"=CE, "3"=TLE, "4"=MLE, "5"=RE）
+- `course_id` (可選): 篩選特定課程的所有提交
+- `language_type` (可選): 篩選程式語言（0=C, 1=C++, 2=Python, 3=Java, 4=JavaScript）
+- `before` (可選): 篩選某時間之前的提交（Unix 時間戳記，單位：秒）
+- `after` (可選): 篩選某時間之後的提交（Unix 時間戳記，單位：秒）
+
+**權限說明**:
+- 學生：只能查看自己的提交
+- 教師/助教：可以查看自己所教課程的所有學生提交
+- 管理員：可以查看所有提交
 
 **成功響應**: HTTP 200
 ```json
@@ -285,8 +297,24 @@ curl -X PUT http://localhost:8000/submission/a1b2c3d4-5678-90ab-cdef-1234567890a
 
 **範例**:
 ```bash
-# 請求
-curl -X GET http://localhost:8000/submission/?page=1&page_size=20 \
+# 基本查詢
+curl -X GET "http://localhost:8000/submission/?page=1&page_size=20" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 查詢課程 3 的所有 AC 提交
+curl -X GET "http://localhost:8000/submission/?course_id=3&status=0" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 查詢特定使用者用 Python 的提交
+curl -X GET "http://localhost:8000/submission/?username=student01&language_type=2" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 查詢特定時間範圍的提交（2025-12-27 00:00:00 到 23:59:59）
+curl -X GET "http://localhost:8000/submission/?after=1735286400&before=1735372799" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 組合多個篩選條件
+curl -X GET "http://localhost:8000/submission/?problem_id=123&status=0&language_type=2" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
