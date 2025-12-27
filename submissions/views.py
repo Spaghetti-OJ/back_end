@@ -161,7 +161,6 @@ class BasePermissionMixin:
 
 class EditorialListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
     """題解列表和創建 API"""
-    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         problem_id = self.kwargs['problem_id']
@@ -221,7 +220,6 @@ class EditorialListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
 
 class EditorialDetailView(BasePermissionMixin, generics.RetrieveUpdateDestroyAPIView):
     """題解詳情、更新和刪除 API"""
-    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         problem_id = self.kwargs['problem_id']
@@ -274,7 +272,6 @@ class EditorialDetailView(BasePermissionMixin, generics.RetrieveUpdateDestroyAPI
 
 
 @api_view(['POST', 'DELETE'])
-@permission_classes([permissions.IsAuthenticated])
 def editorial_like_toggle(request, problem_id, solution_id):
     """題解按讚/取消按讚"""
     
@@ -400,9 +397,10 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
     """
     GET /submission/ - 獲取提交列表
     POST /submission/ - 創建新提交
+    POST /submission/ - 還沒實作黑名單
+
     """
     
-    permission_classes = [permissions.IsAuthenticated]
     
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -412,6 +410,27 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
     def get_queryset(self):
         queryset = Submission.objects.select_related('user').order_by('-created_at')
         return self.get_viewable_submissions(self.request.user, queryset)
+    
+    def get_client_ip(self, request):
+        """獲取客戶端 IP"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0].strip()
+        else:
+            ip = request.META.get('REMOTE_ADDR', 'unknown')
+        return ip
+    
+    def is_ip_blacklisted(self, ip):
+        """檢查 IP 是否在黑名單中"""
+        # TODO: 實作 IP 黑名單邏輯
+        # 可以從資料庫、Redis 或配置文件讀取黑名單
+        # 範例：
+        # from django.core.cache import cache
+        # blacklist = cache.get('ip_blacklist', set())
+        # return ip in blacklist
+        
+        # 目前暫時返回 False（不阻擋任何 IP）
+        return False
     
     def post(self, request, *args, **kwargs):
         """創建新提交 (NOJ 兼容版本)"""
@@ -447,12 +466,112 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                 # 其他驗證錯誤
                 return api_response(data=None, message="invalid data!", status_code=status.HTTP_400_BAD_REQUEST)
             
-            # TODO: 添加其他 NOJ 檢查
-            # - problem permission denied
-            # - homework hasn't start
-            # - Invalid IP address
-            # - quota check: "you have used all your quotas"
-            # - rate limiting: "Submit too fast!" + waitFor
+            # 額外的安全檢查
+            problem_id = serializer.validated_data['problem_id']
+            user = request.user
+            # 確保用戶已通過身份驗證（防止 AnonymousUser 進入此邏輯）
+            if not getattr(user, "is_authenticated", False):
+                return api_response(
+                    data=None,
+                    message="Authentication credentials were not provided.",
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                )
+            
+            # 1. Rate Limiting - 提交速率限制（每分鐘最多 10 次）
+            from django.core.cache import cache
+            rate_limit_key = f"submission_rate:{user.id}"
+            current_count = cache.get(rate_limit_key, 0)
+            
+            if current_count >= 10:
+                # 計算等待時間
+                ttl = cache.ttl(rate_limit_key)
+                wait_for = max(ttl, 1) if ttl else 60
+                return api_response(
+                    data={'waitFor': wait_for},
+                    message="Submit too fast!",
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS
+                )
+            
+            # 增加計數
+            cache.set(rate_limit_key, current_count + 1, 60)  # 60 秒過期
+            
+            # 2. IP 黑名單檢查
+            client_ip = self.get_client_ip(request)
+            if self.is_ip_blacklisted(client_ip):
+                logger.warning(f'Blocked submission from blacklisted IP: {client_ip}')
+                return api_response(
+                    data=None,
+                    message="Invalid IP address",
+                    status_code=status.HTTP_403_FORBIDDEN
+                )
+            
+            # 3. Quota 檢查 - 檢查用戶是否還有提交配額
+            from .models import UserProblemQuota
+            try:
+                with transaction.atomic():
+                    quota = UserProblemQuota.objects.select_for_update().get(
+                        user=user,
+                        problem_id=problem_id,
+                        assignment_id__isnull=True  # 全域配額
+                    )
+                    if quota.remaining_attempts == 0:
+                        return api_response(
+                            data=None,
+                            message="you have used all your quotas",
+                            status_code=status.HTTP_403_FORBIDDEN
+                        )
+                    # 減少配額（如果不是無限制）
+                    if quota.remaining_attempts > 0:
+                        quota.remaining_attempts -= 1
+                        quota.save()
+            except UserProblemQuota.DoesNotExist:
+                # 沒有配額限制，允許提交
+                pass
+            
+            # 4. 題目權限檢查
+            from problems.models import Problems
+            try:
+                problem = Problems.objects.get(id=problem_id)
+                
+                # 檢查題目可見性
+                if problem.is_public == 'hidden':
+                    # Hidden 題目只有創建者和管理員可以提交
+                    if problem.creator_id != user and not user.is_staff:
+                        return api_response(
+                            data=None,
+                            message="problem permission denied",
+                            status_code=status.HTTP_403_FORBIDDEN
+                        )
+                elif problem.is_public == 'course':
+                    # Course 題目需要檢查是否在課程中
+                    from courses.models import Courses
+                    course = problem.course_id
+                    # 若題目未關聯任何課程，則不應允許提交
+                    if course is None:
+                        return api_response(
+                            data=None,
+                            message="problem permission denied",
+                            status_code=status.HTTP_403_FORBIDDEN
+                        )
+                    # 檢查用戶是否是課程成員（老師或學生）
+                    if course.teacher_id != user:
+                        # 檢查是否是學生
+                        from courses.models import Course_students
+                        if not Course_students.objects.filter(
+                            course_id=course,
+                            student_id=user
+                        ).exists():
+                            return api_response(
+                                data=None,
+                                message="problem permission denied",
+                                status_code=status.HTTP_403_FORBIDDEN
+                            )
+            except Problems.DoesNotExist:
+                return api_response(
+                    data=None,
+                    message="Unexisted problem id.",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
             
             submission = serializer.save()
             
@@ -510,7 +629,6 @@ class SubmissionRetrieveUpdateView(BasePermissionMixin, generics.RetrieveUpdateA
     PUT /submission/{id} - 上傳程式碼
     """
     
-    permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'id'
     
     def get_serializer_class(self):
@@ -614,7 +732,6 @@ class SubmissionRetrieveUpdateView(BasePermissionMixin, generics.RetrieveUpdateA
             return api_response(data=None, message="can not find the source file", status_code=status.HTTP_400_BAD_REQUEST)
 
 @api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
 def submission_output_view(request, id, task_no, case_no):
     """
     GET /submission/{id}/output/{task_no}/{case_no}
@@ -681,7 +798,6 @@ class SubmissionListView(BasePermissionMixin, generics.ListAPIView):
     """GET /submission/ - 獲取提交列表"""
     
     serializer_class = SubmissionListSerializer
-    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         queryset = Submission.objects.select_related('user').order_by('-created_at')
@@ -719,7 +835,6 @@ class SubmissionDetailView(BasePermissionMixin, generics.RetrieveAPIView):
     """GET /submission/{id} - 獲取提交詳情"""
     
     serializer_class = SubmissionDetailSerializer
-    permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'id'
     
     def get_queryset(self):
@@ -750,7 +865,6 @@ class SubmissionCodeView(BasePermissionMixin, generics.RetrieveAPIView):
     """GET /submission/{id}/code - 獲取提交程式碼"""
     
     serializer_class = SubmissionCodeSerializer
-    permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'id'
     
     def get_queryset(self):
@@ -785,7 +899,6 @@ class SubmissionStdoutView(BasePermissionMixin, generics.RetrieveAPIView):
     """GET /submission/{id}/stdout - 獲取提交標準輸出"""
     
     serializer_class = SubmissionStdoutSerializer
-    permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'id'
     
     def get_queryset(self):
@@ -813,7 +926,6 @@ class SubmissionStdoutView(BasePermissionMixin, generics.RetrieveAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
 def submission_rejudge(request, id):
     """GET /submission/{id}/rejudge - 重新判題"""
     
@@ -870,7 +982,6 @@ def submission_rejudge(request, id):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
 def ranking_view(request):
     """GET /ranking - 獲取排行榜"""
     
@@ -899,6 +1010,13 @@ def ranking_view(request):
             # 總提交數量
             total_submission_count = user_submissions.count()
             
+            # 獲取用戶頭像
+            try:
+                profile = user.userprofile
+                avatar_url = profile.avatar.url if profile.avatar else None
+            except:
+                avatar_url = None
+            
             # 組裝用戶資料（參照 NOJ 格式）
             user_data = {
                 'user': {
@@ -906,6 +1024,7 @@ def ranking_view(request):
                     'username': user.username,
                     'real_name': getattr(user, 'real_name', user.username),
                     'email': user.email,
+                    'avatar': avatar_url,
                     'is_active': user.is_active,
                     'date_joined': user.date_joined.isoformat() if user.date_joined else None
                 },
@@ -926,7 +1045,6 @@ def ranking_view(request):
     except Exception as e:
         return api_response(data=None, message="Some error occurred, please contact the admin", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
 def user_stats_view(request, user_id):
     """
     GET /stats/user/{userId} - 使用者統計
@@ -1050,7 +1168,6 @@ except Exception as e:
 
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
 def submit_custom_test(request, problem_id):
     """
     提交自定義測試（不存資料庫）
@@ -1238,7 +1355,6 @@ def submit_custom_test(request, problem_id):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
 def get_custom_test_result(request, custom_test_id):
     """
     查詢自定義測試結果
