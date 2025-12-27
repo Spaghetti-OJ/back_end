@@ -78,18 +78,23 @@ class ProblemsViewSet(viewsets.ModelViewSet):
         course_id = self.request.query_params.get('course_id')
         user = getattr(self.request, 'user', None)
         if course_id:
-            qs = qs.filter(course_id=course_id)
+            try:
+                cid = int(course_id)
+            except (TypeError, ValueError):
+                # 無效的 course_id 直接回傳空 QuerySet，避免異常或洩漏資訊
+                return Problems.objects.none()
+            qs = qs.filter(course_id=cid)
             if not getattr(user, 'is_authenticated', False):
                 # 直接擋下，避免洩漏課程題目清單
                 return Problems.objects.none()
-            is_staff_like = bool(getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False) or getattr(user, 'identity', None) in ['admin', 'teacher'])
+            is_staff_like = bool(
+                getattr(user, 'is_staff', False)
+                or getattr(user, 'is_superuser', False)
+                or getattr(user, 'identity', None) in ['admin', 'teacher']
+            )
             if not is_staff_like:
-                try:
-                    cid = int(course_id)
-                except (TypeError, ValueError):
-                    cid = None
                 from courses.models import Course_members
-                is_member = cid is not None and Course_members.objects.filter(course_id_id=cid, user_id=user).exists()
+                is_member = Course_members.objects.filter(course_id_id=cid, user_id=user).exists()
                 if not is_member:
                     # 非成員時不回任何資料
                     return Problems.objects.none()
