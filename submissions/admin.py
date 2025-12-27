@@ -290,23 +290,23 @@ class EditorialLikeInline(admin.TabularInline):
 
 @admin.register(Editorial)
 class EditorialAdmin(admin.ModelAdmin):
-    list_display = ['short_id', 'title', 'problem_id', 'author', 'status', 
-                    'is_official', 'likes_count', 'views_count', 'created_at']
-    list_filter = ['status', 'is_official', 'created_at']
-    search_fields = ['id', 'title', 'problem_id', 'author__username', 'content']
+    list_display = ['short_id', 'problem_id', 'author', 'status', 
+                    'likes_count', 'views_count', 'created_at']
+    list_filter = ['status', 'created_at']
+    search_fields = ['id', 'problem_id', 'author__username', 'content']
     readonly_fields = ['id', 'likes_count', 'views_count', 'created_at', 'updated_at']
     date_hierarchy = 'created_at'
     ordering = ['-created_at']
     
     fieldsets = [
         ('基本資訊', {
-            'fields': ['id', 'problem_id', 'author', 'title']
+            'fields': ['id', 'problem_id', 'author']
         }),
         ('內容', {
-            'fields': ['content', 'difficulty_rating'],
+            'fields': ['content'],
         }),
         ('狀態與設定', {
-            'fields': ['status', 'is_official', 'published_at']
+            'fields': ['status', 'published_at']
         }),
         ('統計', {
             'fields': ['likes_count', 'views_count'],
