@@ -32,6 +32,78 @@ class TestCaseStudentSerializer(serializers.ModelSerializer):
             "status",
         ]
 
+class ProblemManageSerializer(serializers.ModelSerializer):
+    """題目管理用的 Serializer（建立/更新）"""
+    
+    tags = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        write_only=True,
+        help_text="標籤 ID 列表"
+    )
+    
+    static_analysis_rules = serializers.ListField(
+        child=serializers.ChoiceField(choices=[
+            'forbid-loops',
+            'forbid-arrays', 
+            'forbid-stl',
+            'forbid-functions'
+        ]),
+        required=False,
+        default=list,
+        help_text="靜態分析規則列表。有效值: 'forbid-loops', 'forbid-arrays', 'forbid-stl', 'forbid-functions'"
+    )
+    
+    forbidden_functions = serializers.ListField(
+        child=serializers.CharField(max_length=100),
+        required=False,
+        default=list,
+        help_text="禁止使用的函數名稱列表。當 static_analysis_rules 包含 'forbid-functions' 時必填"
+    )
+
+    class Meta:
+        model = Problems
+        fields = [
+            'id', 'title', 'description', 'difficulty', 'is_public',
+            'max_score', 'total_quota',
+            'input_description', 'output_description',
+            'sample_input', 'sample_output',
+            'hint', 'subtask_description',
+            'supported_languages',
+            'solution_code', 'solution_code_language',
+            'use_custom_checker', 'checker_name',
+            'static_analysis_rules', 'forbidden_functions',
+            'course_id', 'tags',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        """驗證靜態分析規則和禁止函數的一致性"""
+        rules = attrs.get('static_analysis_rules', [])
+        forbidden_funcs = attrs.get('forbidden_functions', [])
+        
+        # 如果是更新操作，需要考慮現有值
+        if self.instance:
+            if 'static_analysis_rules' not in attrs:
+                rules = self.instance.static_analysis_rules or []
+            if 'forbidden_functions' not in attrs:
+                forbidden_funcs = self.instance.forbidden_functions or []
+        
+        # 驗證：當選擇 forbid-functions 時，必須提供至少一個禁止函數
+        if 'forbid-functions' in rules:
+            if not forbidden_funcs:
+                raise serializers.ValidationError({
+                    'forbidden_functions': '當啟用 forbid-functions 規則時，必須至少指定一個禁止使用的函數。'
+                })
+            # 驗證每個函數名稱
+            for func in forbidden_funcs:
+                if not func or not func.strip():
+                    raise serializers.ValidationError({
+                        'forbidden_functions': '函數名稱不能為空字串。'
+                    })
+        
+        return attrs
 
 class SubtaskSerializer(serializers.ModelSerializer):
     """完整 subtask 資訊（管理員用）"""
@@ -74,6 +146,26 @@ class ProblemSerializer(serializers.ModelSerializer):
         allow_null=False
     )
     course_name = serializers.CharField(source="course_id.name", read_only=True)
+    
+    # 靜態分析設定
+    static_analysis_rules = serializers.ListField(
+        child=serializers.ChoiceField(choices=[
+            'forbid-loops',
+            'forbid-arrays', 
+            'forbid-stl',
+            'forbid-functions'
+        ]),
+        required=False,
+        default=list,
+        help_text="靜態分析規則列表。有效值: 'forbid-loops', 'forbid-arrays', 'forbid-stl', 'forbid-functions'"
+    )
+    
+    forbidden_functions = serializers.ListField(
+        child=serializers.CharField(max_length=100),
+        required=False,
+        default=list,
+        help_text="禁止使用的函數名稱列表。當 static_analysis_rules 包含 'forbid-functions' 時必填"
+    )
 
     class Meta:
         model = Problems
@@ -88,6 +180,8 @@ class ProblemSerializer(serializers.ModelSerializer):
             "solution_code", "solution_code_language",
             # custom checker settings
             "use_custom_checker", "checker_name",
+            # static analysis settings
+            "static_analysis_rules", "forbidden_functions",
             "creator_id", "course_id", "course_name",
             "created_at", "updated_at",
             "tags", "tag_ids",
@@ -97,6 +191,33 @@ class ProblemSerializer(serializers.ModelSerializer):
             "total_submissions", "accepted_submissions",
             "creator_id", "created_at", "updated_at",
         ]
+
+    def validate(self, attrs):
+        """驗證靜態分析規則和禁止函數的一致性"""
+        rules = attrs.get('static_analysis_rules', [])
+        forbidden_funcs = attrs.get('forbidden_functions', [])
+        
+        # 如果是更新操作，需要考慮現有值
+        if self.instance:
+            if 'static_analysis_rules' not in attrs:
+                rules = self.instance.static_analysis_rules or []
+            if 'forbidden_functions' not in attrs:
+                forbidden_funcs = self.instance.forbidden_functions or []
+        
+        # 驗證：當選擇 forbid-functions 時，必須提供至少一個禁止函數
+        if 'forbid-functions' in rules:
+            if not forbidden_funcs:
+                raise serializers.ValidationError({
+                    'forbidden_functions': '當啟用 forbid-functions 規則時，必須至少指定一個禁止使用的函數。'
+                })
+            # 驗證每個函數名稱
+            for func in forbidden_funcs:
+                if not func or not func.strip():
+                    raise serializers.ValidationError({
+                        'forbidden_functions': '函數名稱不能為空字串。'
+                    })
+        
+        return attrs
 
     def create(self, validated_data):
         # Extract tag_ids (write-only field)
@@ -184,6 +305,10 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
         child=serializers.IntegerField(min_value=1), write_only=True, required=False
     )
     subtasks = SubtaskSerializer(many=True, read_only=True)
+    
+    # 靜態分析設定（唯讀，管理員視角顯示用）
+    static_analysis_config = serializers.SerializerMethodField()
+    use_static_analysis = serializers.SerializerMethodField()
 
     class Meta:
         model = Problems
@@ -196,6 +321,9 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
             "subtask_description", "supported_languages",
             # custom checker settings
             "use_custom_checker", "checker_name",
+            # static analysis settings
+            "static_analysis_rules", "forbidden_functions",
+            "static_analysis_config", "use_static_analysis",
             "creator_id", "course_id",
             "created_at", "updated_at",
             "tags", "tag_ids", "subtasks",
@@ -205,6 +333,14 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
             "total_submissions", "accepted_submissions",
             "creator_id", "created_at", "updated_at",
         ]
+
+    def get_static_analysis_config(self, obj):
+        """取得靜態分析配置（供前端顯示）"""
+        return obj.get_static_analysis_config()
+
+    def get_use_static_analysis(self, obj):
+        """是否啟用靜態分析"""
+        return obj.use_static_analysis
 
 
 class ProblemStudentSerializer(serializers.ModelSerializer):
@@ -220,6 +356,9 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
     submit_count = serializers.IntegerField(read_only=True, default=0)
     high_score = serializers.IntegerField(read_only=True, default=0)
     is_liked_by_user = serializers.SerializerMethodField()
+    
+    # 靜態分析設定（學生只需知道是否啟用）
+    use_static_analysis = serializers.SerializerMethodField()
 
     class Meta:
         model = Problems
@@ -232,6 +371,8 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
             "subtask_description", "supported_languages",
             # custom checker settings (read-only for students)
             "use_custom_checker", "checker_name",
+            # static analysis (read-only for students)
+            "static_analysis_rules", "use_static_analysis",
             "course_id",
             "created_at",
             "tags", "tag_ids", "subtasks",
@@ -240,8 +381,13 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "acceptance_rate", "total_submissions", "accepted_submissions",
             "use_custom_checker", "checker_name",
+            "static_analysis_rules",
             "created_at",
         ]
+
+    def get_use_static_analysis(self, obj):
+        """是否啟用靜態分析"""
+        return obj.use_static_analysis
 
     def get_is_liked_by_user(self, obj):
         request = self.context.get('request')
