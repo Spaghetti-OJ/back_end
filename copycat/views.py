@@ -69,20 +69,20 @@ class CopycatView(APIView):
         except (ValueError, TypeError):
             return api_response(None, "problem_id 必須是整數", status_code=400)
 
-        # 2. 驗證題目是否存在
-        if not Problems.objects.filter(id=problem_id).exists():
-            return api_response(None, f"題目 ID {problem_id} 不存在", status_code=404)
-
-        # 3. 權限檢查：必須是該題所屬課程的老師或助教
+        # 2. 權限檢查：必須是該題所屬課程的老師或助教
+        #    (此方法內部會檢查題目是否存在，避免重複查詢)
         has_permission, error_msg = self._has_problem_edit_permission(request.user, problem_id)
         if not has_permission:
+            # 根據錯誤訊息決定回傳的 status code
+            if "不存在" in error_msg:
+                return api_response(None, error_msg, status_code=404)
             return api_response(None, error_msg, status_code=403)
 
-        # 4. 驗證語言
+        # 3. 驗證語言
         if language.lower() not in LANG_DB_MAP:
              return api_response(None, f"不支援的語言: {language}", status_code=400)
 
-        # 5. 防止重複任務 (使用 get_or_create 防止 Race Condition)
+        # 4. 防止重複任務 (使用 get_or_create 防止 Race Condition)
         report, created = CopycatReport.objects.get_or_create(
             problem_id=problem_id,
             status='pending',
@@ -96,7 +96,7 @@ class CopycatView(APIView):
                 status_code=429
             )
 
-        # 6. 啟動背景執行緒
+        # 5. 啟動背景執行緒
         thread = threading.Thread(
             target=run_moss_check,
             args=(report.id, problem_id, language)
@@ -127,6 +127,8 @@ class CopycatView(APIView):
         # 權限檢查：必須是該題所屬課程的老師或助教
         has_permission, error_msg = self._has_problem_edit_permission(request.user, problem_id)
         if not has_permission:
+            if "不存在" in error_msg:
+                return api_response(None, error_msg, status_code=404)
             return api_response(None, error_msg, status_code=403)
 
         # 只抓最新一筆
