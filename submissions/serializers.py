@@ -265,15 +265,6 @@ class CustomTestSerializer(serializers.ModelSerializer):
 
 
 class EditorialCreateSerializer(serializers.ModelSerializer):
-    title = serializers.CharField(
-        max_length=255,
-        min_length=1,
-        error_messages={
-            'max_length': '標題長度不能超過 255 字元',
-            'min_length': '標題不能為空',
-        }
-    )
-    
     content = serializers.CharField(
         max_length=10000,
         min_length=1,
@@ -286,14 +277,8 @@ class EditorialCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Editorial
-        fields = ['id', 'title', 'content', 'difficulty_rating', 'is_official']
+        fields = ['id', 'content']
         read_only_fields = ['id']
-    
-    def validate_title(self, value):
-        """標題驗證"""
-        if not value.strip():
-            raise serializers.ValidationError('標題不能只包含空白字元')
-        return value.strip()  # 統一回傳 stripped 版本
 
     def validate_content(self, value):
         """內容驗證"""
@@ -332,7 +317,6 @@ class EditorialSerializer(serializers.ModelSerializer):
 
 class EditorialLikeSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
-    editorial_title = serializers.CharField(source='editorial.title', read_only=True)
     
     class Meta:
         model = EditorialLike

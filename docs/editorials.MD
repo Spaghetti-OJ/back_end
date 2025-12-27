@@ -29,37 +29,32 @@ Authorization: Bearer <your_jwt_token>
 #### 請求體
 ```json
 {
-    "title": "題解標題",
-    "content": "題解內容",
-    "difficulty_rating": 3.5,
-    "is_official": true
+    "content": "題解內容"
 }
 ```
 
 #### 請求體字段說明
-- `title` (必填): 題解標題，最大255字元
-- `content` (必填): 題解內容，不能為空
-- `difficulty_rating` (可選): 難度評級
-- `is_official` (可選): 是否為官方題解，默認false
+- `content` (必填): 題解內容，不能為空，最多 10000 字元
 
 #### 成功響應 (201 Created)
 ```json
 {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "title": "題解標題",
-    "content": "題解內容",
-    "difficulty_rating": 3.5,
-    "is_official": true,
-    "problem_id": 1,
-    "author": "550e8400-e29b-41d4-a716-446655440001",
-    "author_username": "teacher1",
-    "likes_count": 0,
-    "views_count": 0,
-    "status": "published",
-    "created_at": "2025-11-02T08:00:00Z",
-    "updated_at": "2025-11-02T08:00:00Z",
-    "published_at": "2025-11-02T08:00:00Z",
-    "is_liked_by_user": false
+    "data": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "author_username": "teacher1",
+        "is_liked_by_user": false,
+        "problem_id": 1,
+        "content": "題解內容",
+        "likes_count": 0,
+        "views_count": 0,
+        "status": "published",
+        "created_at": "2025-11-02T08:00:00Z",
+        "updated_at": "2025-11-02T08:00:00Z",
+        "published_at": "2025-11-02T08:00:00Z",
+        "author": "550e8400-e29b-41d4-a716-446655440001"
+    },
+    "message": "獲取題解列表成功",
+    "status": "ok"
 }
 ```
 
@@ -81,25 +76,26 @@ Authorization: Bearer <your_jwt_token>
 
 #### 成功響應 (200 OK)
 ```json
-[
-    {
-        "id": "550e8400-e29b-41d4-a716-446655440000",
-        "title": "官方題解",
-        "content": "這是官方題解內容...",
-        "difficulty_rating": 3.5,
-        "is_official": true,
-        "problem_id": 1,
-        "author": "550e8400-e29b-41d4-a716-446655440001",
-        "author_username": "teacher1",
-        "likes_count": 15,
-        "views_count": 234,
-        "status": "published",
-        "created_at": "2025-11-01T08:00:00Z",
-        "updated_at": "2025-11-01T08:00:00Z",
-        "published_at": "2025-11-01T08:00:00Z",
-        "is_liked_by_user": true
-    }
-]
+{
+    "data": [
+        {
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "author_username": "teacher1",
+            "is_liked_by_user": true,
+            "problem_id": 1,
+            "content": "這是題解內容...",
+            "likes_count": 15,
+            "views_count": 234,
+            "status": "published",
+            "created_at": "2025-11-01T08:00:00Z",
+            "updated_at": "2025-11-01T08:00:00Z",
+            "published_at": "2025-11-01T08:00:00Z",
+            "author": "550e8400-e29b-41d4-a716-446655440001"
+        }
+    ],
+    "message": "獲取題解列表成功",
+    "status": "ok"
+}
 ```
 
 #### 錯誤響應
@@ -108,9 +104,8 @@ Authorization: Bearer <your_jwt_token>
 
 #### 排序規則
 題解按以下順序排列：
-1. 官方題解優先 (`is_official=true`)
-2. 按讚數量降序
-3. 創建時間降序
+1. 按讚數量降序
+2. 創建時間降序
 
 ---
 
@@ -126,31 +121,29 @@ Authorization: Bearer <your_jwt_token>
 #### 請求體
 ```json
 {
-    "title": "更新後的題解標題",
-    "content": "更新後的題解內容",
-    "difficulty_rating": 4.0,
-    "is_official": false
+    "content": "更新後的題解內容"
 }
 ```
 
 #### 成功響應 (200 OK)
 ```json
 {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "title": "更新後的題解標題",
-    "content": "更新後的題解內容",
-    "difficulty_rating": 4.0,
-    "is_official": false,
-    "problem_id": 1,
-    "author": "550e8400-e29b-41d4-a716-446655440001",
-    "author_username": "teacher1",
-    "likes_count": 15,
-    "views_count": 234,
-    "status": "published",
-    "created_at": "2025-11-01T08:00:00Z",
-    "updated_at": "2025-11-02T08:00:00Z",
-    "published_at": "2025-11-01T08:00:00Z",
-    "is_liked_by_user": true
+    "data": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "author_username": "teacher1",
+        "is_liked_by_user": true,
+        "problem_id": 1,
+        "content": "更新後的題解內容",
+        "likes_count": 15,
+        "views_count": 234,
+        "status": "published",
+        "created_at": "2025-11-01T08:00:00Z",
+        "updated_at": "2025-11-02T08:00:00Z",
+        "published_at": "2025-11-01T08:00:00Z",
+        "author": "550e8400-e29b-41d4-a716-446655440001"
+    },
+    "message": "獲取題解列表成功",
+    "status": "ok"
 }
 ```
 
@@ -206,13 +199,10 @@ Authorization: Bearer <your_jwt_token>
     "author_username": "teacher1",
     "is_liked_by_user": false,
     "problem_id": 1,
-    "title": "動態規劃解法",
     "content": "這個問題可以使用動態規劃來解決...",
-    "difficulty_rating": "3.5",
     "likes_count": 0,
     "views_count": 0,
     "status": "published",
-    "is_official": true,
     "created_at": "2025-11-01T16:22:17.124771Z",
     "updated_at": "2025-11-01T16:22:17.124793Z",
     "published_at": "2025-11-01T16:22:17.124534Z",
@@ -241,16 +231,20 @@ Authorization: Bearer <your_jwt_token>
 ### 常見錯誤響應格式
 ```json
 {
-    "error": "錯誤描述信息",
-    "detail": "詳細錯誤信息"
+    "data": null,
+    "message": "錯誤描述信息",
+    "status": "error"
 }
 ```
 
 或字段驗證錯誤：
 ```json
 {
-    "title": ["標題長度不能超過 255 字元"],
-    "content": ["內容至少需要 10 個字元"]
+    "data": {
+        "content": ["內容至少需要 10 個字元"]
+    },
+    "message": "驗證失敗",
+    "status": "error"
 }
 ```
 
@@ -276,9 +270,8 @@ Authorization: Bearer <your_jwt_token>
 ## 注意事項
 
 1. **UUID格式**: `solutionId` 必須是有效的UUID格式
-2. **內容長度**: 題解內容不能為空
-3. **標題長度**: 標題最多255個字元
-4. **問題關聯**: 題解必須關聯到存在的問題
-5. **課程權限**: 問題必須屬於某個課程，且操作者必須是該課程的教學人員
-6. **狀態管理**: 創建的題解自動設為"已發布"狀態
-7. **統計更新**: 查看題解時會自動增加瀏覽次數
+2. **內容長度**: 題解內容不能為空，最多 10000 字元
+3. **問題關聯**: 題解必須關聯到存在的問題
+4. **課程權限**: 問題必須屬於某個課程，且操作者必須是該課程的教學人員
+5. **狀態管理**: 創建的題解自動設為“已發布”狀態
+6. **統計更新**: 查看題解時會自動增加瀏覽次數

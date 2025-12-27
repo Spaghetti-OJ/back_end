@@ -174,7 +174,7 @@ class EditorialListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
         return Editorial.objects.filter(
             problem_id=problem_id,
             status='published'
-        ).order_by('-is_official', '-likes_count', '-created_at')
+        ).order_by('-likes_count', '-created_at')
     
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -202,9 +202,23 @@ class EditorialListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
         if response.status_code == status.HTTP_201_CREATED:
             editorial = Editorial.objects.get(id=response.data['id'])
             serializer = EditorialSerializer(editorial, context={'request': request})
-            response.data = serializer.data
+            return api_response(
+                data=serializer.data,
+                message='題解創建成功',
+                status_code=status.HTTP_201_CREATED
+            )
         
         return response
+    
+    def list(self, request, *args, **kwargs):
+        """獲取題解列表"""
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return api_response(
+            data=serializer.data,
+            message='獲取題解列表成功',
+            status_code=status.HTTP_200_OK
+        )
     
     def perform_create(self, serializer):
         """創建題解時設定相關欄位"""
@@ -264,6 +278,42 @@ class EditorialDetailView(BasePermissionMixin, generics.RetrieveUpdateDestroyAPI
             )
         
         return obj
+    
+    def retrieve(self, request, *args, **kwargs):
+        """獲取題解詳情"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return api_response(
+            data=serializer.data,
+            message='獲取題解詳情成功',
+            status_code=status.HTTP_200_OK
+        )
+    
+    def update(self, request, *args, **kwargs):
+        """更新題解"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        
+        # 使用 EditorialSerializer 返回完整資料
+        editorial_serializer = EditorialSerializer(instance, context={'request': request})
+        return api_response(
+            data=editorial_serializer.data,
+            message='題解更新成功',
+            status_code=status.HTTP_200_OK
+        )
+    
+    def destroy(self, request, *args, **kwargs):
+        """刪除題解"""
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return api_response(
+            data=None,
+            message='題解刪除成功',
+            status_code=status.HTTP_204_NO_CONTENT
+        )
     
     def perform_update(self, serializer):
         """更新題解時保持 problem_id 不變"""
