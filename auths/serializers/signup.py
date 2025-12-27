@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from user.models import UserProfile
-from courses.models import Course_members
+from courses.models import Course_members, Courses
 
 User = get_user_model()
 
@@ -47,13 +47,11 @@ class MeSerializer(serializers.Serializer):
         return False
     
     def get_access_course(self, user):
-        qs = (
-            Course_members.objects
-            .filter(
-                user_id=user,
-                role__in=[Course_members.Role.TA, Course_members.Role.TEACHER],
-            )
-            .values_list("course_id_id", flat=True)
-            .distinct()
-        )
-        return list(qs)
+        member_ids = Course_members.objects.filter(
+            user_id=user,
+            role__in=[Course_members.Role.TA, Course_members.Role.TEACHER],
+        ).values_list("course_id_id", flat=True)
+
+        teacher_ids = Courses.objects.filter(teacher_id=user).values_list("id", flat=True)
+
+        return sorted(set(member_ids) | set(teacher_ids))
