@@ -409,6 +409,58 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = Submission.objects.select_related('user').order_by('-created_at')
+        
+        # 篩選參數
+        problem_id = self.request.query_params.get('problem_id')
+        username = self.request.query_params.get('username')
+        status_filter = self.request.query_params.get('status')
+        course_id = self.request.query_params.get('course_id')
+        language_type = self.request.query_params.get('language_type')
+        before = self.request.query_params.get('before')  # ISO 8601 格式
+        after = self.request.query_params.get('after')    # ISO 8601 格式
+        
+        # 套用篩選條件
+        if problem_id:
+            queryset = queryset.filter(problem_id=problem_id)
+        
+        if username:
+            queryset = queryset.filter(user__username=username)
+        
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        if course_id:
+            try:
+                # 透過課程找到所有題目，再篩選提交
+                problem_ids = Problems.objects.filter(course_id=course_id).values_list('id', flat=True)
+                queryset = queryset.filter(problem_id__in=problem_ids)
+            except Exception:
+                queryset = queryset.none()  # 查詢失敗返回空結果
+        
+        if language_type:
+            try:
+                queryset = queryset.filter(language_type=int(language_type))
+            except ValueError:
+                pass  # 忽略無效的語言類型
+        
+        if before:
+            try:
+                from datetime import datetime
+                # 將 Unix 時間戳記轉換為 datetime 物件
+                before_dt = datetime.fromtimestamp(int(before))
+                queryset = queryset.filter(timestamp__lt=before_dt)
+            except (ValueError, TypeError):
+                pass  # 忽略無效的時間格式
+        
+        if after:
+            try:
+                from datetime import datetime
+                # 將 Unix 時間戳記轉換為 datetime 物件
+                after_dt = datetime.fromtimestamp(int(after))
+                queryset = queryset.filter(timestamp__gt=after_dt)
+            except (ValueError, TypeError):
+                pass  # 忽略無效的時間格式
+        
         return self.get_viewable_submissions(self.request.user, queryset)
     
     def get_client_ip(self, request):
