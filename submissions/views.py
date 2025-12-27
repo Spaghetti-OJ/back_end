@@ -469,6 +469,13 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
             # 額外的安全檢查
             problem_id = serializer.validated_data['problem_id']
             user = request.user
+            # 確保用戶已通過身份驗證（防止 AnonymousUser 進入此邏輯）
+            if not getattr(user, "is_authenticated", False):
+                return api_response(
+                    data=None,
+                    message="Authentication credentials were not provided.",
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                )
             
             # 1. Rate Limiting - 提交速率限制（每分鐘最多 10 次）
             from django.core.cache import cache
