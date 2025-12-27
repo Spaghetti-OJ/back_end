@@ -397,14 +397,7 @@ class Editorial(models.Model):
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     
     # Core fields
-    title = models.CharField(max_length=255)
     content = models.TextField()
-    difficulty_rating = models.DecimalField(
-        max_digits=3, 
-        decimal_places=1, 
-        null=True, 
-        blank=True
-    )
     
     # Statistics
     likes_count = models.IntegerField(default=0)
@@ -412,7 +405,6 @@ class Editorial(models.Model):
     
     # Status
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
-    is_official = models.BooleanField(default=False)
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -421,7 +413,6 @@ class Editorial(models.Model):
     
     class Meta:
         indexes = [
-            models.Index(fields=['problem_id', 'is_official']),
             models.Index(fields=['problem_id', 'likes_count']),
             models.Index(fields=['author', 'created_at']),
         ]
@@ -429,7 +420,7 @@ class Editorial(models.Model):
         db_table = 'editorials'
     
     def __str__(self):
-        return f"Editorial {self.title} - Problem {self.problem_id} - {self.author.username}"
+        return f"Editorial {self.id} - Problem {self.problem_id} - {self.author.username}"
 
 
 class EditorialLike(models.Model):
@@ -460,4 +451,4 @@ class EditorialLike(models.Model):
         db_table = 'editorial_likes'
     
     def __str__(self):
-        return f"Like {self.editorial.title} by {self.user.username}"
+        return f"Like Editorial {self.editorial.id} by {self.user.username}"
