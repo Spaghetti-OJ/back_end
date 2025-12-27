@@ -655,12 +655,12 @@ public class Main {
         }
         
         status_weights = [
-            ('0', 40),   # Accepted - 40%
+            ('0', 45),   # Accepted - 45%
             ('1', 25),   # Wrong Answer - 25%
-            ('-1', 10),  # Pending - 10%
             ('3', 10),   # TLE - 10%
             ('5', 10),   # Runtime Error - 10%
-            ('2', 5),    # Compilation Error - 5%
+            ('2', 7),    # Compilation Error - 7%
+            ('-1', 3),   # Pending - 3% (少數情況)
         ]
         
         submissions = []
@@ -721,11 +721,12 @@ public class Main {
         
         # Map overall status to result statuses
         result_status_map = {
-            '0': 'accepted',           # AC
-            '1': 'wrong_answer',       # WA
-            '3': 'time_limit_exceeded',# TLE
+            '0': 'accepted',              # AC
+            '1': 'wrong_answer',          # WA
+            '2': 'wrong_answer',          # CE - 標記為 wrong_answer (編譯失敗)
+            '3': 'time_limit_exceeded',   # TLE
             '4': 'memory_limit_exceeded', # MLE
-            '5': 'runtime_error',      # RE
+            '5': 'runtime_error',         # RE
         }
         
         total_test_cases = test_cases.count()
@@ -738,19 +739,30 @@ public class Main {
                 tc_status = 'accepted'
                 tc_score = score_per_case
                 solve_status = 'solved'
+                error_msg = None
             elif overall_status == '2':
-                # Compilation error - no results
-                continue
+                # Compilation error - all test cases fail with no execution
+                tc_status = 'wrong_answer'
+                tc_score = 0
+                solve_status = 'unsolved'
+                error_msg = random.choice([
+                    "error: expected ';' before '}' token",
+                    "SyntaxError: invalid syntax",
+                    "error: 'cout' was not declared in this scope",
+                    "IndentationError: unexpected indent",
+                ])
             else:
                 # Randomly decide if this test case passed or failed
-                if random.random() < 0.5:
+                if random.random() < 0.4:  # 40% chance of passing
                     tc_status = 'accepted'
                     tc_score = score_per_case
                     solve_status = 'solved'
+                    error_msg = None
                 else:
                     tc_status = result_status_map.get(overall_status, 'wrong_answer')
                     tc_score = 0
                     solve_status = 'unsolved'
+                    error_msg = self._generate_error_message(tc_status)
             
             SubmissionResult.objects.create(
                 problem_id=problem.id,
@@ -762,8 +774,8 @@ public class Main {
                 memory_usage=random.randint(256000, 512000) if tc_status == 'memory_limit_exceeded' else random.randint(1000, 30000),
                 score=tc_score,
                 max_score=score_per_case,
-                output_preview=self._generate_output_preview(tc_status),
-                error_message=self._generate_error_message(tc_status),
+                output_preview=self._generate_output_preview(tc_status) if overall_status != '2' else None,
+                error_message=error_msg,
                 solve_status=solve_status,
             )
 
