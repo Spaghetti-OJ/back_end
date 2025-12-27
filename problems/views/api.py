@@ -937,7 +937,7 @@ class ProblemDetailView(APIView):
       submitCount: 個人提交次數（若 submissions table 缺失或未登入則 null）
       highScore: 個人最高分（同上）
 
-    權限：需求書標示需登入；故此處強制 IsAuthenticated。針對非公開題目沿用既有權限檢查。
+    權限：允許匿名存取公開題目；非公開題目與個人相關欄位（如 submitCount、highScore）於內部依題目可見性與使用者身分檢查。
     """
 
     permission_classes = []  # 允許匿名，實際權限在內部依題目可見性檢查
