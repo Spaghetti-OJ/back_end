@@ -241,7 +241,6 @@ Authorization: Bearer <your_jwt_token>
 ```json
 {
     "data": {
-        "title": ["標題長度不能超過 255 字元"],
         "content": ["內容至少需要 10 個字元"]
     },
     "message": "驗證失敗",
