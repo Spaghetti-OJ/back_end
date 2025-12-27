@@ -341,7 +341,7 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 **路徑**：`GET /auth/me/`
 
 **說明**：
-使用目前登入狀態（Authorization Header 帶入 `Bearer <access>`）取得當前使用者的基本資料，包含 `user_id`、`username`、`email`、`role`、`email_verified`。
+使用目前登入狀態（Authorization Header 帶入 `Bearer <access>`）取得當前使用者的基本資料，包含 `user_id`、`username`、`email`、`role`、`email_verified`，以及使用者可管理的課程清單 `access_course`。
 
 ### 請求格式
 
@@ -374,22 +374,34 @@ Authorization: Bearer <ACCESS_TOKEN>
     "username": "momo",
     "email": "momo@example.com",
     "role": "student",
-    "email_verified": true
+    "email_verified": true,
+    "access_course": [1, 3, 8]
   }
 }
 ```
 
-各欄位說明：
+---
 
-| 路徑              | 型別     | 說明                 |
-| --------------- | ------ | ------------------ |
-| `status`        | string | 狀態字串，成功固定為 `"ok"`  |
-| `message`       | string | 描述訊息               |
-| `data.user_id`   | string | 使用者在系統中的唯一 ID      |
-| `data.username` | string | 使用者帳號              |
-| `data.email`    | string | 使用者註冊 email        |
-| `data.role`     | string | 使用者角色（如：`student`） |
-| `data.email_verified` | bool | 是否驗證信箱 |
+### 各欄位說明
+
+| 路徑                    | 型別     | 說明                                   |
+| --------------------- | ------ | ------------------------------------ |
+| `status`              | string | 狀態字串，成功固定為 `"ok"`                    |
+| `message`             | string | 描述訊息                                 |
+| `data.user_id`        | string | 使用者在系統中的唯一 ID                        |
+| `data.username`       | string | 使用者帳號                                |
+| `data.email`          | string | 使用者註冊 email                          |
+| `data.role`           | string | 使用者角色（如：`student`、`teacher`、`admin`） |
+| `data.email_verified` | bool   | 是否已完成信箱驗證                            |
+| `data.access_course`  | int[]  | 使用者具有管理權限（Teacher / TA）的課程 ID 清單     |
+
+---
+
+### 權限與說明補充
+
+* `access_course` 會回傳目前使用者 **可管理的課程**（角色為 Teacher 或 TA）。
+* 若使用者僅為課程學生，則此欄位會回傳空陣列 `[]`。
+* 建立課程的教師會自動被加入該課程的 `Course_members`，並具有 `teacher` 權限。
 
 ---
 
@@ -397,20 +409,20 @@ Authorization: Bearer <ACCESS_TOKEN>
 
 * 未帶 token 或 token 無效（401）：
 
-  ```json
-  {
-    "detail": "Authentication credentials were not provided."
-  }
-  ```
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
 
-  或
+或
 
-  ```json
-  {
-    "detail": "Given token not valid for any token type",
-    "code": "token_not_valid"
-  }
-  ```
+```json
+{
+  "detail": "Given token not valid for any token type",
+  "code": "token_not_valid"
+}
+```
 
 ---
 
@@ -423,9 +435,10 @@ curl -X GET "http://127.0.0.1:8000/auth/me/" \
 
 > 使用說明：
 >
-> * 建議登入後（呼叫 `POST /auth/session/` 拿到 access）就立刻呼叫一次 `GET /auth/me/`，
->   將回傳的 `user_id`、`username`、`email`、`role` 存到前端的全域狀態（例如 Redux / Zustand / Vuex），作為之後顯示使用者名稱或判斷角色權限之用。
-> * 若收到 401，請先確認 access token 是否過期，可搭配 `POST /auth/refresh/` 重新取得新的 access。
+> * 建議登入後（呼叫 `POST /auth/session/` 取得 access token）立刻呼叫一次 `GET /auth/me/`，
+>   將回傳的 `user_id`、`username`、`email`、`role`、`email_verified` 與 `access_course`
+>   存入前端全域狀態（如 Redux / Zustand / Vuex），作為後續顯示使用者資訊與判斷課程管理權限的依據。
+> * 若收到 401，請確認 access token 是否過期，可搭配 `POST /auth/refresh/` 重新取得新的 access token。
 
 ---
 
