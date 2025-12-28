@@ -35,7 +35,7 @@ def api_response(data=None, message="OK", status_code=200):
 
 class LoginLogListView(APIView):
     
-    authentication_classes = [SessionAuthentication]
+    # authentication_classes = [SessionAuthentication]  # Commented to use global default (includes JWTAuthentication)
     # permission_classes = [IsAuthenticated]  # Removed to use global default
 
     def get(self, request):
@@ -52,7 +52,7 @@ class UserLoginLogListView(APIView):
     列出「特定使用者」的所有登入日誌。
     (API: GET /auth/login-logs/<uuid:user_id>)
     """
-    authentication_classes = [SessionAuthentication]
+    # authentication_classes = [SessionAuthentication]  # Commented to use global default (includes JWTAuthentication)
     permission_classes = [IsAdminUser, IsEmailVerified]
 
     def get(self, request, user_id):
@@ -70,7 +70,7 @@ class SuspiciousLoginListView(APIView):
     列出所有「異常」的登入日誌。
     (API: GET /auth/suspicious-activities/)
     """
-    authentication_classes = [SessionAuthentication]
+    # authentication_classes = [SessionAuthentication]  # Commented to use global default (includes JWTAuthentication)
     permission_classes = [IsAdminUser, IsEmailVerified] 
 
     def get(self, request):
