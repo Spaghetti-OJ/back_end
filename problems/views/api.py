@@ -659,14 +659,22 @@ class ProblemTestCaseZipUploadView(APIView):
         except Exception:
             pass
         saved = _storage.save(rel, out_buf)
-        return api_response({"path": saved.replace('\\','/')}, "Zip uploaded with meta", status_code=201)
+        
+        # 計算 SHA256 hash 並儲存到 problem
+        import hashlib
+        out_buf.seek(0)
+        sha256_hash = hashlib.sha256(out_buf.read()).hexdigest()
+        problem.testcase_hash = sha256_hash
+        problem.save(update_fields=['testcase_hash'])
+        
+        return api_response({"path": saved.replace('\\','/'), "testcase_hash": sha256_hash}, "Zip uploaded with meta", status_code=201)
 
 
 class ProblemTestCaseChecksumView(APIView):
     """GET /problem/<pk>/checksum (Sandbox 專用)
-    目的：沙盒下載測資 zip 後驗證 MD5 完整性。
+    目的：沙盒下載測資 zip 後驗證 SHA256 完整性。
     驗證：使用 query string `token` 與後端設定的 SANDBOX_TOKEN 比對。
-    回傳：{"checksum": "<md5>"}
+    回傳：{"checksum": "<sha256>"}
     錯誤：401 token 無效；404 題目或測資不存在。
     """
     permission_classes = []  # 以 sandbox token 驗證，不用一般身份驗證
@@ -681,11 +689,11 @@ class ProblemTestCaseChecksumView(APIView):
         rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
         if not _storage.exists(rel):
             raise Http404("Test case archive not found")
-        # 計算 MD5
+        # 計算 SHA256
         import hashlib
         with _storage.open(rel, 'rb') as fh:
-            md5 = hashlib.md5(fh.read()).hexdigest()
-        return api_response({"checksum": md5}, "OK", status_code=200)
+            sha256 = hashlib.sha256(fh.read()).hexdigest()
+        return api_response({"checksum": sha256}, "OK", status_code=200)
 
 
 class ProblemTestCaseMetaView(APIView):
@@ -709,7 +717,7 @@ class ProblemTestCaseMetaView(APIView):
         import zipfile, hashlib, json
         with _storage.open(rel, 'rb') as fh:
             data = fh.read()
-        md5 = hashlib.md5(data).hexdigest()
+        sha256 = hashlib.sha256(data).hexdigest()
         from io import BytesIO
         buffer = BytesIO(data)
         # 優先讀取 zip 內的 meta.json；若不存在則回退為檔名掃描

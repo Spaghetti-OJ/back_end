@@ -108,6 +108,13 @@ class Problems(models.Model):
         blank=True,
         help_text="List of function names that are forbidden when 'forbid-functions' rule is enabled. Required if 'forbid-functions' is in static_analysis_rules."
     )
+    # --- Testcase package hash ---
+    testcase_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        null=True,
+        help_text="SHA256 hash of the testcase package (problem.zip). Updated when testcases are uploaded."
+    )
     creator_id = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_problems')
     course_id = models.ForeignKey('courses.Courses', on_delete=models.PROTECT, null=False, blank=False, related_name='courses')
     created_at = models.DateTimeField(default=timezone.now)
