@@ -587,21 +587,28 @@ cURL 範例（僅針對本 API）
 curl -X GET "http://127.0.0.1:8000/homework/1/submissions"   -H "Authorization: Bearer <ACCESS_TOKEN>"   -H "Accept: application/json"
 ```
 
-**路徑：**
+# 作業統計 API：GET /homework/<homework_id>/stats/
+
+本端點回傳指定作業的**整體統計（overview）**與**各題彙總統計（problems）**。
+
+> 回傳格式採統一 `api_response` 包裝：`{ data, message, status }`
+
+---
+
+## 路徑
 
 `GET /homework/<homework_id>/stats/`
 
-**說明：**  
-回傳指定作業的整體統計資訊（overview）與各題目的解題統計（problems）。
+---
 
-**權限：**  
-需登入，且必須為該課程的老師或助教。
+## 權限
+
+- 需登入
+- 且必須為該課程的**老師或助教（TA）**
 
 ---
 
 ## 回傳資料結構（data）
-
-以下為 `data` 的完整結構：
 
 ```json
 {
@@ -621,17 +628,17 @@ curl -X GET "http://127.0.0.1:8000/homework/1/submissions"   -H "Authorization: 
 
 ## data：作業基本資訊欄位
 
-| 欄位           | 型別      | 說明                                   |
-| -------------- | --------- | -------------------------------------- |
-| homework_id    | int       | 作業 ID                                |
-| course_id      | uuid      | 所屬課程 ID                            |
-| title          | string    | 作業標題                               |
-| description    | string    | 作業說明                               |
-| start_time     | string    | 開始時間（ISO 8601）                   |
-| due_time       | string    | 截止時間（ISO 8601）                   |
-| problem_count  | int       | 題目數                                 |
-| overview       | object    | 作業整體統計                           |
-| problems       | array     | 各題目的統計資訊                       |
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| homework_id | int | 作業 ID（Assignments.id） |
+| course_id | uuid | 所屬課程 ID（Assignments.course_id） |
+| title | string | 作業標題（Assignments.title） |
+| description | string / null | 作業說明（Assignments.description） |
+| start_time | string / null | 開始時間（ISO 8601） |
+| due_time | string / null | 截止時間（ISO 8601） |
+| problem_count | int | 題目數（啟用題目數量） |
+| overview | object | 作業整體統計 |
+| problems | array<object> | 各題目的統計資訊 |
 
 ---
 
@@ -650,16 +657,16 @@ curl -X GET "http://127.0.0.1:8000/homework/1/submissions"   -H "Authorization: 
 }
 ```
 
-| 欄位                               | 型別   | 說明                                                         |
-| ---------------------------------- | ------ | ------------------------------------------------------------ |
-| participant_count                  | int    | 至少提交過一次作業內任一題的學生數                          |
-| total_submission_count             | int    | 全作業 submission 數總和                                    |
-| avg_submissions_per_user          | float  | 平均每人提交筆數                                             |
-| avg_total_score                    | float  | 平均每位學生（所有題目的 best_score 相加）之總分           |
-| max_total_score                    | int    | 作業最大可能得分（題目數 × 100）                            |
-| solved_all_problem_user_count      | int    | 全題 AC 的使用者數                                           |
-| partially_solved_user_count        | int    | 部分 AC 的使用者數                                           |
-| unsolved_all_problem_user_count    | int    | 全部未 AC 的使用者數                                         |
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| participant_count | int | 至少提交過一次作業內任一題的使用者數 |
+| total_submission_count | int | 全作業 submission 數總和（各題 total_submissions 加總） |
+| avg_submissions_per_user | float | 平均每人提交筆數（total_submission_count / participant_count） |
+| avg_total_score | float | 平均每位使用者的總分（各題 best_score 加總後再取平均） |
+| max_total_score | int | 作業理論滿分（預設：題目數 × 100；若未來改為權重/題目滿分，需同步調整） |
+| solved_all_problem_user_count | int | 全題皆 solved 的使用者數 |
+| partially_solved_user_count | int | solved 題數介於 1 ~ (題目數-1) 的使用者數 |
+| unsolved_all_problem_user_count | int | solved 題數為 0 的使用者數 |
 
 ---
 
@@ -684,20 +691,20 @@ curl -X GET "http://127.0.0.1:8000/homework/1/submissions"   -H "Authorization: 
 }
 ```
 
-| 欄位                    | 型別        | 說明                                                         |
-| ----------------------- | ----------- | ------------------------------------------------------------ |
-| problem_id              | int         | 題目 ID                                                     |
-| order_index             | int         | 題目排序                                                    |
-| weight                  | string      | 作業內題目權重（Decimal）                                   |
-| title                   | string      | 題目名稱                                                    |
-| participant_count       | int         | 對此題有提交紀錄的使用者數                                  |
-| total_submission_count  | int         | 此題 submission 數總和                                      |
-| avg_attempts_per_user   | float       | 平均提交次數                                                |
-| avg_score               | float       | best_score 平均值                                           |
-| ac_user_count           | int         | AC 的使用者數                                               |
-| partial_user_count      | int         | 部分通過（partial）的使用者數                               |
-| unsolved_user_count     | int         | 未通過的使用者數                                            |
-| first_ac_time           | string/null | 最早 AC 時間（無人 AC 則 null）                             |
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| problem_id | int | 題目 ID（Problems.id） |
+| order_index | int | 作業內題目排序（Assignment_problems.order_index） |
+| weight | string | 作業內題目權重（Decimal 字串） |
+| title | string | 題目顯示名稱（通常為 Problems 的字串表示） |
+| participant_count | int | 對此題有提交紀錄的使用者數 |
+| total_submission_count | int | 此題 submission 數總和（total_submissions 加總） |
+| avg_attempts_per_user | float | 平均提交次數（total_submission_count / participant_count） |
+| avg_score | float | 此題 best_score 平均值 |
+| ac_user_count | int | solved 的使用者數 |
+| partial_user_count | int | partial 的使用者數 |
+| unsolved_user_count | int | unsolved 的使用者數 |
+| first_ac_time | string / null | 最早 AC 時間（無人 AC 則 null） |
 
 ---
 
@@ -707,7 +714,7 @@ curl -X GET "http://127.0.0.1:8000/homework/1/submissions"   -H "Authorization: 
 {
   "data": {
     "homework_id": 1,
-    "course_id": "469e303a-6d9e-4dda-831dafe4c1ffdab5",
+    "course_id": "469e303a-6d9e-4dda-831d-afe4c1ffdab5",
     "title": "HW1 - Intro",
     "description": "第一份作業內容",
     "start_time": "2025-11-01T00:00:00Z",
@@ -771,18 +778,18 @@ curl -X GET "http://127.0.0.1:8000/homework/1/submissions"   -H "Authorization: 
 
 ---
 
-## cURL 測試（Windows CMD）
+## cURL 測試範例（Windows CMD）
 
-```cmd
+```bat
 curl -X GET "http://127.0.0.1:8000/homework/<HW_ID>/stats/" ^
   -H "Authorization: Bearer <ACCESS_TOKEN>" ^
   -H "Accept: application/json"
 ```
 
 請將：
-
-- `<HW_ID>` 替換為實際作業 ID  
+- `<HW_ID>` 替換為實際作業 ID
 - `<ACCESS_TOKEN>` 替換為登入後取得的 JWT access token
+
 ## 作業排行榜 API
 
 路徑：GET /homework/<homework_id>/scoreboard/
