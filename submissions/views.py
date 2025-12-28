@@ -895,7 +895,7 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                         quota = UserProblemQuota.objects.select_for_update().get(
                             user=user,
                             problem_id=problem_id,
-                            assignment_id__isnull=True  # Global quota (no assignment)
+                            assignment_id=None  # Global quota (no assignment)
                         )
                     except UserProblemQuota.DoesNotExist:
                         # Record doesn't exist, create it
@@ -913,7 +913,7 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                             quota = UserProblemQuota.objects.select_for_update().get(
                                 user=user,
                                 problem_id=problem_id,
-                                assignment_id__isnull=True
+                                assignment_id=None
                             )
                     
                     # 如果記錄已存在但 total_quota 與題目設定不同，可能是題目設定更新了
@@ -938,7 +938,7 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                         quota = UserProblemQuota.objects.select_for_update().get(
                             user=user,
                             problem_id=problem_id,
-                            assignment_id__isnull=True  # Global quota (no assignment)
+                            assignment_id=None  # Global quota (no assignment)
                         )
                         if quota.remaining_attempts == 0:
                             return api_response(

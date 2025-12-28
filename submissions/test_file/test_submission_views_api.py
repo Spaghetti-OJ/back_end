@@ -1362,10 +1362,9 @@ class TestSubmissionQuotaEnforcement(SubmissionAPITestSetup, APITestCase):
         success_count = results.count(status.HTTP_201_CREATED)
         forbidden_count = results.count(status.HTTP_403_FORBIDDEN)
         
-        # 至少應該有一個成功的
-        self.assertGreaterEqual(success_count, 1)
         # 配額應該被正確執行（只允許 1 次提交）
-        self.assertLessEqual(success_count, 1)
+        self.assertEqual(success_count, 1)
+        self.assertEqual(forbidden_count, 1)
     
     def test_quota_not_synced_with_problem_changes(self):
         """測試題目配額變更時，已存在的用戶配額不會自動同步"""
