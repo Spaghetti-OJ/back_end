@@ -1,5 +1,5 @@
 from django.shortcuts import render, get_object_or_404
-from django.db import models, transaction
+from django.db import models, transaction, IntegrityError
 from django.http import Http404
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
@@ -908,7 +908,7 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                                 total_quota=problem_quota,
                                 remaining_attempts=problem_quota
                             )
-                        except Exception:
+                        except IntegrityError:
                             # If another thread created it concurrently, get it with lock
                             quota = UserProblemQuota.objects.select_for_update().get(
                                 user=user,
@@ -938,7 +938,7 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                         quota = UserProblemQuota.objects.select_for_update().get(
                             user=user,
                             problem_id=problem_id,
-                            assignment_id__isnull=True
+                            assignment_id=None
                         )
                         if quota.remaining_attempts == 0:
                             return api_response(
