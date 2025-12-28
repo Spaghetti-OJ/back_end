@@ -1999,6 +1999,7 @@ class SubmissionCallbackAPIView(APIView):
                     logger.info(f'Created {len(all_test_cases)} {judge_status} results for all test cases of submission {submission_id}')
                 elif judge_status == 'accepted' and len(test_results) == 0:
                     # 特殊處理：AC 但沒有回傳 test_results，為所有測資創建 AC 記錄
+                    logger.info(f'Processing test_result: specail AC with no test_results')
                     all_test_cases = []
                     subtasks = Problem_subtasks.objects.filter(problem_id=submission.problem_id).order_by('subtask_no')
                     for subtask in subtasks:
@@ -2038,6 +2039,8 @@ class SubmissionCallbackAPIView(APIView):
                         subtask_no = test_result.get('test_case_id')  # Sandbox 用這個欄位傳 subtask 編號
                         test_case_index = test_result.get('test_case_index', 1)  # 測資編號
                         
+                        logger.info(f'Processing test_result: subtask_no={subtask_no}, test_case_index={test_case_index}, status={result_status}')
+                        
                         if not subtask_no:
                             logger.warning(f'Missing subtask_no (test_case_id) in test_result')
                             continue
@@ -2049,12 +2052,13 @@ class SubmissionCallbackAPIView(APIView):
                                 subtask_no=subtask_no
                             )
                             subtask_id = subtask.id
+                            logger.info(f'Found subtask: subtask_no={subtask_no} -> subtask_id={subtask_id}')
                         except Problem_subtasks.DoesNotExist:
-                            logger.warning(f'Subtask not found: problem_id={submission.problem_id}, subtask_no={subtask_no}')
+                            logger.error(f'Subtask not found: problem_id={submission.problem_id}, subtask_no={subtask_no}')
                             continue
                         
                         # 創建或更新記錄
-                        SubmissionResult.objects.update_or_create(
+                        result, created = SubmissionResult.objects.update_or_create(
                             submission=submission,
                             subtask_id=subtask_id,
                             test_case_index=test_case_index,
@@ -2069,6 +2073,7 @@ class SubmissionCallbackAPIView(APIView):
                                 'error_message': test_result.get('error_message'),
                             }
                         )
+                        logger.info(f'SubmissionResult {"created" if created else "updated"}: subtask_id={subtask_id}, test_case_index={test_case_index}')
                     
                     logger.info(f'Created {len(test_results)} test results for submission {submission_id}')
                 
