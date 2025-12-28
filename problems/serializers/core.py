@@ -32,79 +32,6 @@ class TestCaseStudentSerializer(serializers.ModelSerializer):
             "status",
         ]
 
-class ProblemManageSerializer(serializers.ModelSerializer):
-    """題目管理用的 Serializer（建立/更新）"""
-    
-    tags = serializers.ListField(
-        child=serializers.IntegerField(),
-        required=False,
-        write_only=True,
-        help_text="標籤 ID 列表"
-    )
-    
-    static_analysis_rules = serializers.ListField(
-        child=serializers.ChoiceField(choices=[
-            'forbid-loops',
-            'forbid-arrays', 
-            'forbid-stl',
-            'forbid-functions'
-        ]),
-        required=False,
-        default=list,
-        help_text="靜態分析規則列表。有效值: 'forbid-loops', 'forbid-arrays', 'forbid-stl', 'forbid-functions'"
-    )
-    
-    forbidden_functions = serializers.ListField(
-        child=serializers.CharField(max_length=100),
-        required=False,
-        default=list,
-        help_text="禁止使用的函數名稱列表。當 static_analysis_rules 包含 'forbid-functions' 時必填"
-    )
-
-    class Meta:
-        model = Problems
-        fields = [
-            'id', 'title', 'description', 'difficulty', 'is_public',
-            'max_score', 'total_quota',
-            'input_description', 'output_description',
-            'sample_input', 'sample_output',
-            'hint', 'subtask_description',
-            'supported_languages',
-            'solution_code', 'solution_code_language',
-            'use_custom_checker', 'checker_name',
-            'static_analysis_rules', 'forbidden_functions',
-            'course_id', 'tags',
-            'created_at', 'updated_at',
-        ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
-
-    def validate(self, attrs):
-        """驗證靜態分析規則和禁止函數的一致性"""
-        rules = attrs.get('static_analysis_rules', [])
-        forbidden_funcs = attrs.get('forbidden_functions', [])
-        
-        # 如果是更新操作，需要考慮現有值
-        if self.instance:
-            if 'static_analysis_rules' not in attrs:
-                rules = self.instance.static_analysis_rules or []
-            if 'forbidden_functions' not in attrs:
-                forbidden_funcs = self.instance.forbidden_functions or []
-        
-        # 驗證：當選擇 forbid-functions 時，必須提供至少一個禁止函數
-        if 'forbid-functions' in rules:
-            if not forbidden_funcs:
-                raise serializers.ValidationError({
-                    'forbidden_functions': '當啟用 forbid-functions 規則時，必須至少指定一個禁止使用的函數。'
-                })
-            # 驗證每個函數名稱
-            for func in forbidden_funcs:
-                if not func or not func.strip():
-                    raise serializers.ValidationError({
-                        'forbidden_functions': '函數名稱不能為空字串。'
-                    })
-        
-        return attrs
-
 class SubtaskSerializer(serializers.ModelSerializer):
     """完整 subtask 資訊（管理員用）"""
     test_cases = TestCaseSerializer(many=True, read_only=True)
@@ -193,29 +120,32 @@ class ProblemSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
-        """驗證靜態分析規則和禁止函數的一致性"""
-        rules = attrs.get('static_analysis_rules', [])
-        forbidden_funcs = attrs.get('forbidden_functions', [])
-        
-        # 如果是更新操作，需要考慮現有值
-        if self.instance:
-            if 'static_analysis_rules' not in attrs:
-                rules = self.instance.static_analysis_rules or []
-            if 'forbidden_functions' not in attrs:
-                forbidden_funcs = self.instance.forbidden_functions or []
-        
-        # 驗證：當選擇 forbid-functions 時，必須提供至少一個禁止函數
-        if 'forbid-functions' in rules:
-            if not forbidden_funcs:
-                raise serializers.ValidationError({
-                    'forbidden_functions': '當啟用 forbid-functions 規則時，必須至少指定一個禁止使用的函數。'
-                })
-            # 驗證每個函數名稱
-            for func in forbidden_funcs:
-                if not func or not func.strip():
-                    raise serializers.ValidationError({
-                        'forbidden_functions': '函數名稱不能為空字串。'
-                    })
+        """
+        透過 Problems.clean() 執行驗證，避免在序列化器中重複商業邏輯。
+        """
+        # 建立或重用 Problems 實例以反映驗證後的狀態
+        if self.instance is not None:
+            instance = self.instance
+            for field, value in attrs.items():
+                setattr(instance, field, value)
+        else:
+            # 建立臨時實例用於驗證（需要必填欄位）
+            temp_attrs = attrs.copy()
+            # 確保必填欄位存在
+            if 'creator_id' not in temp_attrs:
+                # 使用假的 creator_id 僅用於驗證
+                temp_attrs['creator_id_id'] = 1
+            if 'course_id' not in temp_attrs:
+                # 使用假的 course_id 僅用於驗證
+                temp_attrs['course_id_id'] = 1
+            instance = Problems(**temp_attrs)
+
+        # 將實際驗證委派給模型的 clean()，避免重複邏輯
+        try:
+            instance.clean()
+        except ValidationError as e:
+            # 將 Django ValidationError 轉換為 DRF ValidationError
+            raise serializers.ValidationError(e.message_dict if hasattr(e, 'message_dict') else {'non_field_errors': e.messages})
         
         return attrs
 
