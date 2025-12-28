@@ -39,21 +39,23 @@ class Problems(models.Model):
         EASY = 'easy', 'Easy'
         MEDIUM = 'medium', 'Medium'
         HARD = 'hard', 'Hard'
+    
     class StaticAnalysisRule(models.TextChoices):
         """靜態分析規則選項"""
         FORBID_LOOPS = 'forbid-loops', 'Forbid Loops'
         FORBID_ARRAYS = 'forbid-arrays', 'Forbid Arrays'
         FORBID_STL = 'forbid-stl', 'Forbid STL'
         FORBID_FUNCTIONS = 'forbid-functions', 'Forbid Functions'
+    
+    class Visibility(models.TextChoices):
+        HIDDEN = 'hidden', 'Hidden'
+        COURSE = 'course', 'Course only'
+        PUBLIC = 'public', 'Public'
 
     id = models.AutoField(primary_key=True)
     title = models.CharField(max_length=200)
     difficulty = models.CharField(max_length=10, choices=Difficulty.choices, default=Difficulty.MEDIUM)
     max_score = models.IntegerField(default=100)
-    class Visibility(models.TextChoices):
-        HIDDEN = 'hidden', 'Hidden'
-        COURSE = 'course', 'Course only'
-        PUBLIC = 'public', 'Public'
 
     # Visibility of problem: hidden (only owner/admin), course (course members), public (everyone)
     # Keep field name `is_public` for backward compatibility, but store tri-state choice value.

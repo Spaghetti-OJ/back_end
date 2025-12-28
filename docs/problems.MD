@@ -702,7 +702,7 @@ curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
   }'
 ```
 
-> 靜態分析驗證錯誤（啟用 forbid-functions 但未提供函數列表，預期 400/422）
+> 靜態分析驗證錯誤（啟用 forbid-functions 但未提供函數列表，預期 400）
 ```bash
 curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
   -H "Authorization: Bearer $TOKEN" \
