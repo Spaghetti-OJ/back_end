@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.db.models import Max,Sum
 from django.db.models import Sum, Count, Max, Q
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
@@ -257,6 +257,144 @@ class HomeworkDetailView(APIView):
         return api_response(
             data=payload,
             message="get homework",
+            status_code=status.HTTP_200_OK,
+        )
+    @transaction.atomic
+    def put(self, request, homework_id: int):
+        hw = self._get_hw(homework_id)
+        course = hw.course
+
+        if not is_teacher_or_ta(request.user, course):
+            return api_response(
+                data=None,
+                message="user must be the teacher or ta of this course",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        ser = HomeworkUpdateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        vd = ser.validated_data
+
+        # 基本欄位
+        if "name" in vd:
+            new_title = (vd["name"] or "").strip()
+            # 可選：避免空白名稱
+            if not new_title:
+                return api_response(
+                    data=None,
+                    message="name cannot be blank",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # ✅ 同課程內名稱不得與「其他作業」重複（排除自己 hw.id）
+            exists = Assignments.objects.filter(
+                course=hw.course,
+                title=new_title,
+            ).exclude(id=hw.id).exists()
+
+            if exists:
+                return api_response(
+                    data=None,
+                    message="homework exists in this course",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+
+            hw.title = new_title
+        if "markdown" in vd:
+            hw.description = vd.get("markdown", "") or ""
+        if "start" in vd:
+            hw.start_time = vd.get("_start_dt")
+        if "end" in vd:
+            hw.due_time = vd.get("_end_dt")
+
+        # penalty -> late_penalty（Decimal 0~100）
+        if "penalty" in vd:
+            # 你的 serializer penalty 是 CharField，這裡做轉換
+            raw = (vd.get("penalty") or "").strip()
+            if raw == "":
+                hw.late_penalty = Decimal("0.00")
+            else:
+                try:
+                    val = Decimal(raw)
+                except (TypeError, ValueError, InvalidOperation):
+                    return api_response(
+                        data=None,
+                        message="penalty must be a number string (0~100)",
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                    )
+                if val < 0 or val > 100:
+                    return api_response(
+                        data=None,
+                        message="penalty must be between 0 and 100",
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                    )
+                hw.late_penalty = val
+
+        # max_attempts 從 serializer validated_data 讀取
+        if "max_attempts" in vd:
+            ma = vd.get("max_attempts")
+            if ma is not None:
+                hw.max_attempts = ma
+
+        hw.save()
+
+        # 題目整包覆蓋
+        if "problem_ids" in vd:
+            new_pids = vd.get("problem_ids") or []
+            Assignment_problems.objects.filter(assignment=hw).delete()
+            for idx, pid in enumerate(new_pids, start=1):
+                Assignment_problems.objects.create(
+                    assignment=hw,
+                    problem_id=pid,
+                    order_index=idx,
+                    weight=Decimal("1.00"),
+                    special_judge=False,
+                )
+
+        payload = {
+            "id": hw.id,
+            "name": hw.title,
+            "start": to_epoch_from_dt(hw.start_time),
+            "end": to_epoch_from_dt(hw.due_time),
+            "problemIds": collect_problem_ids(hw),
+            "markdown": hw.description or "",
+            "latePenalty": str(hw.late_penalty),   # 文件要寫清楚：字串/數字
+            "maxAttempts": hw.max_attempts,
+        }
+
+        return api_response(
+            data=payload,
+            message="update homework",
+            status_code=status.HTTP_200_OK,
+        )
+    @transaction.atomic
+    def delete(self, request, homework_id: int):
+        """
+        DELETE /homework/<homework_id>
+        刪除作業（老師/TA）
+        行為：
+          - 會連帶刪除 assignment_problems（因為 FK on_delete=CASCADE）
+          - 不會刪除 Problems / Submissions（submissions 仍存在於題目層級）
+        """
+        hw = self._get_hw(homework_id)
+        course = hw.course
+
+        # 權限：只有老師/TA
+        if not is_teacher_or_ta(request.user, course):
+            return api_response(
+                data=None,
+                message="user must be the teacher or ta of this course",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        # 刪除
+        hw_id = hw.id
+        hw_title = hw.title
+        hw.delete()
+
+        return api_response(
+            data={"id": hw_id, "name": hw_title},
+            message="delete homework",
             status_code=status.HTTP_200_OK,
         )
     
