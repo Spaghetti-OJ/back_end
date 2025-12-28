@@ -47,52 +47,170 @@ cURL 測試範例：
 
 權限：需登入，且必須為該課程之老師或助教。
 
-請求格式（JSON）：
+說明：
+- 此 API 用於更新作業基本資訊、題目清單、逾期扣分、最大嘗試次數。
+- **只需傳要更新的欄位**（皆為選填）。
+- 若有提供 `problem_ids`，會採用 **整包覆蓋（replace）**：先刪除舊的題目綁定，再依序重建 `order_index=1..n`。
 
-| 欄位         | 型別           | 必填 | 說明                                        |
-| ------------ | -------------- | :--: | ------------------------------------------- |
-| name         | string         |  ✅  | 作業名稱（同課程內不可重複）                |
-| markdown     | string         |  ❌  | 作業說明                                    |
-| course_id    | uuid           |  ✅  | 所屬課程 ID                                 |
-| start        | string or null |  ❌  | 開始時間（ISO 8601；後端轉為 `_start_dt`）  |
-| end          | string or null |  ❌  | 結束時間（ISO 8601；後端轉為 `_end_dt`）    |
-| problem_ids  | array<int>     |  ❌  | 題目 ID 列表（會依序建立 `order_index`）    |
+---
+
+### 請求格式（JSON；欄位皆選填）
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| name | string | 新作業名稱（會 `strip()`；同課程內若與其他作業重名 → 400） |
+| markdown | string | 新作業說明（可為空字串） |
+| start | int or null | 新開始時間（epoch seconds） |
+| end | int or null | 新截止時間（epoch seconds；若同時給 start/end，end 需 >= start） |
+| problem_ids | array<int> | 重新指定題目（整包覆蓋；會依序建立 `order_index`） |
+| penalty | string | 逾期扣分百分比（字串數字，範圍 0~100；會寫入 `Assignments.late_penalty`） |
+| max_attempts | int | 最大嘗試次數（-1 代表不限；或 >=1） |
 
 請求範例：
 
-    {
-      "name": "HW1 - Intro",
-      "markdown": "第一份作業內容",
-      "course_id": "4e3e0a4e-6a75-48da-b692-291c65186ce3",
-      "start": null,
-      "end": null,
-      "problem_ids": [101, 102]
-    }
+```json
+{
+  "name": "HW1 - Updated",
+  "markdown": "更新後的作業說明",
+  "start": 1735660800,
+  "end": 1736265599,
+  "problem_ids": [201, 202, 203],
+  "penalty": "10.00",
+  "max_attempts": -1
+}
+```
 
-成功回應（200）：
+---
 
-    "Add homework Success"
+### 成功回應（200 OK）
 
-錯誤回應：
-- 400 名稱重複：
+回傳格式採統一 `api_response` 包裝：
 
-      "homework exists in this course"
+```json
+{
+  "data": {
+    "id": 1,
+    "name": "HW1 - Updated",
+    "start": 1735660800,
+    "end": 1736265599,
+    "problem_ids": [201, 202, 203],
+    "markdown": "更新後的作業說明",
+    "late_penalty": "10.00",
+    "max_attempts": -1
+  },
+  "message": "update homework",
+  "status": "ok"
+}
+```
 
-- 403 權限不足（非老師或助教）：
+欄位說明（data）：
 
-      "user must be the teacher or ta of this course"
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| id | int | 作業 ID |
+| name | string | 作業名稱 |
+| start | int or null | 開始時間（epoch seconds） |
+| end | int or null | 截止時間（epoch seconds） |
+| problem_ids | array<int> | 此作業題目 ID 清單（依 order_index 排序） |
+| markdown | string | 作業說明 |
+| late_penalty | string | 逾期扣分百分比（Decimal 字串，0~100） |
+| max_attempts | int | 最大嘗試次數（-1 或 >=1） |
 
-cURL 測試範例：
+---
 
-    curl -X POST "http://127.0.0.1:8000/homework/" ^
-      -H "Authorization: Bearer <ACCESS_TOKEN>" ^
-      -H "Content-Type: application/json" ^
-      -d "{
-        \"name\": \"HW1 - Intro\",
-        \"markdown\": \"第一份作業內容\",
-        \"course_id\": \"<COURSE_UUID>\",
-        \"problem_ids\": [101, 102]
-      }"
+### 錯誤回應
+
+#### 400 – 參數錯誤（範例）
+
+- 名稱空白：
+
+```json
+{
+  "data": null,
+  "message": "name cannot be blank",
+  "status": "error"
+}
+```
+
+- 同課程作業名稱重複：
+
+```json
+{
+  "data": null,
+  "message": "homework exists in this course",
+  "status": "error"
+}
+```
+
+- end 早於 start（或 timestamp 格式錯誤等 serializer 驗證失敗）：
+
+```json
+{
+  "data": null,
+  "message": "{'end': ['end earlier than start']}",
+  "status": "error"
+}
+```
+
+- penalty 非數字字串或超出範圍：
+
+```json
+{
+  "data": null,
+  "message": "penalty must be between 0 and 100",
+  "status": "error"
+}
+```
+
+- max_attempts 非法：
+
+```json
+{
+  "data": null,
+  "message": "max_attempts must be -1 or >=1",
+  "status": "error"
+}
+```
+
+> 註：serializer 產生的 message 可能是 dict/list 的字串化結果，視你目前的錯誤包裝邏輯而定。
+
+#### 403 – 權限不足（非老師或助教）
+
+```json
+{
+  "data": null,
+  "message": "user must be the teacher or ta of this course",
+  "status": "error"
+}
+```
+
+#### 404 – 作業不存在
+
+通常為 DRF 預設：
+
+```json
+{
+  "detail": "Not found."
+}
+```
+
+---
+
+### cURL 測試範例
+
+#### Windows CMD
+
+```bat
+curl -X PUT "http://127.0.0.1:8000/homework/<HW_ID>/" ^
+  -H "Authorization: Bearer <ACCESS_TOKEN>" ^
+  -H "Content-Type: application/json" ^
+  -d "{
+    "name": "HW1 - Updated",
+    "problem_ids": [201, 202, 203],
+    "penalty": "10.00",
+    "max_attempts": -1
+  }"
+```
 
 ---
 
