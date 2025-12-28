@@ -1105,18 +1105,22 @@ def submission_output_view(request, id, task_no, case_no):
     # 5. 找結果
     try:
         if test_case_id:
-            # 優先用 test_case_id 查找
-            result = SubmissionResult.objects.get(
+            # 優先用 test_case_id 查找（取最新的結果）
+            result = SubmissionResult.objects.filter(
                 submission_id=submission.id,
                 test_case_id=test_case_id
-            )
+            ).order_by('-created_at').first()
         else:
             # 如果沒有 test_case_id（例如 CE），用 test_case_index 查找
-            result = SubmissionResult.objects.get(
+            result = SubmissionResult.objects.filter(
                 submission_id=submission.id,
                 test_case_index=case_no
-            )
-    except SubmissionResult.DoesNotExist:
+            ).order_by('-created_at').first()
+        
+        if not result:
+            return api_response(None, "output not found", 404)
+    except Exception as e:
+        logger.error(f'Error fetching submission result: {str(e)}')
         return api_response(None, "output not found", 404)
 
     # 6. 回傳
@@ -1964,17 +1968,26 @@ class SubmissionCallbackAPIView(APIView):
                         else:
                             continue  # 其他情況跳過
                     
-                    SubmissionResult.objects.create(
-                        submission=submission,
-                        problem_id=submission.problem_id,
-                        test_case_id=test_case_id,
-                        test_case_index=case_index,
-                        status=result_status,
-                        execution_time=test_result.get('execution_time'),
-                        memory_usage=test_result.get('memory_usage'),
-                        score=test_result.get('score', 0),
-                        max_score=test_result.get('max_score', 100),
-                        error_message=test_result.get('error_message'),
+                    # 使用 update_or_create 避免重複呼叫 callback 時產生重複記錄
+                    # 當 test_case_id 為 None 時（CE 情況），用 test_case_index 區分不同測資
+                    lookup_fields = {
+                        'submission': submission,
+                        'problem_id': submission.problem_id,
+                        'test_case_index': case_index,
+                    }
+                    if test_case_id is not None:
+                        lookup_fields['test_case_id'] = test_case_id
+                    
+                    SubmissionResult.objects.update_or_create(
+                        **lookup_fields,
+                        defaults={
+                            'status': result_status,
+                            'execution_time': test_result.get('execution_time'),
+                            'memory_usage': test_result.get('memory_usage'),
+                            'score': test_result.get('score', 0),
+                            'max_score': test_result.get('max_score', 100),
+                            'error_message': test_result.get('error_message'),
+                        }
                     )
                 
                 logger.info(f'Created {len(test_results)} test results for submission {submission_id}')

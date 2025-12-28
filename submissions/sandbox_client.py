@@ -113,6 +113,13 @@ def submit_to_sandbox(submission):
         headers = {}
         if SANDBOX_API_KEY:
             headers['X-API-KEY'] = SANDBOX_API_KEY
+            logger.info(f'Using API Key: {SANDBOX_API_KEY[:10]}...')  # 只顯示前 10 個字元
+        else:
+            logger.warning('SANDBOX_API_KEY is not set!')
+        
+        logger.debug(f'Request URL: {url}')
+        logger.debug(f'Request data: {data}')
+        logger.debug(f'Request headers: {headers}')
         
         response = requests.post(
             url,
