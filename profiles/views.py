@@ -8,6 +8,7 @@ from .serializers import MeProfileSerializer, MeProfileUpdateSerializer, PublicP
 from rest_framework import permissions
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.exceptions import NotFound
+from user.permissions import IsEmailVerified
 
 def api_response(data=None, message="OK", status_code=200):
     status_str = "ok" if 200 <= status_code < 400 else "error"
@@ -20,7 +21,8 @@ def api_response(data=None, message="OK", status_code=200):
 User = get_user_model()
 
 class MeProfileView(APIView):
-    permission_classes = [IsAuthenticated]
+    #permission_classes = [IsAuthenticated, IsEmailVerified]
+    skip_email_verification = True
 
     def get(self, request):
         # 盡量一次取回關聯
@@ -54,7 +56,7 @@ class PublicProfileView(RetrieveAPIView):
     - 必須登入（JWT）
     - 回傳對方公開資料（不含 real_name、student_id）
     """
-    permission_classes = [permissions.IsAuthenticated]
+    #permission_classes = [IsAuthenticated, IsEmailVerified]
     serializer_class = PublicProfileSerializer
     lookup_field = "username"
 

@@ -3,6 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
 
 from api_tokens.models import ApiToken
@@ -35,8 +36,8 @@ class ApiTokenListView(APIView):
     - POST: 為當前使用者建立一個新的 API Token。
     """
 
-    authentication_classes = [SessionAuthentication, ApiTokenAuthentication]
-    permission_classes = [IsAuthenticated, TokenHasScope]
+    authentication_classes = [ApiTokenAuthentication, JWTAuthentication, SessionAuthentication]
+    # permission_classes = [IsAuthenticated, TokenHasScope] # Removed to use global default
 
     def get(self, request):
         tokens = ApiToken.objects.filter(user=request.user)
@@ -51,7 +52,7 @@ class ApiTokenListView(APIView):
             user=request.user,
             name=serializer.validated_data['name'],
             token_hash=token_hash,
-            prefix=full_token[:8],
+            prefix=full_token[:16],
             permissions=serializer.validated_data.get('permissions', []),
             expires_at=serializer.validated_data.get('expires_at')
         )
@@ -66,13 +67,13 @@ class ApiTokenListView(APIView):
 
 class ApiTokenDetailView(APIView):
     """
-    處理對 API Tokens 的請求。
-    - GET: 列出當前登入使用者的所有 API Tokens。
-    - POST: 為當前使用者建立一個新的 API Token。
+    處理單一 API Token 的請求。
+    - GET: 取得指定 Token 的詳細資訊
+    - DELETE: 刪除指定的 Token
     """
     
-    authentication_classes = [SessionAuthentication, ApiTokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [ApiTokenAuthentication, JWTAuthentication, SessionAuthentication]
+    # permission_classes = [IsAuthenticated] # Removed to use global default
 
     def get_object(self, request, tokenId):
         try:
@@ -81,12 +82,22 @@ class ApiTokenDetailView(APIView):
             return None
 
     def get(self, request, tokenId):
-        # ❗ 此處為未實作的 GET /<id> 端點
-        return api_response(
-            None, 
-            "Token 詳情端點尚未實作",
-            status_code=status.HTTP_501_NOT_IMPLEMENTED
-        )
+        """
+        取得單一 Token 的詳細資訊
+        """
+        token = self.get_object(request, tokenId)
+        
+        if token is None:
+            return api_response(
+                None, 
+                "Token 不存在或權限不足", 
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+            
+        # 直接複用 ListSerializer 即可，它已經包含了所有我們需要的欄位
+        serializer = ApiTokenListSerializer(token)
+        
+        return api_response(serializer.data, "成功取得 Token 詳情")
 
     def delete(self, request, tokenId):
         token = self.get_object(request, tokenId)

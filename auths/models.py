@@ -4,6 +4,8 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 import uuid
+from datetime import timedelta
+from django.conf import settings
 
 User = get_user_model() 
 
@@ -143,3 +145,33 @@ class LoginLog(models.Model):
     
     def __str__(self):
         return f"[{self.created_at.strftime('%Y-%m-%d %H:%M')}] {self.username} - {self.get_login_status_display()} (IP: {self.ip_address})"
+    
+class EmailVerificationToken(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="email_verification_tokens",
+    )
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    used = models.BooleanField(default=False)
+
+    @property
+    def is_expired(self):
+        return self.created_at < timezone.now() - timedelta(hours=24)
+
+    def __str__(self):
+        return f"{self.user} - {self.token}"
+    
+class PasswordResetToken(models.Model):
+    """
+    一次性重設密碼 token
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="password_reset_tokens")
+    token = models.CharField(max_length=128, unique=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    used = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.user_id} {self.token[:8]}..."

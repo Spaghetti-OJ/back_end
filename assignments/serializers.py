@@ -1,21 +1,26 @@
 from typing import List, Optional
+
 from django.utils import timezone
 from rest_framework import serializers
-from datetime import datetime
-
+from datetime import datetime, timezone as dt_timezone
 
 from assignments.models import Assignments, Assignment_problems
 from courses.models import Courses
 from problems.models import Problems
-from rest_framework import serializers
+from submissions.models import Submission
+
 
 def to_dt_from_epoch(value: Optional[int]):
     if value in (None, "", 0):
         return None
     try:
-        return timezone.datetime.fromtimestamp(int(value), tz=timezone.get_current_timezone())
-    except Exception:
+        return datetime.fromtimestamp(
+            int(value),
+            tz=timezone.get_current_timezone(),
+        )
+    except (TypeError, ValueError, OSError):
         raise serializers.ValidationError("invalid timestamp")
+
 
 def to_epoch_from_dt(dt):
     if not dt:
@@ -23,15 +28,17 @@ def to_epoch_from_dt(dt):
     return int(dt.timestamp())
 
 
-# ---------- 建立 ----------
 class HomeworkCreateSerializer(serializers.Serializer):
     name = serializers.CharField(required=True)
     course_id = serializers.UUIDField()
     markdown = serializers.CharField(required=False, allow_blank=True, default="")
     start = serializers.IntegerField(required=False, allow_null=True)
     end = serializers.IntegerField(required=False, allow_null=True)
-    problem_ids = serializers.ListField(child=serializers.IntegerField(),
-                                        required=False, default=list)
+    problem_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
     scoreboard_status = serializers.IntegerField(required=False, allow_null=True)
     penalty = serializers.CharField(required=False, allow_blank=True, default="")
 
@@ -47,25 +54,33 @@ class HomeworkCreateSerializer(serializers.Serializer):
         if Assignments.objects.filter(course=course, title=attrs["name"]).exists():
             raise serializers.ValidationError("homework exists in this course")
 
-        # 時間轉換
+        # 時間轉換（epoch -> aware datetime in UTC）
         start = attrs.get("start")
         end = attrs.get("end")
-        attrs["_start_dt"] = datetime.fromtimestamp(start, tz=timezone.utc) if start is not None else None
-        attrs["_end_dt"]   = datetime.fromtimestamp(end,   tz=timezone.utc) if end   is not None else None
-        return attrs
 
+        attrs["_start_dt"] = (
+            datetime.fromtimestamp(start, tz=dt_timezone.utc)
+            if start is not None
+            else None
+        )
+        attrs["_end_dt"] = (
+            datetime.fromtimestamp(end, tz=dt_timezone.utc)
+            if end is not None
+            else None
+        )
+
+        return attrs
 # ---------- 詳情輸出 ----------
 class HomeworkDetailSerializer(serializers.Serializer):
-    # 指定的輸出格式
     message = serializers.CharField()
     name = serializers.CharField()
     start = serializers.IntegerField(allow_null=True)
     end = serializers.IntegerField(allow_null=True)
     problemIds = serializers.ListField(child=serializers.IntegerField())
     markdown = serializers.CharField(allow_blank=True)
-    studentStatus = serializers.CharField()
+    studentStatus = serializers.DictField()
     penalty = serializers.CharField(allow_blank=True)
-
+    
     @staticmethod
     def from_instance(hw: Assignments, problem_ids: List[int], is_teacher_or_ta: bool, penalty_text: str = ""):
         return {
@@ -165,3 +180,110 @@ class AddProblemsInSerializer(serializers.Serializer):
         if not data.get("problems") and not data.get("problem_ids"):
             raise serializers.ValidationError("problem_ids or problems is required")
         return data
+
+class HomeworkDeadlineSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    markdown = serializers.CharField(allow_blank=True)
+    course_id = serializers.UUIDField()
+    start = serializers.DateTimeField(allow_null=True)
+    end = serializers.DateTimeField(allow_null=True)
+    is_overdue = serializers.BooleanField()
+    server_time = serializers.DateTimeField()
+    
+class HomeworkProblemStatsSerializer(serializers.Serializer):
+    problem_id = serializers.IntegerField()
+    order_index = serializers.IntegerField()
+    weight = serializers.DecimalField(max_digits=5, decimal_places=2)
+    title = serializers.CharField()
+
+    participant_count = serializers.IntegerField()
+    total_submission_count = serializers.IntegerField()
+    avg_attempts_per_user = serializers.FloatField()
+    avg_score = serializers.FloatField()
+
+    ac_user_count = serializers.IntegerField()
+    partial_user_count = serializers.IntegerField()
+    unsolved_user_count = serializers.IntegerField()
+
+    first_ac_time = serializers.DateTimeField(allow_null=True)
+
+
+class HomeworkStatsSerializer(serializers.Serializer):
+    homework_id = serializers.IntegerField()
+    course_id = serializers.UUIDField()
+
+    title = serializers.CharField()
+    description = serializers.CharField(allow_blank=True, allow_null=True)
+    start_time = serializers.DateTimeField(allow_null=True)
+    due_time = serializers.DateTimeField(allow_null=True)
+    problem_count = serializers.IntegerField()
+
+    overview = serializers.DictField()
+    problems = HomeworkProblemStatsSerializer(many=True)
+
+class ScoreboardProblemSerializer(serializers.Serializer):
+    problem_id = serializers.IntegerField()
+    best_score = serializers.IntegerField()
+    max_possible_score = serializers.IntegerField()
+    solve_status = serializers.CharField()
+
+class ScoreboardRowSerializer(serializers.Serializer):
+    rank = serializers.IntegerField()
+    user_id = serializers.UUIDField()
+    username = serializers.CharField()
+    real_name = serializers.CharField()
+
+    total_score = serializers.IntegerField()
+    max_total_score = serializers.IntegerField()
+    is_late = serializers.BooleanField()
+
+    first_ac_time = serializers.DateTimeField(allow_null=True)
+    last_submission_time = serializers.DateTimeField(allow_null=True)
+
+    problems = ScoreboardProblemSerializer(many=True)
+
+class HomeworkScoreboardSerializer(serializers.Serializer):
+    assignment_id = serializers.IntegerField()
+    title = serializers.CharField()
+    course_id = serializers.UUIDField()
+    items = ScoreboardRowSerializer(many=True)
+
+class HomeworkSubmissionListItemSerializer(serializers.ModelSerializer):
+    """
+    GET /homework/{id}/submissions 用的單筆 submission 輸出格式
+    """
+
+    # 跟 Table Users 對應：Users.id / Users.username
+    user_id = serializers.UUIDField(source="user.id", read_only=True)
+    username = serializers.CharField(source="user.username", read_only=True)
+
+    # 額外的 display 欄位
+    language = serializers.CharField(source="get_language_type_display", read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+
+    class Meta:
+        model = Submission
+        fields = [
+            "id",
+            "problem_id",
+            "user_id",
+            "language_type",
+            "status",
+            "score",
+            "max_score",
+            "execution_time",
+            "memory_usage",
+            "is_late",
+            "penalty_applied",
+            "attempt_number",
+            "judge_server",
+            "created_at",
+            "judged_at",
+
+            # 額外資訊
+            "username",
+            "language",
+            "status_display",
+        ]
+        read_only_fields = fields

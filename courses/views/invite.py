@@ -1,5 +1,5 @@
 from django.db import IntegrityError
-from rest_framework import permissions, status
+from rest_framework import status
 from rest_framework.views import APIView
 
 from ..common.responses import api_response
@@ -13,8 +13,6 @@ class CourseInviteCodeView(APIView):
      - POST /course/<course_id>/invite-code/ 產生課程邀請代碼（教師/管理員）
      - DELETE /course/<course_id>/invite-code/<code> 刪除課程邀請代碼（教師/管理員）
     """
-
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, course_id):
         course = self._get_course(course_id)

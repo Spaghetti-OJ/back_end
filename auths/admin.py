@@ -73,3 +73,15 @@ class UserActivityAdmin(admin.ModelAdmin):
     )
     
     search_fields = ('user__username', 'description', 'ip_address', 'object_id')
+
+    readonly_fields = (
+        'user', 'activity_type', 'content_type', 'object_id',
+        'description', 'ip_address', 'user_agent', 'metadata',
+        'success', 'created_at'
+    )
+    
+    def has_add_permission(self, request):
+        return False
+    
+    def has_change_permission(self, request, obj=None):
+        return False

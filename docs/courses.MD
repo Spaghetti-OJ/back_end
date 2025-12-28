@@ -111,15 +111,9 @@ curl http://127.0.0.1:8000/course/42/ \
 
 ## 課程邀請加入 API
 
-**路徑**：`POST /course/<course_id>/join`
+**路徑**：`POST /course/<joinCode>/join`
 
-**說明**：學生以邀請代碼加入課程。僅學生身分可使用，代碼不分大小寫。
-
-**請求格式 (JSON)**
-
-| 欄位名    | 型別   | 必填 | 說明                 |
-| --------- | ------ | ---- | -------------------- |
-| `joinCode` | string | ✅   | 7 碼英數邀請代碼 |
+**說明**：學生以邀請代碼加入課程（代碼置於路徑中，大小寫不敏感）。僅學生身分可使用；此請求不需要 body。
 
 **成功回應 (200 OK)**：
 
@@ -133,17 +127,14 @@ curl http://127.0.0.1:8000/course/42/ \
 | -------------------- | ---- | ------------------------------------------ |
 | 未登入               | 401  | `{ "detail": "Authentication credentials were not provided." }` |
 | 非學生身分           | 403  | `{ "message": "Forbidden." }`              |
-| 課程不存在           | 404  | `{ "message": "Course not found." }`       |
 | 邀請代碼錯誤/失效    | 400  | `{ "message": "Invalid join code." }`      |
 | 已在課程內           | 400  | `{ "message": "You are already in this course." }` |
 | 已達人數上限         | 403  | `{ "message": "Course is full." }`         |
 
 **cURL 測試**：
 ```bash
-curl -X POST http://127.0.0.1:8000/course/42/join/ \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer <access>" \
-    -d '{"joinCode": "ABC1234"}'
+curl -X POST http://127.0.0.1:8000/course/ABC1234/join/ \
+    -H "Authorization: Bearer <access>"
 ```
 
 ## 課程邀請代碼產生 API
@@ -259,22 +250,22 @@ curl -X POST http://127.0.0.1:8000/course/42/assign-ta/ \
 
 **路徑**：`PUT /course/<course_id>/`
 
-**說明**：同步指定課程的助教名單，並可移除特定學生。僅課程教師本人或系統管理員可執行；教師只能操作自己的課程。
+**說明**：批次調整課程學生（移除與加入）。僅課程教師本人或系統管理員可執行；教師只能操作自己的課程。
 
 **路徑/查詢參數**
 
 | 參數名      | 來源 | 型別 | 必填 | 說明                     |
 | ----------- | ---- | ---- | ---- | ------------------------ |
 | `course_id` | URL  | int | ✅   | 課程 ID（整數）                  |
-| `student`   | URL  | UUID | ⭕   | 要移除的學生 ID（可選） |
 
 **請求格式 (JSON)**
 
 | 欄位名 | 型別 | 必填 | 說明                                 |
 | ------ | ---- | ---- | ------------------------------------ |
-| `TAs`  | list | ⭕   | 要保留的助教帳號列表；缺省表示不異動 |
+| `remove` | list | ❌   | 要移除的學生帳號（username）列表 |
+| `new`    | list | ❌   | 要加入課程的學生帳號（username）列表 |
 
-> 備註：`TAs` 給空陣列 `[]` 代表移除所有助教；若提供 `student` 查詢參數，會刪除該學生在課程中的成員紀錄。
+> 備註：`remove`、`new` 皆可省略或給空陣列，代表該方向不異動。
 
 **成功回應 (200 OK)**
 
@@ -290,17 +281,20 @@ curl -X POST http://127.0.0.1:8000/course/42/assign-ta/ \
 | 權限不足（非教師/管理員）      | 403  | `{ "message": "Forbidden." }`            |
 | 非授課教師操作他人課程         | 403  | `{ "message": "You are not in this course." }` |
 | 課程不存在                     | 404  | `{ "message": "Course not found." }`     |
-| 指定助教帳號不存在             | 404  | `{ "message": "User: <username> not found." }` |
 | 指定學生不存在或不在該課程內   | 404  | `{ "message": "Student not found." }`    |
+| 要加入者不是學生               | 400  | `{ "message": "User is not a student." }` |
+| 學生已在課程內                 | 400  | `{ "message": "Student already in this course." }` |
+| 已達人數上限                   | 403  | `{ "message": "Course is full." }`       |
 
 **cURL 測試**
 
 ```bash
-curl -X PUT "http://127.0.0.1:8000/course/<course_id>/?student=<student_id>" \
+curl -X PUT "http://127.0.0.1:8000/course/<course_id>/" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer <access>" \
     -d '{
-    "TAs": ["ta_user_1", "ta_user_2"]
+    "remove": ["<username_to_remove>"],
+    "new": ["<username_to_add_1>", "<username_to_add_2>"]
     }'
 ```
 
@@ -312,6 +306,13 @@ curl -X PUT "http://127.0.0.1:8000/course/<course_id>/?student=<student_id>" \
 
 **說明**：以 CSV 檔批次匯入學生帳號並加入指定課程。僅管理員或授課教師可操作；教師只能匯入自己的課程；檔案大小上限 5MB。
 
+**請求格式 (multipart/form-data)**：
+
+| 欄位    | 必填 | 說明                                                                 |
+| ------- | ---- | -------------------------------------------------------------------- |
+| `file`  | ✅   | 上傳的 CSV 檔案                                                      |
+| `force` | ❌   | 布林，`1/true` 時若帳號已存在會覆寫 email/real_name/student_id，預設為不更新 |
+
 **CSV 欄位**
 
 | 欄位名       | 必填 | 說明                                               |
@@ -319,8 +320,8 @@ curl -X PUT "http://127.0.0.1:8000/course/<course_id>/?student=<student_id>" \
 | `username`   | ✅   | 學生帳號（全域唯一）                               |
 | `email`      | ✅   | 學生 Email（全域唯一）                             |
 | `real_name`  | ✅   | 學生姓名                                           |
-| `student_id` | ⭕   | 學號，若提供會寫入 `UserProfile.student_id`         |
-| `password`   | ⭕   | 初始密碼，未填時會自動產生隨機密碼                 |
+| `student_id` | ❌   | 學號，若提供會寫入 `UserProfile.student_id`         |
+| `password`   | ❌   | 初始密碼，未填時會自動產生隨機密碼                 |
 
 **成功回應 (200 OK)**：
 
@@ -363,7 +364,8 @@ curl -X PUT "http://127.0.0.1:8000/course/<course_id>/?student=<student_id>" \
 ```bash
 curl -X POST http://127.0.0.1:8000/course/42/import-csv/ \
     -H "Authorization: Bearer <access>" \
-    -F "file=@./students.csv"
+    -F "file=@./students.csv" \
+    -F "force=1"
 ```
 
 ---
@@ -526,6 +528,8 @@ curl http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
     -H "Authorization: Bearer <access>"
 ```
 
+## 學生成績新增 API
+
 **路徑**：`POST /course/<course_id>/grade/<student>`
 
 **說明**：新增指定學生的成績項目。需登入且必須為該課程的教師、助教或管理員（且為課程成員）。
@@ -567,6 +571,8 @@ curl -X POST http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
     }'
 ```
 
+## 學生成績修改 API
+
 **路徑**：`PUT /course/<course_id>/grade/<student>`
 
 **說明**：修改指定學生的成績項目。需登入且必須為該課程的教師、助教或管理員（並為課程成員）。若提供 `new_title`，會以其覆蓋原標題；若未提供則沿用原標題。
@@ -576,7 +582,7 @@ curl -X POST http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
 | 欄位名 | 型別 | 必填 | 說明 |
 | --- | --- | --- | --- |
 | `title` | string | ✅ | 要修改的成績項目原標題 |
-| `new_title` | string | ⭕ | 新標題，若缺省則維持原標題 |
+| `new_title` | string | ❌ | 新標題，若缺省則維持原標題 |
 | `content` | string | ✅ | 成績說明，可為空字串 |
 | `score` | number / string | ✅ | 分數，可為數字或字母（例如 `92`、`"A"`） |
 
@@ -610,6 +616,8 @@ curl -X PUT http://127.0.0.1:8000/course/<course_id>/grade/<student>/ \
         "score": 85
     }'
 ```
+
+## 學生成績刪除 API
 
 **路徑**：`DELETE /course/<course_id>/grade/<student>`
 
@@ -740,8 +748,8 @@ curl -X DELETE http://127.0.0.1:8000/course/ \
 | 參數名   | 型別   | 必填 | 說明                                |
 | -------- | ------ | ---- | ----------------------------------- |
 | `pids`   | string | ✅   | 題目 ID 逗號串，如 `1,2,3`            |
-| `start`  | float  | ⭕   | 開始時間戳（秒），過濾 >= 該時間的提交 |
-| `end`    | float  | ⭕   | 結束時間戳（秒），過濾 <= 該時間的提交 |
+| `start`  | float  | ❌   | 開始時間戳（秒），過濾 >= 該時間的提交 |
+| `end`    | float  | ❌   | 結束時間戳（秒），過濾 <= 該時間的提交 |
 
 **成功回應 (200 OK)**：
 

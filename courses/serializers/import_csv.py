@@ -14,6 +14,12 @@ class CourseImportCSVSerializer(serializers.Serializer):
         help_text="含有學生資料的 CSV 檔案",
     )
 
+    force = serializers.BooleanField(
+        required=False,
+        default=False,
+        help_text="是否強制更新已存在學生資訊",
+    )
+
     def validate_file(self, value):
         filename = (getattr(value, "name", None) or "").lower()
         if not filename.endswith(".csv"):

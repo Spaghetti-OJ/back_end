@@ -1,5 +1,5 @@
 from django.db.models import Q
-from rest_framework import generics, permissions, status
+from rest_framework import generics, status
 from rest_framework.exceptions import ErrorDetail
 from ..common.responses import api_response
 
@@ -20,8 +20,6 @@ class CourseListCreateView(generics.GenericAPIView):
      - DELETE /course/ 刪除課程（擁有者/管理員）
     """
 
-    permission_classes = [permissions.IsAuthenticated]
-
     def get_serializer_class(self):
         if self.request.method == "GET":
             return CourseListSerializer
@@ -31,6 +29,8 @@ class CourseListCreateView(generics.GenericAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        if getattr(user, "identity", None) == "admin":
+            return Courses.objects.select_related("teacher_id").order_by("-created_at")
         return (
             Courses.objects.select_related("teacher_id")
             .filter(Q(teacher_id=user) | Q(members__user_id=user))
@@ -73,6 +73,13 @@ class CourseListCreateView(generics.GenericAPIView):
             )
 
         course = serializer.save()
+
+        Course_members.objects.get_or_create(
+            course_id=course,
+            user_id=teacher,
+            defaults={"role": Course_members.Role.TEACHER},
+        )
+        
         return api_response(
             data={"course": {"id": course.id}},
             message="Success.",

@@ -1,8 +1,5 @@
-# api_tokens/services.py
-
 import secrets
 import hashlib
-
 
 from django.utils.crypto import constant_time_compare, pbkdf2
 

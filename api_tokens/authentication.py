@@ -28,6 +28,11 @@ class ApiTokenAuthentication(BaseAuthentication):
         except IndexError:
             raise AuthenticationFailed('Token 格式錯誤')
 
+        # 2.5. 檢查是否為 API Token 格式
+        # 如果不是 noj_pat_ 開頭，可能是 JWT token，讓其他認證類別處理
+        if not raw_token.startswith('noj_pat_'):
+            return None
+
         # 3. 對 Token 進行雜湊 (因為資料庫存的是 Hash)
         # 注意：這裡必須跟當初生成 Token 時的雜湊演算法一致 (SHA-256)
         hashed_token = hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
@@ -45,12 +50,21 @@ class ApiTokenAuthentication(BaseAuthentication):
             raise AuthenticationFailed('API Token 已被撤銷')
 
         # 6. (RFC 要求) 更新使用統計
-        # 只有在驗證成功時才更新
-        token.last_used_at = timezone.now()
+        # 使用 F() 表達式進行原子性更新，避免競態條件
+        from django.db.models import F
+        
         # 這裡我們需要判斷 request 的 IP
-        token.last_used_ip = self.get_client_ip(request)
-        token.usage_count += 1
-        token.save()
+        client_ip = self.get_client_ip(request)
+        
+        ApiToken.objects.filter(id=token.id).update(
+            last_used_at=timezone.now(),
+            last_used_ip=client_ip,
+            usage_count=F('usage_count') + 1
+        )
+        
+        # 從資料庫重新載入，確保記憶體中的物件與 DB 狀態一致
+        token.refresh_from_db(fields=['last_used_at', 'last_used_ip', 'usage_count'])
+        # token.save()  <-- 不需要再 save，因為 update 已經寫入 DB
 
         # 7. 認證成功！回傳 (User, Auth) tuple
         # request.user 會變成 token.user

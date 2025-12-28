@@ -341,7 +341,7 @@ curl -i -X POST "http://127.0.0.1:8000/auth/session/revoke/" \
 **路徑**：`GET /auth/me/`
 
 **說明**：
-使用目前登入狀態（Authorization Header 帶入 `Bearer <access>`）取得當前使用者的基本資料，包含 `user_id`、`username`、`email`、`role`。
+使用目前登入狀態（Authorization Header 帶入 `Bearer <access>`）取得當前使用者的基本資料，包含 `user_id`、`username`、`email`、`role`、`email_verified`，以及使用者可管理的課程清單 `access_course`。
 
 ### 請求格式
 
@@ -373,21 +373,35 @@ Authorization: Bearer <ACCESS_TOKEN>
     "user_id": "f07e9f90-89c3-49a6-b241-2fe8f73ff80b",
     "username": "momo",
     "email": "momo@example.com",
-    "role": "student"
+    "role": "student",
+    "email_verified": true,
+    "access_course": [1, 3, 8]
   }
 }
 ```
 
-各欄位說明：
+---
 
-| 路徑              | 型別     | 說明                 |
-| --------------- | ------ | ------------------ |
-| `status`        | string | 狀態字串，成功固定為 `"ok"`  |
-| `message`       | string | 描述訊息               |
-| `data.user_id`   | string | 使用者在系統中的唯一 ID      |
-| `data.username` | string | 使用者帳號              |
-| `data.email`    | string | 使用者註冊 email        |
-| `data.role`     | string | 使用者角色（如：`student`） |
+### 各欄位說明
+
+| 路徑                    | 型別     | 說明                                   |
+| --------------------- | ------ | ------------------------------------ |
+| `status`              | string | 狀態字串，成功固定為 `"ok"`                    |
+| `message`             | string | 描述訊息                                 |
+| `data.user_id`        | string | 使用者在系統中的唯一 ID                        |
+| `data.username`       | string | 使用者帳號                                |
+| `data.email`          | string | 使用者註冊 email                          |
+| `data.role`           | string | 使用者角色（如：`student`、`teacher`、`admin`） |
+| `data.email_verified` | bool   | 是否已完成信箱驗證                            |
+| `data.access_course`  | int[]  | 使用者具有管理權限（Teacher / TA）的課程 ID 清單     |
+
+---
+
+### 權限與說明補充
+
+* `access_course` 會回傳目前使用者 **可管理的課程**（角色為 Teacher 或 TA）。
+* 若使用者僅為課程學生，則此欄位會回傳空陣列 `[]`。
+* 建立課程的教師會自動被加入該課程的 `Course_members`，並具有 `teacher` 權限。
 
 ---
 
@@ -395,20 +409,20 @@ Authorization: Bearer <ACCESS_TOKEN>
 
 * 未帶 token 或 token 無效（401）：
 
-  ```json
-  {
-    "detail": "Authentication credentials were not provided."
-  }
-  ```
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
 
-  或
+或
 
-  ```json
-  {
-    "detail": "Given token not valid for any token type",
-    "code": "token_not_valid"
-  }
-  ```
+```json
+{
+  "detail": "Given token not valid for any token type",
+  "code": "token_not_valid"
+}
+```
 
 ---
 
@@ -421,9 +435,10 @@ curl -X GET "http://127.0.0.1:8000/auth/me/" \
 
 > 使用說明：
 >
-> * 建議登入後（呼叫 `POST /auth/session/` 拿到 access）就立刻呼叫一次 `GET /auth/me/`，
->   將回傳的 `user_id`、`username`、`email`、`role` 存到前端的全域狀態（例如 Redux / Zustand / Vuex），作為之後顯示使用者名稱或判斷角色權限之用。
-> * 若收到 401，請先確認 access token 是否過期，可搭配 `POST /auth/refresh/` 重新取得新的 access。
+> * 建議登入後（呼叫 `POST /auth/session/` 取得 access token）立刻呼叫一次 `GET /auth/me/`，
+>   將回傳的 `user_id`、`username`、`email`、`role`、`email_verified` 與 `access_course`
+>   存入前端全域狀態（如 Redux / Zustand / Vuex），作為後續顯示使用者資訊與判斷課程管理權限的依據。
+> * 若收到 401，請確認 access token 是否過期，可搭配 `POST /auth/refresh/` 重新取得新的 access token。
 
 ---
 
@@ -477,6 +492,7 @@ curl -X GET "http://127.0.0.1:8000/auth/me/" \
 | student_id   | string | 學號（若有）                           |
 | bio | string | 個人簡介                             |
 | avatar       | string | 頭像 url                |
+| email_verified   | bool | 是否驗證過信箱 |
 
 ---
 
@@ -612,7 +628,7 @@ curl -i -X GET "http://127.0.0.1:8000/profile/momo/" \
 可修改欄位：
 
 * `real_name`：真實姓名（User）
-* `email`：Email（User）
+* `email`：Email（User），修改 Email 後會變成未驗證狀態
 * `student_id`：學號，可空（UserProfile）
 * `bio`：個人簡介，可空（UserProfile）
 * `avatar`：頭像圖片檔案，可選（UserProfile）
@@ -622,9 +638,9 @@ curl -i -X GET "http://127.0.0.1:8000/profile/momo/" \
 
 ---
 
-## 請求格式
+### 請求格式
 
-### JSON（不含檔案）
+#### JSON（不含檔案）
 
 ```
 POST /profile/
@@ -641,7 +657,7 @@ Authorization: Bearer <ACCESS_TOKEN>
 }
 ```
 
-### multipart/form-data（含 avatar）
+#### multipart/form-data（含 avatar）
 
 ```
 POST /profile/
@@ -657,7 +673,7 @@ Authorization: Bearer <ACCESS_TOKEN>
 
 ---
 
-## 成功回應（200）
+### 成功回應（200）
 
 ```json
 {
@@ -678,7 +694,7 @@ Authorization: Bearer <ACCESS_TOKEN>
 
 ---
 
-## 失敗回應（400）
+### 失敗回應（400）
 
 ```json
 {
@@ -693,9 +709,9 @@ Authorization: Bearer <ACCESS_TOKEN>
 
 ---
 
-## curl 範例
+### curl 範例
 
-### 修改文字欄位（JSON）
+#### 修改文字欄位（JSON）
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/profile/" \
@@ -708,7 +724,7 @@ curl -X POST "http://127.0.0.1:8000/profile/" \
   }'
 ```
 
-### 上傳頭像（multipart/form-data）
+#### 上傳頭像（multipart/form-data）
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/profile/" \
@@ -717,3 +733,700 @@ curl -X POST "http://127.0.0.1:8000/profile/" \
   -F "bio=更新過的自我介紹"
 ```
 ---
+
+## POST /auth/check/<item>/ - 檢查使用者名稱 / 電子郵件可用性
+
+**說明**：
+此 API 用於檢查使用者名稱或電子郵件是否已被使用。主要應用場景為「已登入使用者修改帳號資料（例如變更 Email）」時，確認新填寫的值是否可使用。本端點需要登入（JWT 驗證）。
+
+---
+
+### HTTP 方法與路徑
+
+`POST /auth/check/<item>/`
+
+* `item`（Path 參數）：
+
+  * `username`：檢查使用者名稱
+  * `email`：檢查電子郵件
+  * 其他值 → 回傳 400
+
+---
+
+### 驗證方式
+
+需要登入（JWT Access Token）。
+
+Header：
+
+```http
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+---
+
+### Request Body
+
+#### 檢查 Username
+
+```json
+{
+  "username": "momo"
+}
+```
+
+#### 檢查 Email
+
+```json
+{
+  "email": "momo@example.com"
+}
+```
+
+> 檢查 email 時，後端會排除目前登入使用者本身的 email，避免誤判為已被使用。
+
+---
+
+### cURL 範例
+
+#### 1. 檢查使用者名稱
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/check/username/ \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "momo"}'
+```
+
+#### 2. 檢查電子郵件
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/check/email/ \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "new_email@example.com"}'
+```
+
+---
+
+### 成功回應（200 OK）
+
+#### 可使用
+
+```json
+{
+  "data": { "valid": 1 },
+  "message": "Email Can Be Used",
+  "status": "ok"
+}
+```
+
+#### 已被使用
+
+```json
+{
+  "data": { "valid": 0 },
+  "message": "Email Has Been Used",
+  "status": "ok"
+}
+```
+
+---
+
+### 錯誤回應
+
+#### 1. item 無效（例如 `/auth/check/abc/`）
+
+```json
+{
+  "data": null,
+  "message": "Invalid Checking Type",
+  "status": "error"
+}
+```
+
+#### 2. 缺少欄位
+
+```json
+{
+  "data": null,
+  "message": "Missing email",
+  "status": "error"
+}
+```
+
+#### 3. 未登入
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+HTTP 401 Unauthorized
+
+---
+
+### 使用時機
+
+* 修改帳號資料（例如變更 Email）前，先用此 API 檢查新 email 是否可用。
+* 若 email `valid: 1`，前端即可讓使用者送出「變更 Email」並進行後續驗證流程。
+
+---
+
+## POST /auth/send-email/ - 寄送驗證信
+
+**說明**：
+此 API 會寄出一封「Email 驗證信」到目前登入使用者帳號所綁定的電子郵件信箱。
+主要使用情境：使用者已註冊並登入後，於個人資料頁面按下「寄出驗證信」按鈕。
+
+---
+
+### HTTP 方法與路徑
+
+`POST /auth/send-email/`
+
+---
+
+### 驗證方式
+
+此端點需要登入（JWT Access Token）。
+
+請在 Header 中附上：
+
+```http
+Authorization: Bearer <ACCESS_TOKEN>
+Content-Type: application/json
+```
+
+未提供或 Token 無效時，將回傳 `401 Unauthorized`。
+
+---
+
+### Request Body
+
+此端點 **不需要**任何欄位，Body 可以為空或傳入空物件：
+
+```json
+{}
+```
+
+---
+
+### cURL 範例
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/send-email/ \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+---
+
+### 成功回應（200 OK）
+
+```json
+{
+  "data": {
+    "email": "user@example.com"
+  },
+  "message": "Verification Email Sent",
+  "status": "ok"
+}
+```
+
+* `data.email`：此次寄出驗證信的目標信箱
+
+---
+
+### 錯誤回應（範例）
+
+#### 1. 尚未設定 Email
+
+當目前登入使用者的帳號沒有綁定 email 時：
+
+```json
+{
+  "data": null,
+  "message": "Email Not Set",
+  "status": "error"
+}
+```
+
+HTTP 狀態碼：`400 Bad Request`
+
+---
+
+#### 2. Email 已經驗證過
+
+若使用者的信箱已經完成驗證：
+
+```json
+{
+  "data": null,
+  "message": "Email Already Verified",
+  "status": "error"
+}
+```
+
+HTTP 狀態碼：`400 Bad Request`
+
+> 若你希望「已驗證也可以重寄」，可調整後端邏輯，改為仍然寄信但 message 不同。
+
+---
+
+#### 3. 未登入
+
+未附上合法 JWT：
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+HTTP 狀態碼：`401 Unauthorized`
+
+---
+
+### 使用情境建議
+
+* 使用者登入後進入「個人資料 / 帳號設定」頁面：
+
+  * 若後端回傳 `email_verified: false`，前端顯示警示區塊與「寄出驗證信」按鈕。
+  * 點擊按鈕 → 呼叫 `POST /auth/send-email/`。
+  * 提示使用者「驗證信已寄出，請到信箱收信」。
+
+---
+
+## POST /auth/verify-email/ - 驗證 Email Token
+
+**說明**：
+此 API 用於驗證使用者從 Email 中點擊的驗證連結所帶的 token。
+驗證成功後，會將該使用者的信箱標記為已驗證。
+
+---
+
+### HTTP 方法與路徑
+
+`POST /auth/verify-email/`
+
+---
+
+### 驗證方式
+
+此端點 **不需要登入**。
+使用情境通常是使用者從信箱點擊連結，瀏覽器前端取得 URL 中的 `token` 後呼叫此 API。
+
+---
+
+### Request Body（JSON）
+
+```json
+{
+  "token": "<從信件連結取得的 token>"
+}
+```
+
+* `token`：Email 中驗證連結所附帶的 token 字串。
+
+---
+
+### cURL 範例
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/verify-email/ \
+  -H "Content-Type: application/json" \
+  -d '{"token": "96009ee2e6ed4e9d893bf8da27e2dcab"}'
+```
+
+> 上述 token 僅為範例，實際值請從實際收到的 Email 連結中取得。
+
+---
+
+### 成功回應（200 OK）
+
+驗證成功時，會回傳該使用者的基本資訊：
+
+```json
+{
+  "data": {
+    "email": "user@example.com",
+    "username": "momo",
+    "user_id": "8e7c2c5a-1234-5678-9abc-def012345678"
+  },
+  "message": "Email Verified",
+  "status": "ok"
+}
+```
+
+* `data.email`：已驗證的電子郵件
+* `data.username`：使用者帳號名稱
+* `data.user_id`：使用者主鍵 ID（若為 UUID，將會是字串格式）
+
+---
+
+### 錯誤回應（範例）
+
+#### 1. 缺少 token
+
+```json
+{
+  "data": null,
+  "message": "Missing token",
+  "status": "error"
+}
+```
+
+HTTP 狀態碼：`400 Bad Request`
+
+---
+
+#### 2. token 無效
+
+當找不到對應的 `EmailVerificationToken` 紀錄時：
+
+```json
+{
+  "data": null,
+  "message": "Invalid Token",
+  "status": "error"
+}
+```
+
+HTTP 狀態碼：`400 Bad Request`
+
+---
+
+#### 3. token 已被使用
+
+同一個 token 只能使用一次，若重複使用：
+
+```json
+{
+  "data": null,
+  "message": "Token Already Used",
+  "status": "error"
+}
+```
+
+HTTP 狀態碼：`400 Bad Request`
+
+---
+
+#### 4. token 已過期
+
+若 token 超過有效期限（例如 24 小時）後才使用：
+
+```json
+{
+  "data": null,
+  "message": "Token Expired",
+  "status": "error"
+}
+```
+
+HTTP 狀態碼：`400 Bad Request`
+
+---
+
+### 使用情境建議
+
+1. 後端寄出驗證信 (`POST /auth/send-email/`)，Email 內容包含：
+
+   ```text
+   http://localhost:5173/verify-email?token=<TOKEN>
+   ```
+
+2. 前端的 `/verify-email` 頁面：
+
+   * 從網址列取得 `token`（query string）
+   * 呼叫 `POST /auth/verify-email/` 並將 `token` 放在 JSON body
+   * 根據回傳結果顯示：
+
+     * 驗證成功畫面（例如：顯示使用者名稱與提示可以關閉視窗 / 回到主頁）
+     * 或錯誤提示（連結已失效、Token 無效等）
+
+3. 之後其他需要「已驗證信箱」的功能（例如重設密碼、寄通知信等），即可依據 `email_verified` 欄位進行權限控制。
+
+---
+
+## POST /auth/change-password/
+
+**說明**：
+已登入使用者可以透過此 API 驗證舊密碼，並將密碼更新為新的密碼。
+
+需使用 JWT Access Token（放在 `Authorization: Bearer <token>`）完成驗證。
+
+---
+
+### 請求格式（JSON）
+
+| 欄位名            | 型別     |  必填 | 說明  |
+| -------------- | ------ | :-: | --- |
+| `old_password` | string |  ✅  | 舊密碼 |
+| `new_password` | string |  ✅  | 新密碼 |
+
+---
+
+### 請求範例（Curl）
+
+```bash
+curl -X POST "http://127.0.0.1:8000/auth/change-password/" \
+  -H "Authorization: Bearer <你的 access token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "old_password": "oldpass123",
+    "new_password": "newpass456"
+  }'
+```
+
+成功後會回傳：
+
+```json
+{
+  "data": null,
+  "message": "Password changed successfully.",
+  "status": "ok"
+}
+```
+
+---
+
+### 可能的錯誤回應
+
+### 1. 未登入 / Token 無效
+
+**HTTP 401 Unauthorized**
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+### 2. 舊密碼錯誤
+
+**HTTP 400 Bad Request**
+
+```json
+{
+  "data": null,
+  "message": "Old password is incorrect.",
+  "status": "error"
+}
+```
+
+### 3. 新密碼不符合密碼強度檢查
+
+**HTTP 400 Bad Request**
+
+```json
+{
+  "data": {
+    "new_password": [
+      "This password is too short. It must contain at least 8 characters."
+    ]
+  },
+  "message": "Invalid password.",
+  "status": "error"
+}
+```
+
+---
+
+### 備註
+
+* 系統會使用 Django 的內建 password validators 檢查新密碼是否符合規範。
+* 舊密碼必須正確，否則不允許更新。
+* 密碼更新後建議讓前端刷新 Token（若業務需要）。
+
+--
+
+## POST /auth/forgot-password/
+
+**說明**：
+使用者需同時輸入正確的 `username` 與 `email`。若兩者皆正確，且該帳號已綁定並**完成信箱驗證**，系統將寄出一封「重設密碼」信件至該帳號的信箱。信件中包含一組一次性且有時效性的重設密碼連結（含 token）。
+
+> 典型使用時機：登入頁面點選「忘記密碼」後呼叫。
+
+### 權限
+
+* 不需登入（`AllowAny`）
+
+### Request
+
+* **Method**：`POST`
+* **Path**：`/auth/forgot-password/`
+* **Headers**：
+
+  * `Content-Type: application/json`
+
+#### Body（JSON）
+
+| 欄位         | 型別     |  必填 | 說明           |
+| ---------- | ------ | :-: | ------------ |
+| `username` | string |  ✅  | 使用者帳號        |
+| `email`    | string |  ✅  | 與帳號綁定的電子郵件信箱 |
+
+#### 範例
+
+```json
+{
+  "username": "momomo",
+  "email": "momomo@example.com"
+}
+```
+
+---
+
+### Success Response
+
+* **Status**：`200 OK`
+
+```json
+{
+  "data": null,
+  "message": "已寄出重設密碼信，請至驗證信箱查收。",
+  "status": "ok"
+}
+```
+
+---
+
+### Error Responses
+
+#### 帳號或信箱不正確
+
+* **Status**：`400 Bad Request`
+
+```json
+{
+  "data": null,
+  "message": "帳號或信箱不正確。",
+  "status": "error"
+}
+```
+
+#### 尚未綁定或尚未驗證信箱
+
+* **Status**：`400 Bad Request`
+
+```json
+{
+  "data": null,
+  "message": "此帳號尚未綁定或驗證信箱，無法使用密碼恢復。",
+  "status": "error"
+}
+```
+
+---
+
+### Curl 範例
+
+```bash
+curl -X POST "http://127.0.0.1:8000/auth/forgot-password/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "momomo",
+    "email": "momomo@example.com"
+  }'
+```
+
+---
+
+### 寄信內容（概念）
+
+信件中會包含一組用於重設密碼的連結，格式通常如下：
+
+* `http://localhost:3000/reset-password?token=<TOKEN>`
+
+其中 `<TOKEN>` 為一次性且具有效期限的重設密碼 token，僅能使用一次。
+
+---
+
+## POST /auth/reset-password/
+
+**說明**：
+使用者從信件連結取得 `token` 後，提交 `token` 與 `new_password` 以完成重設密碼。此 API 會驗證 token 是否存在、是否過期、是否已使用，通過後將使用者密碼更新為新密碼，並將 token 標記為已使用。
+
+### 權限
+
+* 不需登入（`AllowAny`）
+
+### Request
+
+* **Method**：`POST`
+* **Path**：`/auth/reset-password/`
+* **Headers**：
+
+  * `Content-Type: application/json`
+
+#### Body（JSON）
+
+| 欄位             | 型別     |  必填 | 說明              |
+| -------------- | ------ | :-: | --------------- |
+| `token`        | string |  ✅  | 信件連結中的一次性 token |
+| `new_password` | string |  ✅  | 新密碼（預設最少 8 碼）   |
+
+#### 範例
+
+```json
+{ "token": "<TOKEN>", "new_password": "NewPassword123!" }
+```
+
+### Success Response
+
+* **Status**：`200 OK`
+
+```json
+{ "data": null, "message": "密碼已成功重設。", "status": "ok" }
+```
+
+### Error Responses
+
+#### Token 無效
+
+* **Status**：`400 Bad Request`
+
+```json
+{ "data": null, "message": "無效的重設連結。", "status": "error" }
+```
+
+#### Token 已使用
+
+* **Status**：`400 Bad Request`
+
+```json
+{ "data": null, "message": "此重設連結已被使用。", "status": "error" }
+```
+
+#### Token 已過期
+
+* **Status**：`400 Bad Request`
+
+```json
+{ "data": null, "message": "此重設連結已過期。", "status": "error" }
+```
+
+### Curl 範例
+
+> 先從信件連結取得 `token=` 後面的值，再帶入以下 curl。
+
+```bash
+curl -X POST "http://127.0.0.1:8000/auth/reset-password/" \
+  -H "Content-Type: application/json" \
+  -d '{"token":"<TOKEN>","new_password":"NewPassword123!"}'
+```
+
+### 測試：重設後登入（可選）
+
+若你的登入 API 為 `POST /auth/session/`，可用新密碼登入確認：
+
+```bash
+curl -X POST "http://127.0.0.1:8000/auth/session/" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"momomo","password":"NewPassword123!"}'
+```

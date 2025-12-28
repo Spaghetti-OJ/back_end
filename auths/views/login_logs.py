@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.permissions import IsAdminUser
+from user.permissions import IsEmailVerified
 from rest_framework.pagination import PageNumberPagination
 
 from ..models import LoginLog
@@ -35,7 +36,7 @@ def api_response(data=None, message="OK", status_code=200):
 class LoginLogListView(APIView):
     
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]  # Removed to use global default
 
     def get(self, request):
         logs = LoginLog.objects.filter(user=request.user).order_by('-created_at')
@@ -52,7 +53,7 @@ class UserLoginLogListView(APIView):
     (API: GET /auth/login-logs/<uuid:user_id>)
     """
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser] 
+    permission_classes = [IsAdminUser, IsEmailVerified]
 
     def get(self, request, user_id):
         logs = LoginLog.objects.filter(user__id=user_id).order_by('-created_at')
@@ -70,7 +71,7 @@ class SuspiciousLoginListView(APIView):
     (API: GET /auth/suspicious-activities/)
     """
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser] 
+    permission_classes = [IsAdminUser, IsEmailVerified] 
 
     def get(self, request):
     

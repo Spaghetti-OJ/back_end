@@ -9,7 +9,8 @@ from django.core.files.storage import default_storage
 from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
-from rest_framework import generics, permissions, status, parsers
+from django.utils.crypto import get_random_string
+from rest_framework import generics, parsers, status
 from rest_framework.exceptions import ErrorDetail
 from rest_framework.response import Response
 
@@ -28,7 +29,6 @@ class CourseImportCSVView(generics.GenericAPIView):
      - POST /course/<course_id>/import-csv
     """
 
-    permission_classes = [permissions.IsAuthenticated]
     serializer_class = CourseImportCSVSerializer
     parser_classes = [parsers.MultiPartParser, parsers.FormParser]
 
@@ -48,6 +48,7 @@ class CourseImportCSVView(generics.GenericAPIView):
             detail = self._extract_error_detail(serializer.errors)
             message = str(detail) if detail else "Invalid data."
             return api_response(message=message, status_code=status.HTTP_400_BAD_REQUEST)
+        force = serializer.validated_data.get("force", False)
 
         current_student_count = Course_members.objects.filter(
             course_id=course,
@@ -77,6 +78,7 @@ class CourseImportCSVView(generics.GenericAPIView):
                 file_bytes=file_bytes,
                 course=course,
                 remaining_slots=self._remaining_slots(course, current_student_count),
+                force=force,
             )
         except ValueError as exc:
             self._mark_batch_failed(batch, [{"message": str(exc)}])
@@ -169,7 +171,7 @@ class CourseImportCSVView(generics.GenericAPIView):
             ContentFile(file_bytes),
         )
 
-    def _import_students(self, *, file_bytes, course, remaining_slots):
+    def _import_students(self, *, file_bytes, course, remaining_slots, force):
         try:
             text = file_bytes.decode("utf-8-sig")
         except UnicodeDecodeError:
@@ -222,6 +224,7 @@ class CourseImportCSVView(generics.GenericAPIView):
                         real_name=real_name,
                         password=password,
                         student_id=student_id,
+                        force=force,
                     )
                     if created:
                         created_users += 1
@@ -269,44 +272,61 @@ class CourseImportCSVView(generics.GenericAPIView):
             return ""
         return str(value).strip()
 
-    def _get_or_create_student_user(self, *, username, email, real_name, password, student_id):
-        try:
-            user = User.objects.get(username=username)
-            created = False
-            if user.email.lower() != email.lower():
-                raise ValueError("Username belongs to a different email.")
-        except User.DoesNotExist:
-            if User.objects.filter(email__iexact=email).exists():
-                raise ValueError("Email already exists.")
+    def _get_or_create_student_user(self, *, username, email, real_name, password, student_id, force):
+        user_by_username = User.objects.filter(username=username).first()
+        user_by_email = User.objects.filter(email__iexact=email).first()
+
+        if user_by_username and user_by_email and user_by_username != user_by_email:
+            raise ValueError("Username belongs to a different email.")
+
+        user = user_by_username or user_by_email
+        created = False
+
+        if user is None:
             user = User(
                 username=username,
                 email=email,
                 real_name=real_name,
                 identity=User.Identity.STUDENT,
             )
-            user.set_password(password or User.objects.make_random_password(length=12))
+            user.set_password(self._generate_password(password))
             user.save()
             created = True
+        else:
+            if user.identity != User.Identity.STUDENT:
+                raise ValueError("User is not a student.")
 
-        if user.identity != User.Identity.STUDENT:
-            raise ValueError("User is not a student.")
-
-        if user.real_name != real_name:
-            user.real_name = real_name
-            user.save(update_fields=["real_name"])
+            updated_fields = []
+            if force and user.email.lower() != email.lower():
+                if User.objects.exclude(pk=user.pk).filter(email__iexact=email).exists():
+                    raise ValueError("Email already exists.")
+                user.email = email
+                updated_fields.append("email")
+            if force and user.real_name != real_name:
+                user.real_name = real_name
+                updated_fields.append("real_name")
+            if updated_fields:
+                user.save(update_fields=updated_fields)
 
         profile, _ = UserProfile.objects.get_or_create(user=user)
         if student_id:
-            if profile.student_id and profile.student_id != student_id:
-                raise ValueError("student_id already bound to another user.")
-            if not profile.student_id:
-                if UserProfile.objects.exclude(user=user).filter(student_id=student_id).exists():
-                    raise ValueError("student_id already used.")
-                profile.student_id = student_id
-                profile.updated_at = timezone.now()
-                profile.save(update_fields=["student_id", "updated_at"])
+            if force or created:
+                if profile.student_id != student_id:
+                    if UserProfile.objects.exclude(user=user).filter(student_id=student_id).exists():
+                        raise ValueError("student_id already used.")
+                    profile.student_id = student_id
+                    profile.updated_at = timezone.now()
+                    profile.save(update_fields=["student_id", "updated_at"])
 
         return user, created
+
+    def _generate_password(self, password):
+        if password:
+            return password
+        generator = getattr(User.objects, "make_random_password", None)
+        if callable(generator):
+            return generator(length=12)
+        return get_random_string(12)
 
     @staticmethod
     def _mark_batch_failed(batch, error_log):

@@ -236,8 +236,23 @@ curl -X PUT http://localhost:8000/submission/a1b2c3d4-5678-90ab-cdef-1234567890a
 **認證**: 必須（Bearer Token）
 
 **查詢參數**:
-- `page` (可選): 頁碼，預設 1
-- `page_size` (可選): 每頁數量，預設 20
+- `page` (可選): 頁碼,預設 1
+- `page_size` (可選): 每頁數量,預設 20
+- `problem_id` (可選): 篩選特定題目的提交
+- `username` (可選): 篩選特定使用者的提交
+- `status` (可選): 篩選判題狀態(如 "0"=AC, "1"=WA, "2"=CE, "3"=TLE, "4"=MLE, "5"=RE)
+- `course_id` (可選): 篩選特定課程的所有提交
+- `language_type` (可選): 篩選程式語言(0=C, 1=C++, 2=Python, 3=Java, 4=JavaScript)
+- `before` (可選): 篩選某時間之前的提交(Unix 時間戳記,單位:秒)
+- `after` (可選): 篩選某時間之後的提交(Unix 時間戳記,單位:秒)
+- `ip_prefix` (可選): 篩選 IP 網段前綴,支援以下格式:
+  - 簡單前綴: `192.168.` 匹配所有 192.168.x.x
+  - CIDR 表示法: `192.168.1.0/24` 匹配 192.168.1.0-255 範圍
+
+**權限說明**:
+- 學生：只能查看自己的提交
+- 教師/助教：可以查看自己所教課程的所有學生提交
+- 管理員：可以查看所有提交
 
 **成功響應**: HTTP 200
 ```json
@@ -285,8 +300,36 @@ curl -X PUT http://localhost:8000/submission/a1b2c3d4-5678-90ab-cdef-1234567890a
 
 **範例**:
 ```bash
-# 請求
-curl -X GET http://localhost:8000/submission/?page=1&page_size=20 \
+# 基本查詢
+curl -X GET "http://localhost:8000/submission/?page=1&page_size=20" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 查詢課程 3 的所有 AC 提交
+curl -X GET "http://localhost:8000/submission/?course_id=3&status=0" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 查詢特定使用者用 Python 的提交
+curl -X GET "http://localhost:8000/submission/?username=student01&language_type=2" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 查詢特定時間範圍的提交（2025-12-27 00:00:00 到 23:59:59）
+curl -X GET "http://localhost:8000/submission/?after=1735286400&before=1735372799" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 組合多個篩選條件
+curl -X GET "http://localhost:8000/submission/?problem_id=123&status=0&language_type=2" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 查詢特定 IP 網段的提交(簡單前綴)
+curl -X GET "http://localhost:8000/submission/?ip_prefix=192.168." \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 查詢特定 IP 網段的提交(CIDR 表示法)
+curl -X GET "http://localhost:8000/submission/?ip_prefix=192.168.1.0/24" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 組合 IP 網段與其他條件
+curl -X GET "http://localhost:8000/submission/?ip_prefix=10.0.0.0/8&status=0" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -634,9 +677,9 @@ submissionId: "a1b2c3d4-5678-90ab-cdef-1234567890ab"
 ### 1. 提交限制檢查
 - [ ] `"problem permission denied"` - 題目權限檢查
 - [ ] `"homework hasn't start"` - 作業時間檢查
-- [ ] `"Invalid IP address"` - IP 白名單檢查
+- [x] IP 網段前綴篩選 - 支援簡單前綴和 CIDR 表示法
 - [ ] `"you have used all your quotas"` - 配額限制
-- [ ] `"Submit too fast!"` - 提交頻率限制（含 `waitFor` 欄位）
+- [ ] `"Submit too fast!"` - 提交頻率限制(含 `waitFor` 欄位)
 
 ### 2. 判題系統整合
 - [ ] 實際連接 SandBox 判題系統
@@ -806,9 +849,15 @@ curl -X GET http://localhost:8000/submission/student-submission-id/ \
 
 ## 版本歷史
 
+**v1.1 (2025-12-28)**
+- 新增 IP 網段前綴篩選功能
+- 支援簡單前綴匹配(如 `192.168.`)
+- 支援 CIDR 表示法(如 `192.168.1.0/24`)
+- 實作統計資料自動更新(全域與作業層級)
+
 **v1.0 (2025-11-09)**
 - 初始版本
-- 實作基本提交功能（創建、上傳、查詢）
+- 實作基本提交功能(創建、上傳、查詢)
 - 兼容 NOJ 格式標準
 - 實作角色權限系統
 - 支援重新判題功能

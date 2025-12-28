@@ -42,7 +42,7 @@ urlpatterns = [
     path('api-tokens/', include('api_tokens.urls')),
     path('profile/', include('profiles.urls')),
     path('homework/',include('assignments.urls')),
-    path('schema-viewer/', include('schema_viewer.urls')),
+    # Removed schema_viewer (module not installed); rely on drf_spectacular
     path('editor/', include('editor.urls')),
     path('api-auth/', include('rest_framework.urls')),
     path('copycat/', include('copycat.urls')),
@@ -60,6 +60,10 @@ urlpatterns = [
         name="redoc",
     ),
     path("search/", include("search.urls")),
+    path(
+        "course/<int:course_id>/homework/",
+        include(("courses.urls.homework", "homework"), namespace="homework"),
+    ),
 ]
 
 if settings.DEBUG:

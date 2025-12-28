@@ -7,24 +7,62 @@
 - 路徑：`GET /problem/<problem_id>`
 - 未登入僅能看到 `public` 題目；`course` / `hidden` 需題目擁有者、課程成員或有管理權限。
 
-成功回應（200 OK 範例，部分欄位視登入與資料情況可能為 null）：
+成功回應（200 OK 新格式；部分欄位視登入與資料情況可能為 null）：
 ```json
 {
   "data": {
-    "id": 1,
-    "title": "Two Sum",
-    "difficulty": "easy",
-    "is_public": "public",
-    "course_id": "<uuid>",
-    "tags": [{"id":1, "name":"陣列", "usage_count": 10}],
-    "submit_count": 2,
-    "high_score": 80
+    "problemName": "Two Sum",
+    "description": {
+      "description": "找出兩數之和等於 target。",
+      "input": "第一行 n，第二行 n 個數字，第三行 target",
+      "output": "輸出兩個索引 i j",
+      "hint": "可以使用雜湊表降低時間複雜度",
+      "sampleInput": ["5", "2 7 11 15 9", "9"],
+      "sampleOutput": ["0 1"]
+    },
+    "owner": {
+      "id": "6420753c-9e51-42a0-8349-ef79b2e70787",
+      "username": "admin",
+      "real_name": ""
+    },
+    "tags": [
+      {"id": 2, "name": "array", "usage_count": 10}
+    ],
+    "allowedLanguage": 15,
+    "courses": [
+      {"id": 1, "name": "演算法課程"}
+    ],
+    "quota": -1,
+    "defaultCode": {"c": "", "cpp": "", "java": "", "python": ""},
+    "status": "public",
+    "type": 0,
+    "testCase": [
+      {"no": 1, "stem": "0001", "in": "0001.in", "out": "0001.out"}
+    ],
+    "fillInTemplate": null,
+    "submitCount": 2,
+    "highScore": 80,
+    "static_analysis_rules": ["forbid-loops"],
+    "forbidden_functions": [],
+    "use_static_analysis": true,
+    "static_analysis_config": {
+      "enabled": true,
+      "rules": ["forbid-loops"]
+    }
   },
-  "message": "取得題目成功",
+  "message": "Problem can view.",
   "status": "200"
 }
 ```
-未登入或無權限時可能回 404（隱藏不可見）或 403。
+欄位說明補充：
+- `description.sampleInput` / `description.sampleOutput`：後端已將原始換行字串依行切割為陣列；若為空字串則回傳 `[]`。
+- `allowedLanguage`：語言遮罩（c=1, cpp=2, java=4, python=8；相加形成整數）。
+- `testCase`：僅在題目已有上傳測資 zip 且解析成功時出現。沒有則為空陣列。
+- `static_analysis_rules`：靜態分析規則列表，可選值：`forbid-loops`、`forbid-arrays`、`forbid-stl`、`forbid-functions`。空陣列表示不使用靜態分析。
+- `forbidden_functions`：禁止使用的函數名稱列表。當 `static_analysis_rules` 包含 `forbid-functions` 時會有值。
+- `use_static_analysis`：布林值，表示是否啟用靜態分析（根據 `static_analysis_rules` 自動計算）。
+- `static_analysis_config`：完整的靜態分析配置物件（供 Sandbox 使用）。
+未登入或無權限時可能回 403；若是舊邏輯隱藏題目也可能視需求回 404。
 
 **cURL**
 ```bash
@@ -168,6 +206,108 @@ curl "http://127.0.0.1:8000/problem/30/checksum?token=$SANDBOX_TOKEN"
 curl "http://127.0.0.1:8000/problem/30/meta?token=$SANDBOX_TOKEN" | jq
 ```
 
+#### 3) 下載測資包（Sandbox 專用）
+- 路徑：`GET /problem/<problem_id>/testdata?token=<sandbox_token>`
+- 目的：提供 Sandbox 下載該題目的完整測資包（.zip 檔案）
+- 驗證：使用 query string `token` 與後端設定的 `SANDBOX_TOKEN` 比對
+- 回傳：`application/zip` 二進位檔案流
+
+此端點與 `/test-case` 下載端點的差異：
+- `/test-case`：需要一般使用者登入驗證（JWT），供題目管理者下載
+- `/testdata`：使用 Sandbox Token 驗證，專門供 Sandbox 環境下載判題測資
+
+成功回應（200 OK）：
+- Content-Type: `application/zip`
+- Content-Disposition: `attachment; filename="problem-<problem_id>-package.zip"`
+- Body: 測資 zip 檔案的二進位內容
+
+錯誤情況：
+- 401 Invalid sandbox token（token 缺失、不正確或 SANDBOX_TOKEN 未設定）
+- 404 題目不存在或測資檔案不存在
+
+**cURL**
+```bash
+# 下載測資包
+curl "http://127.0.0.1:8000/problem/30/testdata?token=$SANDBOX_TOKEN" -o problem-30-testdata.zip
+
+# 驗證下載的 zip 檔案
+unzip -l problem-30-testdata.zip
+```
+
+**典型 Sandbox 工作流程**
+```bash
+# 1. 下載測資包
+curl "http://127.0.0.1:8000/problem/30/testdata?token=$SANDBOX_TOKEN" -o testdata.zip
+
+# 2. 取得 checksum 並驗證完整性
+CHECKSUM=$(curl -s "http://127.0.0.1:8000/problem/30/checksum?token=$SANDBOX_TOKEN" | jq -r '.data.checksum')
+echo "$CHECKSUM  testdata.zip" | md5sum -c
+
+# 3. 取得測資結構資訊
+curl "http://127.0.0.1:8000/problem/30/meta?token=$SANDBOX_TOKEN" | jq '.data.tasks'
+
+# 4. 解壓並執行判題
+unzip -q testdata.zip -d testcases/
+# ... 執行使用者程式並比對 .in/.out 檔案
+```
+
+---
+
+## 題目巢狀「測資資料表」CRUD（Test_cases）
+
+此段為「資料表層級」管理子題底下的個別測資（與上面的題目層級 Zip 機制並行）。
+
+- 路徑：
+  - `GET /problem/<problem_id>/test-cases` — 取得此題目所有子題的測資清單
+  - `POST /problem/<problem_id>/test-cases` — 新增測資（需提供 `subtask_id` 且必須隸屬此題目）
+  - `PUT /problem/<problem_id>/test-cases/<case_id>` — 修改測資
+  - `DELETE /problem/<problem_id>/test-cases/<case_id>` — 刪除測資
+
+- 權限：
+  - `GET` 允許匿名，但僅在題目對該使用者可見時返回（與題目詳情相同可視規則）。
+  - `POST/PUT/DELETE` 需要題目擁有者 / 課程 TA / 教師 / 管理員。
+
+- 驗證重點：
+  - `POST` 時必須提供 `subtask_id`（或 `subtaskId`），且該子題必須屬於此題目；否則回 404。
+  - `PUT/DELETE` 時會驗證該測資所屬子題是否隸屬此題目；不符則回 404。
+
+**cURL 範例**
+
+取得測資列表：
+```bash
+curl "http://127.0.0.1:8000/problem/2/test-cases"
+```
+
+新增測資到指定子題（需登入與權限）：
+```bash
+curl -X POST "http://127.0.0.1:8000/problem/2/test-cases" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subtask_id": 3,
+    "idx": 1,
+    "input_path": "0001.in",
+    "output_path": "0001.out",
+    "status": "ready"
+  }'
+```
+
+修改測資：
+```bash
+curl -X PUT "http://127.0.0.1:8000/problem/2/test-cases/10" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "status": "disabled" }'
+```
+
+刪除測資：
+```bash
+curl -X DELETE "http://127.0.0.1:8000/problem/2/test-cases/10" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+> 備註：題目層級 Zip（`/initiate-test-case-upload`、`/complete-test-case-upload`、`/test-case`）提供給 Sandbox 與下載使用；資料表 CRUD 用於後台維護子題級測資。兩者並行，不互相覆蓋。
+
 ---
 
 ## 建立題目（管理）
@@ -301,12 +441,40 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/stats" \
 | hint | string/null | ❌ | null | 提示文字 |
 | subtask_description | string/null | ❌ | null | 子任務敘述（若有 subtasks） |
 | supported_languages | array | ❌ | `["c","cpp","java","python"]` | 可提交語言（陣列字串） |
+| static_analysis_rules | string[] | ❌ | `[]` | 靜態分析規則列表，可選值見下方說明 |
+| forbidden_functions | string[] | ❌ | `[]` | 禁止使用的函數名稱列表（當啟用 `forbid-functions` 規則時必填且至少一個） |
 | tags | int[] | ❌ | (無) | 標籤 id 陣列；嚴格驗證全部必須存在 |
 
 備註：
 1. 未提供可選欄位則使用預設或留空（null）。
 2. `tags` 為寫入用；回傳時使用 `tags` 物件陣列（含 id/name/usage_count）。
 3. 不支援在建立時直接寫 `like_count`、`view_count` 等統計欄位。
+
+### 靜態分析規則說明
+
+`static_analysis_rules` 可選用以下規則（可多選組合）：
+
+| 規則 | 說明 | 適用情境 |
+| ---- | ---- | -------- |
+| `forbid-loops` | 禁止使用迴圈（for、while、do-while） | 遞迴練習題 |
+| `forbid-arrays` | 禁止使用陣列 | 指標練習題 |
+| `forbid-stl` | 禁止使用 STL 容器和演算法 | 資料結構實作題 |
+| `forbid-functions` | 禁止使用特定函數 | 演算法實作題（禁用內建排序等） |
+
+**驗證規則**：
+- 當 `static_analysis_rules` 包含 `forbid-functions` 時，`forbidden_functions` 必須提供且至少包含一個函數名稱。
+- 函數名稱不能為空字串。
+
+**回應中的額外欄位**：
+- `use_static_analysis`（boolean）：是否啟用靜態分析，根據 `static_analysis_rules` 是否為空自動計算。
+- `static_analysis_config`（object）：完整配置，供 Sandbox 判題使用，格式如下：
+```json
+{
+  "enabled": true,
+  "rules": ["forbid-functions", "forbid-stl"],
+  "forbidden_functions": ["sort", "qsort"]
+}
+```
 
 ### 最小可建立 Payload（僅必填）
 ```json
@@ -334,6 +502,8 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/stats" \
   "hint": "使用雜湊表",
   "subtask_description": "Subtask1: n<=1000; Subtask2: n<=1e5",
   "supported_languages": ["c","cpp","python"],
+  "static_analysis_rules": ["forbid-functions"],
+  "forbidden_functions": ["sort", "qsort"],
   "tags": [1,2]
 }
 ```
@@ -497,6 +667,50 @@ curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
   -d '{
     "tags": [2,99999]
   }'
+```
+
+### 靜態分析設定範例
+
+> 啟用禁止迴圈和陣列（遞迴練習）
+```bash
+curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "static_analysis_rules": ["forbid-loops", "forbid-arrays"]
+  }'
+```
+
+> 啟用禁止特定函數（演算法實作）
+```bash
+curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "static_analysis_rules": ["forbid-functions", "forbid-stl"],
+    "forbidden_functions": ["sort", "qsort", "stable_sort", "nth_element"]
+  }'
+```
+
+> 停用靜態分析
+```bash
+curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "static_analysis_rules": []
+  }'
+```
+
+> 靜態分析驗證錯誤（啟用 forbid-functions 但未提供函數列表，預期 400）
+```bash
+curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "static_analysis_rules": ["forbid-functions"]
+  }'
+# 回應：{"forbidden_functions": ["當啟用 forbid-functions 規則時，必須至少指定一個禁止使用的函數。"]}
 ```
 
 ---

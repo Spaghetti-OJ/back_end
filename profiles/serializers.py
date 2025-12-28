@@ -31,6 +31,7 @@ class MeProfileSerializer(serializers.ModelSerializer):
             "student_id",
             "bio",
             "avatar",
+            "email_verified", 
         ]
 
     def get_role(self, obj):
@@ -62,34 +63,54 @@ class MeProfileUpdateSerializer(serializers.Serializer):
     def update(self, instance: UserProfile, validated_data):
         user = instance.user
 
+        old_email = user.email
+
         user_updated = False
+
         if "real_name" in validated_data:
             user.real_name = validated_data["real_name"]
             user_updated = True
-        user_updated = False
-        if "real_name" in validated_data:
-            user.real_name = validated_data["real_name"]
-            user_updated = True
+
         if "email" in validated_data:
-            user.email = validated_data["email"]
+            new_email = validated_data["email"]
+
+            if User.objects.filter(email=new_email).exclude(id=user.id).exists():
+                raise serializers.ValidationError({
+                    "email": ["Email has been used by another account."]
+                })
+
+            user.email = new_email
             user_updated = True
+
         if user_updated:
             user.save()
 
+        email_changed = (
+            "email" in validated_data
+            and validated_data["email"] != old_email
+        )
         profile_updated = False
+
         if "student_id" in validated_data:
             instance.student_id = validated_data["student_id"]
             profile_updated = True
+
         if "bio" in validated_data:
             instance.bio = validated_data["bio"]
             profile_updated = True
+
         if "avatar" in validated_data:
             # 允許上傳新頭像或傳 null 清空（前端就送 avatar=null）
             instance.avatar = validated_data["avatar"]
             profile_updated = True
 
+        if email_changed:
+            instance.email_verified = False
+            profile_updated = True
+
         if profile_updated:
             instance.save()
+
         return instance
 
     def create(self, validated_data):
