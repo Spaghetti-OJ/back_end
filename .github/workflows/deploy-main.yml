@@ -138,9 +138,24 @@ jobs:
 
       - name: Setup Nginx configuration
         run: |
+          # 確保 nginx 已安裝
+          if ! command -v nginx &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y nginx
+          fi
+          
+          # 確保目錄存在
+          sudo mkdir -p /etc/nginx/sites-available
+          sudo mkdir -p /etc/nginx/sites-enabled
+          
           # 複製 nginx 配置並替換路徑
           sudo cp "${APP_DIR}/deploy/nginx.conf" /etc/nginx/sites-available/noj-backend
           sudo sed -i "s|/home/runner/back_end_production|${APP_DIR}|g" /etc/nginx/sites-available/noj-backend
+          
+          # 確保 nginx.conf 包含 sites-enabled
+          if ! sudo grep -q "sites-enabled" /etc/nginx/nginx.conf; then
+            sudo sed -i '/http {/a \    include /etc/nginx/sites-enabled/*;' /etc/nginx/nginx.conf
+          fi
           
           # 啟用站點
           sudo ln -sf /etc/nginx/sites-available/noj-backend /etc/nginx/sites-enabled/
