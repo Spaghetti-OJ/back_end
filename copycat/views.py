@@ -17,8 +17,11 @@ from .services import run_moss_check, LANG_DB_MAP
 # ===================================================================
 def api_response(data=None, message="OK", status_code=200):
     status_str = "ok" if 200 <= status_code < 400 else "error"
-    if data is None: data = {}
-    return Response({"data": data, "message": message, "status": status_str}, status=status_code)
+    return Response(
+        {"data": data, "message": message, "status": status_str},
+        status=status_code
+    )
+
 
 class CopycatView(APIView):
     authentication_classes = [SessionAuthentication, JWTAuthentication, ApiTokenAuthentication]
@@ -27,8 +30,21 @@ class CopycatView(APIView):
     def _has_problem_edit_permission(self, user, problem_id):
         """
         檢查使用者是否有該題目的編輯權限
-        必須是該題所屬課程的老師或助教
+        - Admin (is_staff/is_superuser/identity='admin') 可以操作所有題目
+        - 其他使用者必須是該題所屬課程的老師或助教
         """
+        # 1. Admin 權限檢查：可以操作所有題目
+        if (
+            getattr(user, 'is_superuser', False)
+            or getattr(user, 'is_staff', False)
+            or getattr(user, 'identity', None) == 'admin'
+        ):
+            # 仍需確認題目存在
+            if not Problems.objects.filter(pk=problem_id).exists():
+                return False, "題目不存在"
+            return True, None
+        
+        # 2. 非 Admin：檢查課程權限
         try:
             problem = Problems.objects.select_related('course_id').get(pk=problem_id)
         except Problems.DoesNotExist:
@@ -69,8 +85,7 @@ class CopycatView(APIView):
         except (ValueError, TypeError):
             return api_response(None, "problem_id 必須是整數", status_code=400)
 
-        # 2. 權限檢查：必須是該題所屬課程的老師或助教
-        #    (此方法內部會檢查題目是否存在，避免重複查詢)
+        # 2. 權限檢查：Admin 可操作所有題目，其他使用者須為課程老師或助教
         has_permission, error_msg = self._has_problem_edit_permission(request.user, problem_id)
         if not has_permission:
             # 根據錯誤訊息決定回傳的 status code
@@ -124,7 +139,7 @@ class CopycatView(APIView):
         except (ValueError, TypeError):
             return api_response(None, "problem_id 必須是整數", status_code=400)
 
-        # 權限檢查：必須是該題所屬課程的老師或助教
+        # 權限檢查：Admin 可操作所有題目，其他使用者須為課程老師或助教
         has_permission, error_msg = self._has_problem_edit_permission(request.user, problem_id)
         if not has_permission:
             if "不存在" in error_msg:
