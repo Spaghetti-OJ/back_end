@@ -13,6 +13,12 @@ from .views.api import (
     ProblemTestCaseListCreateView, ProblemTestCaseDetailView, ProblemTestCaseZipUploadView,
 )
 from .views.sandbox import ProblemTestCasePackageView
+from .views.llm_testgen import (
+    LLMTestGenHealthView,
+    LLMTestGenGenerateView,
+    LLMTestGenCustomView,
+    LLMTestGenSaveView,
+)
 
 router = DefaultRouter()
 router.register(r"problems", ProblemsViewSet, basename="problems")
@@ -46,6 +52,11 @@ urlpatterns = [
     path("<int:pk>/checksum", ProblemTestCaseChecksumView.as_view(), name="problem-testcase-checksum"),
     path("<int:pk>/meta", ProblemTestCaseMetaView.as_view(), name="problem-testcase-meta"),
     path("<int:pk>/testdata", ProblemTestCasePackageView.as_view(), name="problem-testcase-package"),
+    # LLM 測資生成 API
+    path("llm-testgen/health", LLMTestGenHealthView.as_view(), name="llm-testgen-health"),
+    path("<int:pk>/llm-testgen/generate", LLMTestGenGenerateView.as_view(), name="llm-testgen-generate"),
+    path("<int:pk>/llm-testgen/custom", LLMTestGenCustomView.as_view(), name="llm-testgen-custom"),
+    path("<int:pk>/llm-testgen/save", LLMTestGenSaveView.as_view(), name="llm-testgen-save"),
     # 新標籤 API
     path("tags", TagListCreateView.as_view(), name="tag-list-create"),
     path("<int:pk>/tags", ProblemTagAddView.as_view(), name="problem-tag-add"),
