@@ -3,7 +3,38 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import models
 from django.db.models import Q, F
+import ipaddress
+from django.core.exceptions import ValidationError
+from django.utils.translation import gettext_lazy as _
 
+def validate_cidr_whitelist(value: str):
+    """
+    允許空字串（代表不限制）。
+    允許多筆 CIDR，用逗號或換行分隔，例如：
+      192.168.1.0/24
+      10.0.0.0/8, 140.112.0.0/16
+      2001:db8::/32
+    """
+    if not value:
+        return
+
+    raw_parts = value.replace("\n", ",").split(",")
+    parts = [p.strip() for p in raw_parts if p.strip()]
+    if not parts:
+        return
+
+    errors = []
+    for p in parts:
+        try:
+            ipaddress.ip_network(p, strict=False)
+        except ValueError:
+            errors.append(p)
+
+    if errors:
+        raise ValidationError(
+            _("Invalid CIDR(s): %(items)s"),
+            params={"items": ", ".join(errors)},
+        )
 
 class Assignments(models.Model):
     """作業本體"""
@@ -49,6 +80,7 @@ class Assignments(models.Model):
     )
 
     ip_restriction = models.TextField(blank=True)
+    ip_whitelist = models.TextField(blank=True, validators=[validate_cidr_whitelist])
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
