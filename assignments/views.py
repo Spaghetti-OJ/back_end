@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status, permissions
 from django.db.models import Max,Sum
 from django.db.models import Sum, Count, Max, Q
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
@@ -316,7 +316,7 @@ class HomeworkDetailView(APIView):
             else:
                 try:
                     val = Decimal(raw)
-                except Exception:
+                except (TypeError, ValueError, InvalidOperation):
                     return api_response(
                         data=None,
                         message="penalty must be a number string (0~100)",
@@ -330,23 +330,11 @@ class HomeworkDetailView(APIView):
                     )
                 hw.late_penalty = val
 
-        # max_attempts（如果你想支援就從 request.data 讀；你 serializer 沒這欄）
-        if "max_attempts" in request.data:
-            try:
-                ma = int(request.data.get("max_attempts"))
-            except Exception:
-                return api_response(
-                    data=None,
-                    message="max_attempts must be int (-1 or >=1)",
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                )
-            if ma != -1 and ma < 1:
-                return api_response(
-                    data=None,
-                    message="max_attempts must be -1 or >=1",
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                )
-            hw.max_attempts = ma
+        # max_attempts 從 serializer validated_data 讀取
+        if "max_attempts" in vd:
+            ma = vd.get("max_attempts")
+            if ma is not None:
+                hw.max_attempts = ma
 
         hw.save()
 

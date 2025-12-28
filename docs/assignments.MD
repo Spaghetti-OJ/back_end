@@ -93,10 +93,10 @@ cURL 測試範例：
     "name": "HW1 - Updated",
     "start": 1735660800,
     "end": 1736265599,
-    "problem_ids": [201, 202, 203],
+    "problemIds": [201, 202, 203],
     "markdown": "更新後的作業說明",
-    "late_penalty": "10.00",
-    "max_attempts": -1
+    "latePenalty": "10.00",
+    "maxAttempts": -1
   },
   "message": "update homework",
   "status": "ok"
@@ -111,10 +111,10 @@ cURL 測試範例：
 | name | string | 作業名稱 |
 | start | int or null | 開始時間（epoch seconds） |
 | end | int or null | 截止時間（epoch seconds） |
-| problem_ids | array<int> | 此作業題目 ID 清單（依 order_index 排序） |
+| problemIds | array<int> | 此作業題目 ID 清單（依 order_index 排序） |
 | markdown | string | 作業說明 |
-| late_penalty | string | 逾期扣分百分比（Decimal 字串，0~100） |
-| max_attempts | int | 最大嘗試次數（-1 或 >=1） |
+| latePenalty | string | 逾期扣分百分比（Decimal 字串，0~100） |
+| maxAttempts | int | 最大嘗試次數（-1 或 >=1） |
 
 ---
 
@@ -204,12 +204,7 @@ cURL 測試範例：
 curl -X PUT "http://127.0.0.1:8000/homework/<HW_ID>/" ^
   -H "Authorization: Bearer <ACCESS_TOKEN>" ^
   -H "Content-Type: application/json" ^
-  -d "{
-    "name": "HW1 - Updated",
-    "problem_ids": [201, 202, 203],
-    "penalty": "10.00",
-    "max_attempts": -1
-  }"
+  -d "{\"name\": \"HW1 - Updated\", \"problem_ids\": [201, 202, 203], \"penalty\": \"10.00\", \"max_attempts\": -1}"
 ```
 
 ---

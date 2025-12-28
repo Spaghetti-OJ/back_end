@@ -106,6 +106,7 @@ class HomeworkUpdateSerializer(serializers.Serializer):
     )
     scoreboard_status = serializers.IntegerField(required=False, allow_null=True)
     penalty = serializers.CharField(required=False, allow_blank=True)
+    max_attempts = serializers.IntegerField(required=False, allow_null=True)
 
     def validate(self, attrs):
         # 時間檢查
@@ -125,6 +126,12 @@ class HomeworkUpdateSerializer(serializers.Serializer):
                     not_found.append(pid)
             if not_found:
                 raise serializers.ValidationError({"problem_ids": f"problems not found: {not_found}"})
+
+        # 驗證 max_attempts
+        if "max_attempts" in attrs:
+            ma = attrs.get("max_attempts")
+            if ma is not None and ma != -1 and ma < 1:
+                raise serializers.ValidationError({"max_attempts": "max_attempts must be -1 or >=1"})
 
         attrs["_start_dt"] = start_dt
         attrs["_end_dt"] = end_dt
