@@ -25,10 +25,25 @@ def _is_valid_domain(value: str) -> bool:
     v = value.strip().lower()
     if not v:
         return False
-    # Simple domain pattern: labels separated by '.', no scheme/path/port
+    
+    # Allow localhost for testing
+    if v == 'localhost':
+        return True
+    
+    # Allow IPv4 addresses
+    ipv4_pattern = r'^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+    if re.match(ipv4_pattern, v):
+        return True
+    
+    # Allow IPv6 addresses (simplified pattern)
+    if ':' in v and re.match(r'^[0-9a-f:]+$', v):
+        return True
+    
+    # Standard domain pattern: labels separated by '.', no scheme/path/port
     # Allows subdomains; disallows wildcards and protocols
-    pattern = r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])\.)+[a-z]{2,}$"
-    return re.match(pattern, v) is not None
+    domain_pattern = r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])\.)+[a-z]{2,}$"
+    return re.match(domain_pattern, v) is not None
+
 def default_static_analysis_rules():
     """預設的靜態分析規則（空列表表示不使用）"""
     return []
