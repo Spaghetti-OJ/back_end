@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - dev
-      - feat/finish_all_submission_function
+      - feat/Add_some_data_for_submit
 
 concurrency: deploy-dev
 
