@@ -784,10 +784,11 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                     elif 'not allowed language' in str(errors['language_type']):
                         return api_response(data=None, message="not allowed language", status_code=status.HTTP_403_FORBIDDEN)
                     else:
-                        return api_response(data=None, message="invalid data!", status_code=status.HTTP_400_BAD_REQUEST)
+                        return api_response(data=None, message=f"languageType 驗證失敗: {errors['language_type']}", status_code=status.HTTP_400_BAD_REQUEST)
                 
                 # 其他驗證錯誤
-                return api_response(data=None, message="invalid data!", status_code=status.HTTP_400_BAD_REQUEST)
+                error_details = '; '.join([f"{field}: {', '.join(msgs)}" for field, msgs in errors.items()])
+                return api_response(data=None, message=f"資料驗證失敗: {error_details}", status_code=status.HTTP_400_BAD_REQUEST)
             
             # 額外的安全檢查
             problem_id = serializer.validated_data['problem_id']
@@ -867,7 +868,7 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                         )
                 elif problem.is_public == 'course':
                     # Course 題目需要檢查是否在課程中
-                    from courses.models import Courses
+                    from courses.models import Courses, Course_members
                     course = problem.course_id
                     # 若題目未關聯任何課程，則不應允許提交
                     if course is None:
@@ -876,19 +877,16 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                             message="problem permission denied",
                             status_code=status.HTTP_403_FORBIDDEN
                         )
-                    # 檢查用戶是否是課程成員（老師或學生）
-                    if course.teacher_id != user:
-                        # 檢查是否是學生
-                        from courses.models import Course_students
-                        if not Course_students.objects.filter(
-                            course_id=course,
-                            student_id=user
-                        ).exists():
-                            return api_response(
-                                data=None,
-                                message="problem permission denied",
-                                status_code=status.HTTP_403_FORBIDDEN
-                            )
+                    # 檢查用戶是否是課程成員（老師、助教或學生）
+                    if not Course_members.objects.filter(
+                        course_id=course,
+                        user_id=user
+                    ).exists():
+                        return api_response(
+                            data=None,
+                            message="problem permission denied",
+                            status_code=status.HTTP_403_FORBIDDEN
+                        )
             except Problems.DoesNotExist:
                 return api_response(
                     data=None,
@@ -910,11 +908,14 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
             error_message = str(e.detail[0]) if hasattr(e, 'detail') and e.detail else str(e)
             if 'problem' in error_message.lower():
                 return api_response(data=None, message="Unexisted problem id.", status_code=status.HTTP_404_NOT_FOUND)
-            return api_response(data=None, message="invalid data!", status_code=status.HTTP_400_BAD_REQUEST)
+            return api_response(data=None, message=f"資料驗證錯誤: {error_message}", status_code=status.HTTP_400_BAD_REQUEST)
         
         except Exception as e:
             # 其他系統錯誤
-            return api_response(data=None, message="invalid data!", status_code=status.HTTP_400_BAD_REQUEST)
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"提交創建失敗: {str(e)}", exc_info=True)
+            return api_response(data=None, message=f"系統錯誤: {str(e)[:200]}", status_code=status.HTTP_400_BAD_REQUEST)
     
     def list(self, request, *args, **kwargs):
         """獲取提交列表 (NOJ 兼容版本)"""
