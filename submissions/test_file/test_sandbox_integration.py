@@ -89,17 +89,13 @@ print(f"Hello, {name}!")
         print(f" 請求失敗: {e}")
         return None
     
-    # 步驟 2: 上傳程式碼
+    # 步驟 2: 上傳程式碼（或檔案）
     print(f"\n[步驟 2] 上傳程式碼到 {submission_id}...")
-    source_code = """
-def solve():
-    a, b = map(int, input().split())
-    print(a + b)
-
-if __name__ == '__main__':
-    solve()
+    source_code = """name = input()
+print(f"Hello, {name}!")
 """
     
+    # 使用文字提交（source_code）
     payload = {"source_code": source_code}
     
     try:
