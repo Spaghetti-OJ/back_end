@@ -95,7 +95,7 @@ def submit_to_sandbox(submission):
             'checker_name': problem.checker_name if problem.use_custom_checker else 'diff',
             'use_static_analysis': False,  # TODO: 從 assignment 設定取得
             'priority': 0,  # 一般優先級
-            'callback_url': f'{settings.BACKEND_BASE_URL}/submissions/callback/',  # Sandbox 判題完成後回傳結果的 URL
+            'callback_url': f'{settings.BACKEND_BASE_URL}/submission/callback/',  # Sandbox 判題完成後回傳結果的 URL（注意：是 submission 不是 submissions）
         }
         
         # 5. 準備檔案
