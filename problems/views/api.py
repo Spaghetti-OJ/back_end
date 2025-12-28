@@ -1115,6 +1115,11 @@ class ProblemDetailView(APIView):
             # Custom checker settings
             'use_custom_checker': getattr(problem, 'use_custom_checker', False),
             'checker_name': getattr(problem, 'checker_name', 'diff'),
+            # Static analysis settings
+            'static_analysis_rules': getattr(problem, 'static_analysis_rules', []),
+            'forbidden_functions': getattr(problem, 'forbidden_functions', []),
+            'use_static_analysis': getattr(problem, 'use_static_analysis', False),
+            'static_analysis_config': problem.get_static_analysis_config() if hasattr(problem, 'get_static_analysis_config') else {'enabled': False},
         }
 
         return api_response(data, "Problem can view.", status_code=200)

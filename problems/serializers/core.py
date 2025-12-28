@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.core.exceptions import ValidationError
 from ..models import Problems, Problem_subtasks, Test_cases, Tags, Problem_tags
 from typing import Optional
 
@@ -31,7 +32,6 @@ class TestCaseStudentSerializer(serializers.ModelSerializer):
             "input_size", "output_size",
             "status",
         ]
-
 
 class SubtaskSerializer(serializers.ModelSerializer):
     """完整 subtask 資訊（管理員用）"""
@@ -74,6 +74,26 @@ class ProblemSerializer(serializers.ModelSerializer):
         allow_null=False
     )
     course_name = serializers.CharField(source="course_id.name", read_only=True)
+    
+    # 靜態分析設定
+    static_analysis_rules = serializers.ListField(
+        child=serializers.ChoiceField(choices=[
+            'forbid-loops',
+            'forbid-arrays', 
+            'forbid-stl',
+            'forbid-functions'
+        ]),
+        required=False,
+        default=list,
+        help_text="靜態分析規則列表。有效值: 'forbid-loops', 'forbid-arrays', 'forbid-stl', 'forbid-functions'"
+    )
+    
+    forbidden_functions = serializers.ListField(
+        child=serializers.CharField(max_length=100),
+        required=False,
+        default=list,
+        help_text="禁止使用的函數名稱列表。當 static_analysis_rules 包含 'forbid-functions' 時必填"
+    )
     submit_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
@@ -89,6 +109,8 @@ class ProblemSerializer(serializers.ModelSerializer):
             "solution_code", "solution_code_language",
             # custom checker settings
             "use_custom_checker", "checker_name",
+            # static analysis settings
+            "static_analysis_rules", "forbidden_functions",
             "creator_id", "course_id", "course_name",
             "created_at", "updated_at",
             "tags", "tag_ids", "submit_count",
@@ -98,6 +120,35 @@ class ProblemSerializer(serializers.ModelSerializer):
             "total_submissions", "accepted_submissions",
             "creator_id", "created_at", "updated_at",
         ]
+
+    def validate(self, attrs):
+        """
+        透過 Problems.clean() 執行驗證，避免在序列化器中重複商業邏輯。
+        """
+        # 建立或重用 Problems 實例以反映驗證後的狀態
+        if self.instance is not None:
+            instance = self.instance
+            for field, value in attrs.items():
+                setattr(instance, field, value)
+        else:
+            # 建立臨時實例用於驗證
+            # 注意：我們只使用 clean() 驗證靜態分析欄位，不會實際存取外鍵
+            temp_attrs = attrs.copy()
+            # 提供必填外鍵的臨時值（僅用於建立物件，不會實際查詢資料庫）
+            if 'creator_id' not in temp_attrs and 'creator_id_id' not in temp_attrs:
+                temp_attrs['creator_id_id'] = None  # clean() 不會驗證此欄位
+            if 'course_id' not in temp_attrs and 'course_id_id' not in temp_attrs:
+                temp_attrs['course_id_id'] = None  # clean() 不會驗證此欄位
+            instance = Problems(**temp_attrs)
+
+        # 將實際驗證委派給模型的 clean()，避免重複邏輯
+        try:
+            instance.clean()
+        except ValidationError as e:
+            # 將 Django ValidationError 轉換為 DRF ValidationError
+            raise serializers.ValidationError(e.message_dict if hasattr(e, 'message_dict') else {'non_field_errors': e.messages})
+        
+        return attrs
 
     def create(self, validated_data):
         # Extract tag_ids (write-only field)
@@ -185,6 +236,10 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
         child=serializers.IntegerField(min_value=1), write_only=True, required=False
     )
     subtasks = SubtaskSerializer(many=True, read_only=True)
+    
+    # 靜態分析設定（唯讀，管理員視角顯示用）
+    static_analysis_config = serializers.SerializerMethodField()
+    use_static_analysis = serializers.SerializerMethodField()
 
     class Meta:
         model = Problems
@@ -197,6 +252,9 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
             "subtask_description", "supported_languages",
             # custom checker settings
             "use_custom_checker", "checker_name",
+            # static analysis settings
+            "static_analysis_rules", "forbidden_functions",
+            "static_analysis_config", "use_static_analysis",
             "creator_id", "course_id",
             "created_at", "updated_at",
             "tags", "tag_ids", "subtasks",
@@ -206,6 +264,14 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
             "total_submissions", "accepted_submissions",
             "creator_id", "created_at", "updated_at",
         ]
+
+    def get_static_analysis_config(self, obj):
+        """取得靜態分析配置（供前端顯示）"""
+        return obj.get_static_analysis_config()
+
+    def get_use_static_analysis(self, obj):
+        """是否啟用靜態分析"""
+        return obj.use_static_analysis
 
 
 class ProblemStudentSerializer(serializers.ModelSerializer):
@@ -221,6 +287,9 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
     submit_count = serializers.IntegerField(read_only=True, default=0)
     high_score = serializers.IntegerField(read_only=True, default=0)
     is_liked_by_user = serializers.SerializerMethodField()
+    
+    # 靜態分析設定（學生只需知道是否啟用）
+    use_static_analysis = serializers.SerializerMethodField()
 
     class Meta:
         model = Problems
@@ -233,6 +302,8 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
             "subtask_description", "supported_languages",
             # custom checker settings (read-only for students)
             "use_custom_checker", "checker_name",
+            # static analysis (read-only for students)
+            "static_analysis_rules", "use_static_analysis",
             "course_id",
             "created_at",
             "tags", "tag_ids", "subtasks",
@@ -241,8 +312,13 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "acceptance_rate", "total_submissions", "accepted_submissions",
             "use_custom_checker", "checker_name",
+            "static_analysis_rules",
             "created_at",
         ]
+
+    def get_use_static_analysis(self, obj):
+        """是否啟用靜態分析"""
+        return obj.use_static_analysis
 
     def get_is_liked_by_user(self, obj):
         request = self.context.get('request')

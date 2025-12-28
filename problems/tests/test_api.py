@@ -9,6 +9,7 @@ import os
 import zipfile
 from io import BytesIO
 from problems.services.storage import _storage
+from user.models import UserProfile
 
 
 @pytest.fixture
@@ -23,19 +24,30 @@ def teacher(db):
     )
     u.is_staff = True
     u.save(update_fields=["is_staff"])
+    # Create UserProfile with email_verified=True
+    UserProfile.objects.update_or_create(
+        user=u,
+        defaults={"email_verified": True}
+    )
     return u
 
 
 @pytest.fixture
 def student(db):
     User = get_user_model()
-    return User.objects.create_user(
+    u = User.objects.create_user(
         username="student1",
         email="student1@example.com",
         password="pass1234",
         real_name="Student One",
         identity="student",
     )
+    # Create UserProfile with email_verified=True for student too
+    UserProfile.objects.update_or_create(
+        user=u,
+        defaults={"email_verified": True}
+    )
+    return u
 
 
 @pytest.fixture
@@ -342,3 +354,246 @@ def test_checker_settings_passed_to_sandbox(api_client, teacher, course):
             call_data = mock_post.call_args[1].get('data', {})
             assert call_data.get('use_checker') is True
             assert call_data.get('checker_name') == 'token'
+
+
+@pytest.mark.django_db
+def test_problem_static_analysis_rules_basic(api_client, teacher, course):
+    """Test creating and updating problems with static analysis rules."""
+    api_client.force_authenticate(user=teacher)
+    
+    # Test 1: 建立題目時設定靜態分析規則
+    payload = {
+        "title": "Recursion Only Problem",
+        "description": "必須使用遞迴解題",
+        "difficulty": "medium",
+        "course_id": str(course.id),
+        "static_analysis_rules": ["forbid-loops"],
+    }
+    res = api_client.post("/problem/manage", payload, format="json")
+    assert res.status_code == 201
+    problem_id = res.json()["data"]["problem_id"]
+    
+    # Test 2: 驗證 API 回應包含靜態分析設定
+    res_detail = api_client.get(f"/problem/{problem_id}")
+    assert res_detail.status_code == 200
+    data = res_detail.json()["data"]
+    assert data["static_analysis_rules"] == ["forbid-loops"]
+    assert data["use_static_analysis"] is True
+    assert data["static_analysis_config"]["enabled"] is True
+    assert "forbid-loops" in data["static_analysis_config"]["rules"]
+    
+    # Test 3: 更新靜態分析規則（使用 PUT）
+    update_payload = {
+        "title": "Recursion Only Problem",
+        "description": "必須使用遞迴解題",
+        "difficulty": "medium",
+        "course_id": str(course.id),
+        "static_analysis_rules": ["forbid-loops", "forbid-arrays"],
+    }
+    res_update = api_client.put(f"/problem/manage/{problem_id}", update_payload, format="json")
+    assert res_update.status_code == 200
+    
+    # Test 4: 驗證更新後包含多個規則
+    res_after = api_client.get(f"/problem/{problem_id}")
+    data_after = res_after.json()["data"]
+    assert set(data_after["static_analysis_rules"]) == {"forbid-loops", "forbid-arrays"}
+
+
+@pytest.mark.django_db
+def test_static_analysis_forbid_functions_validation(api_client, teacher, course):
+    """Test validation that forbid-functions requires forbidden_functions list."""
+    api_client.force_authenticate(user=teacher)
+    
+    # Test 1: 啟用 forbid-functions 但未提供函數列表 => 400
+    payload = {
+        "title": "No Sort Problem",
+        "description": "不能使用 sort",
+        "difficulty": "medium",
+        "course_id": str(course.id),
+        "static_analysis_rules": ["forbid-functions"],
+        "forbidden_functions": [],  # 空列表應該失敗
+    }
+    res = api_client.post("/problem/manage", payload, format="json")
+    assert res.status_code == 422  # DRF returns 422 for validation errors in this endpoint
+    
+    # Test 2: 提供函數列表後應該成功
+    payload["forbidden_functions"] = ["sort", "sorted"]
+    res = api_client.post("/problem/manage", payload, format="json")
+    assert res.status_code == 201
+    problem_id = res.json()["data"]["problem_id"]
+    
+    # Test 3: 驗證 forbidden_functions 被正確儲存
+    res_detail = api_client.get(f"/problem/{problem_id}")
+    data = res_detail.json()["data"]
+    assert set(data["forbidden_functions"]) == {"sort", "sorted"}
+    assert data["static_analysis_config"]["forbidden_functions"] == ["sort", "sorted"]
+
+
+@pytest.mark.django_db
+def test_static_analysis_empty_function_name_validation(api_client, teacher, course):
+    """Test that empty function names are rejected."""
+    api_client.force_authenticate(user=teacher)
+    
+    # 嘗試建立帶有空字串函數名稱的題目
+    payload = {
+        "title": "Invalid Functions Problem",
+        "description": "Test validation",
+        "difficulty": "medium",
+        "course_id": str(course.id),
+        "static_analysis_rules": ["forbid-functions"],
+        "forbidden_functions": ["sort", "", "printf"],  # 包含空字串
+    }
+    res = api_client.post("/problem/manage", payload, format="json")
+    assert res.status_code == 422  # DRF returns 422 for validation errors in this endpoint
+    body = res.json()
+    # 應該包含錯誤訊息
+    assert "forbidden_functions" in str(body).lower() or "函數" in str(body)
+
+
+@pytest.mark.django_db
+def test_static_analysis_disable_rules(api_client, teacher, course):
+    """Test disabling static analysis rules."""
+    api_client.force_authenticate(user=teacher)
+    
+    # 建立帶有靜態分析規則的題目
+    problem = Problems.objects.create(
+        title="Test Problem",
+        description="desc",
+        difficulty="easy",
+        creator_id=teacher,
+        course_id=course,
+        static_analysis_rules=["forbid-loops"],
+    )
+    
+    # 清空規則以停用靜態分析
+    update_payload = {
+        "title": "Test Problem",
+        "description": "desc",
+        "difficulty": "easy",
+        "course_id": str(course.id),
+        "static_analysis_rules": [],
+    }
+    res = api_client.put(f"/problem/manage/{problem.id}", update_payload, format="json")
+    assert res.status_code == 200
+    
+    # 驗證靜態分析已停用
+    res_detail = api_client.get(f"/problem/{problem.id}")
+    data = res_detail.json()["data"]
+    assert data["static_analysis_rules"] == []
+    assert data["use_static_analysis"] is False
+    assert data["static_analysis_config"]["enabled"] is False
+
+
+@pytest.mark.django_db
+def test_static_analysis_remove_forbid_functions_rule(api_client, teacher, course):
+    """Test removing forbid-functions rule while keeping forbidden_functions list."""
+    api_client.force_authenticate(user=teacher)
+    
+    # 建立帶有 forbid-functions 規則的題目
+    problem = Problems.objects.create(
+        title="Test Problem",
+        description="desc",
+        difficulty="easy",
+        creator_id=teacher,
+        course_id=course,
+        static_analysis_rules=["forbid-functions"],
+        forbidden_functions=["sort", "qsort"],
+    )
+    
+    # 移除 forbid-functions 規則但保留 forbidden_functions（應該可以成功）
+    update_payload = {
+        "title": "Test Problem",
+        "description": "desc",
+        "difficulty": "easy",
+        "course_id": str(course.id),
+        "static_analysis_rules": ["forbid-loops"],  # 不包含 forbid-functions
+        # 保留 forbidden_functions 欄位
+    }
+    res = api_client.put(f"/problem/manage/{problem.id}", update_payload, format="json")
+    assert res.status_code == 200
+    
+    # 驗證規則已更新
+    res_detail = api_client.get(f"/problem/{problem.id}")
+    data = res_detail.json()["data"]
+    assert "forbid-functions" not in data["static_analysis_rules"]
+    assert "forbid-loops" in data["static_analysis_rules"]
+
+
+@pytest.mark.django_db
+def test_static_analysis_multiple_rules(api_client, teacher, course):
+    """Test creating problems with multiple static analysis rules."""
+    api_client.force_authenticate(user=teacher)
+    
+    payload = {
+        "title": "Strict Problem",
+        "description": "多重限制",
+        "difficulty": "hard",
+        "course_id": str(course.id),
+        "static_analysis_rules": ["forbid-loops", "forbid-arrays", "forbid-stl"],
+    }
+    res = api_client.post("/problem/manage", payload, format="json")
+    assert res.status_code == 201
+    problem_id = res.json()["data"]["problem_id"]
+    
+    # 驗證所有規則都被正確儲存
+    res_detail = api_client.get(f"/problem/{problem_id}")
+    data = res_detail.json()["data"]
+    assert set(data["static_analysis_rules"]) == {"forbid-loops", "forbid-arrays", "forbid-stl"}
+    assert data["use_static_analysis"] is True
+    config = data["static_analysis_config"]
+    assert config["enabled"] is True
+    assert set(config["rules"]) == {"forbid-loops", "forbid-arrays", "forbid-stl"}
+
+
+@pytest.mark.django_db
+def test_static_analysis_invalid_rule(api_client, teacher, course):
+    """Test that invalid rule names are rejected."""
+    api_client.force_authenticate(user=teacher)
+    
+    payload = {
+        "title": "Invalid Rule Problem",
+        "description": "Test validation",
+        "difficulty": "medium",
+        "course_id": str(course.id),
+        "static_analysis_rules": ["forbid-loops", "invalid-rule"],
+    }
+    res = api_client.post("/problem/manage", payload, format="json")
+    # 應該失敗，因為 invalid-rule 不是有效的規則
+    assert res.status_code == 422  # DRF returns 422 for validation errors in this endpoint
+
+
+@pytest.mark.django_db
+def test_static_analysis_api_response_fields(api_client, teacher, course):
+    """Test that API responses include all static analysis fields."""
+    api_client.force_authenticate(user=teacher)
+    
+    # 建立帶有靜態分析設定的題目
+    problem = Problems.objects.create(
+        title="API Test Problem",
+        description="desc",
+        difficulty="easy",
+        creator_id=teacher,
+        course_id=course,
+        static_analysis_rules=["forbid-functions"],
+        forbidden_functions=["printf", "scanf"],
+    )
+    
+    # 驗證 API 回應包含所有必要欄位
+    res = api_client.get(f"/problem/{problem.id}")
+    assert res.status_code == 200
+    data = res.json()["data"]
+    
+    # 檢查必要欄位
+    assert "static_analysis_rules" in data
+    assert "forbidden_functions" in data
+    assert "use_static_analysis" in data
+    assert "static_analysis_config" in data
+    
+    # 檢查 config 物件結構
+    config = data["static_analysis_config"]
+    assert "enabled" in config
+    assert "rules" in config
+    assert "forbidden_functions" in config
+    assert config["enabled"] is True
+    assert config["rules"] == ["forbid-functions"]
+    assert config["forbidden_functions"] == ["printf", "scanf"]
