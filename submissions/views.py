@@ -1861,7 +1861,29 @@ def get_custom_test_result(request, custom_test_id):
         
         submission_id = test_info['submission_id']
         
-        # 3. 從 Sandbox 查詢實際結果
+        # 3. 檢查 Redis 中是否已有完整結果（callback 更新過）
+        if 'stdout' in test_info or 'stderr' in test_info:
+            # 結果已通過 callback 更新到 Redis
+            return api_response(
+                data={
+                    'test_id': custom_test_id,
+                    'problem_id': test_info['problem_id'],
+                    'language': test_info['language'],
+                    'status': test_info.get('status', 'completed'),
+                    'stdout': test_info.get('stdout', ''),
+                    'stderr': test_info.get('stderr', ''),
+                    'time': test_info.get('time'),
+                    'memory': test_info.get('memory'),
+                    'message': test_info.get('message', ''),
+                    'compile_info': test_info.get('compile_info', ''),
+                    'created_at': test_info.get('created_at'),
+                    'completed_at': test_info.get('completed_at'),
+                },
+                message='here you are, bro',
+                status_code=status.HTTP_200_OK
+            )
+        
+        # 4. 如果 Redis 還沒有結果，從 Sandbox API 查詢（fallback）
         import requests
         from .sandbox_client import SANDBOX_API_URL, SANDBOX_API_KEY
         
@@ -1879,13 +1901,13 @@ def get_custom_test_result(request, custom_test_id):
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE
             )
         
-        # 4. 檢查測試是否完成（必須有 stdout 或明確的錯誤狀態）
+        # 5. 檢查是否完成（有輸出或明確狀態）
         sandbox_status = sandbox_result.get('status', 'unknown')
         has_output = 'stdout' in sandbox_result or 'stderr' in sandbox_result
         is_completed = sandbox_status in ['completed', 'accepted', 'wrong_answer', 'runtime_error', 
                                           'time_limit_exceeded', 'memory_limit_exceeded', 'compile_error']
         
-        # 如果還在處理中（沒有輸出且狀態不是完成），返回處理中狀態
+        # 如果還在處理中，返回處理中狀態
         if not has_output and not is_completed:
             return api_response(
                 data={
@@ -1895,15 +1917,21 @@ def get_custom_test_result(request, custom_test_id):
                     'message': 'Job is currently running',
                 },
                 message='測試正在處理中，請稍後再查詢',
-                status_code=status.HTTP_202_ACCEPTED  # 202 表示已接受但未完成
+                status_code=status.HTTP_202_ACCEPTED
             )
         
-        # 5. 更新 Redis 中的狀態（只有完成時才更新）
+        # 6. 將 Sandbox 結果更新到 Redis（供下次查詢使用）
         test_info['status'] = sandbox_status
-        test_info['last_updated'] = str(timezone.now())
+        test_info['stdout'] = sandbox_result.get('stdout', '')
+        test_info['stderr'] = sandbox_result.get('stderr', '')
+        test_info['time'] = sandbox_result.get('time')
+        test_info['memory'] = sandbox_result.get('memory')
+        test_info['message'] = sandbox_result.get('message', '')
+        test_info['compile_info'] = sandbox_result.get('compile_info', '')
+        test_info['completed_at'] = str(timezone.now())
         redis_client.setex(cache_key, 1800, json.dumps(test_info))
         
-        # 6. 返回完整結果（使用 api_response）
+        # 7. 返回完整結果
         return api_response(
             data={
                 'test_id': custom_test_id,
@@ -2269,30 +2297,74 @@ class CustomTestCallbackAPIView(APIView):
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
             
-            # 3. 更新 CustomTest
-            with transaction.atomic():
-                try:
-                    custom_test = CustomTest.objects.select_for_update().get(id=test_id)
-                except CustomTest.DoesNotExist:
-                    logger.error(f'CustomTest not found: {test_id}')
+            # 3. 更新 Redis 中的測試結果
+            import json
+            import redis
+            
+            # 連接 Redis
+            try:
+                redis_client = redis.Redis(
+                    host='127.0.0.1',
+                    port=6379,
+                    db=2,
+                    decode_responses=True
+                )
+                redis_client.ping()
+            except Exception as redis_error:
+                logger.error(f'Redis connection failed: {str(redis_error)}')
+                return api_response(
+                    message='Redis service unavailable',
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
+            
+            # 查找對應的 cache key（需要遍歷所有用戶的 test）
+            # 格式：custom_test:{user_id}:{test_id}
+            # 由於 callback 不知道 user_id，使用 pattern 搜索
+            try:
+                pattern = f"custom_test:*:{test_id}"
+                keys = redis_client.keys(pattern)
+                
+                if not keys:
+                    logger.warning(f'Custom test not found in Redis: {test_id}')
                     return api_response(
-                        message='CustomTest not found',
+                        message='Custom test not found or expired',
                         status_code=status.HTTP_404_NOT_FOUND
                     )
                 
-                # 更新測試結果（CustomTest 使用字串狀態碼）
-                custom_test.status = 'completed' if test_status == 'completed' else 'error'
-                custom_test.actual_output = stdout
-                custom_test.execution_time = execution_time
-                custom_test.memory_usage = memory_usage
-                custom_test.completed_at = timezone.now()
+                cache_key = keys[0]  # 應該只有一個
                 
-                if stderr or exit_code != 0:
-                    custom_test.error_message = stderr or f'Exit code: {exit_code}'
+                # 讀取現有資料
+                cached = redis_client.get(cache_key)
+                if not cached:
+                    return api_response(
+                        message='Custom test not found or expired',
+                        status_code=status.HTTP_404_NOT_FOUND
+                    )
                 
-                custom_test.save()
+                test_info = json.loads(cached)
                 
-                logger.info(f'Updated custom test {test_id}: status={custom_test.status}')
+                # 更新結果
+                test_info['status'] = test_status
+                test_info['stdout'] = stdout
+                test_info['stderr'] = stderr
+                test_info['time'] = execution_time
+                test_info['memory'] = memory_usage
+                test_info['exit_code'] = exit_code
+                test_info['completed_at'] = str(timezone.now())
+                test_info['message'] = data.get('message', '')
+                test_info['compile_info'] = data.get('compile_info', '')
+                
+                # 寫回 Redis（保持 30 分鐘過期）
+                redis_client.setex(cache_key, 1800, json.dumps(test_info))
+                
+                logger.info(f'Updated custom test in Redis: {test_id}, status={test_status}')
+                
+            except Exception as e:
+                logger.error(f'Failed to update Redis: {str(e)}')
+                return api_response(
+                    message=f'Failed to update test result: {str(e)}',
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
             
             return api_response(
                 data={'test_id': str(test_id)},
