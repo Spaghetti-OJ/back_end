@@ -1997,6 +1997,35 @@ class SubmissionCallbackAPIView(APIView):
                         )
                     
                     logger.info(f'Created {len(all_test_cases)} {judge_status} results for all test cases of submission {submission_id}')
+                elif judge_status == 'accepted' and len(test_results) == 0:
+                    # 特殊處理：AC 但沒有回傳 test_results，為所有測資創建 AC 記錄
+                    all_test_cases = []
+                    subtasks = Problem_subtasks.objects.filter(problem_id=submission.problem_id).order_by('subtask_no')
+                    for subtask in subtasks:
+                        test_cases = Test_cases.objects.filter(subtask_id=subtask.id).order_by('idx')
+                        all_test_cases.extend(test_cases)
+                    
+                    total_cases = len(all_test_cases)
+                    score_per_case = submission.max_score // total_cases if total_cases > 0 else 0
+                    
+                    for test_case in all_test_cases:
+                        SubmissionResult.objects.update_or_create(
+                            submission=submission,
+                            subtask_id=test_case.subtask_id.id,
+                            test_case_index=test_case.idx,
+                            defaults={
+                                'problem_id': submission.problem_id,
+                                'test_case_id': None,
+                                'status': 'accepted',
+                                'execution_time': execution_time // total_cases if total_cases > 0 else execution_time,
+                                'memory_usage': memory_usage,
+                                'score': score_per_case,
+                                'max_score': score_per_case,
+                                'error_message': None,
+                            }
+                        )
+                    
+                    logger.info(f'Created {len(all_test_cases)} accepted results for all test cases of submission {submission_id}')
                 else:
                     # 正常情況：處理每個測資結果
                     for test_result in test_results:
