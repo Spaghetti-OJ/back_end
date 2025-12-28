@@ -1549,7 +1549,7 @@ class UserLikedProblemsView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         liked_ids = ProblemLike.objects.filter(user=user).values_list('problem', flat=True)
-        return Problems.objects.filter(id__in=liked_ids).order_by('-created_at')
+        return Problems.objects.filter(id__in=liked_ids).select_related('course_id').order_by('-created_at')
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())

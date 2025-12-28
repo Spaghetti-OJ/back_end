@@ -296,6 +296,7 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
     allowed_network = serializers.ListField(
         child=serializers.CharField(max_length=255), required=False
     )
+    course_name = serializers.CharField(source="course_id.name", read_only=True)
     
     # 靜態分析設定（學生只需知道是否啟用）
     use_static_analysis = serializers.SerializerMethodField()
@@ -311,9 +312,9 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
             "subtask_description", "supported_languages", "allowed_network",
             # custom checker settings (read-only for students)
             "use_custom_checker", "checker_name",
+            "course_id", "course_name",
             # static analysis (read-only for students)
             "static_analysis_rules", "use_static_analysis",
-            "course_id",
             "created_at",
             "tags", "tag_ids", "subtasks",
             "submit_count", "high_score", "is_liked_by_user",
