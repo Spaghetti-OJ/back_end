@@ -907,10 +907,36 @@ class ProblemListView(APIView):
         page = paginator.paginate_queryset(queryset, request)
         if page is not None:
             serializer = ProblemSerializer(page, many=True)
-            return paginator.get_paginated_response(serializer.data)
+            data = serializer.data
+            # Inject per-user submit_count
+            if request.user.is_authenticated:
+                from submissions.models import Submission
+                problem_ids = [item['id'] for item in data]
+                user_submissions = Submission.objects.filter(
+                    user=request.user, problem_id__in=problem_ids
+                ).values_list('problem_id', flat=True)
+                submit_counts = {}
+                for pid in problem_ids:
+                    submit_counts[pid] = list(user_submissions).count(pid)
+                for item in data:
+                    item['submit_count'] = submit_counts.get(item['id'], 0)
+            return paginator.get_paginated_response(data)
         
         serializer = ProblemSerializer(queryset, many=True)
-        return api_response(serializer.data, "OK", status_code=200)
+        data = serializer.data
+        # Inject per-user submit_count
+        if request.user.is_authenticated:
+            from submissions.models import Submission
+            problem_ids = [item['id'] for item in data]
+            user_submissions = Submission.objects.filter(
+                user=request.user, problem_id__in=problem_ids
+            ).values_list('problem_id', flat=True)
+            submit_counts = {}
+            for pid in problem_ids:
+                submit_counts[pid] = list(user_submissions).count(pid)
+            for item in data:
+                item['submit_count'] = submit_counts.get(item['id'], 0)
+        return api_response(data, "OK", status_code=200)
 
     # 重要：不允許在 /problem/ 進行建立，統一走 /problem/manage
     # 若誤用 POST /problem/，回傳 405，請改用 /problem/manage
@@ -1085,6 +1111,7 @@ class ProblemDetailView(APIView):
             'fillInTemplate': fill_in_template,
             'submitCount': submit_count,
             'highScore': high_score,
+            'subtaskDescription': getattr(problem, 'subtask_description', ''),
             # Custom checker settings
             'use_custom_checker': getattr(problem, 'use_custom_checker', False),
             'checker_name': getattr(problem, 'checker_name', 'diff'),
@@ -1153,11 +1180,33 @@ class ProblemStatsView(APIView):
             for row in submissions.values('status').annotate(cnt=Count('id')):
                 status_count[row['status']] = row['cnt']
 
-            # 9. top10執行時間
-            top10_runtime = list(submissions.filter(execution_time__gt=0).order_by('execution_time')[:10].values('id', 'user', 'execution_time', 'score', 'status'))
+            # 9. top10執行時間（含使用者 username，方便前端顯示）
+            runtime_qs = submissions.filter(execution_time__gt=0).select_related('user').order_by('execution_time')[:10]
+            top10_runtime = [
+                {
+                    'id': s.id,
+                    'user': s.user_id,
+                    'username': getattr(s.user, 'username', ''),
+                    'execution_time': s.execution_time,
+                    'score': s.score,
+                    'status': s.status,
+                }
+                for s in runtime_qs
+            ]
 
-            # 10. top10記憶體
-            top10_memory = list(submissions.filter(memory_usage__gt=0).order_by('memory_usage')[:10].values('id', 'user', 'memory_usage', 'score', 'status'))
+            # 10. top10記憶體（含使用者 username）
+            memory_qs = submissions.filter(memory_usage__gt=0).select_related('user').order_by('memory_usage')[:10]
+            top10_memory = [
+                {
+                    'id': s.id,
+                    'user': s.user_id,
+                    'username': getattr(s.user, 'username', ''),
+                    'memory_usage': s.memory_usage,
+                    'score': s.score,
+                    'status': s.status,
+                }
+                for s in memory_qs
+            ]
 
             return api_response({
                 "acUserRatio": [ac_user_count, total_students],

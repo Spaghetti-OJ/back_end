@@ -94,6 +94,7 @@ class ProblemSerializer(serializers.ModelSerializer):
         default=list,
         help_text="禁止使用的函數名稱列表。當 static_analysis_rules 包含 'forbid-functions' 時必填"
     )
+    submit_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Problems
@@ -112,7 +113,7 @@ class ProblemSerializer(serializers.ModelSerializer):
             "static_analysis_rules", "forbidden_functions",
             "creator_id", "course_id", "course_name",
             "created_at", "updated_at",
-            "tags", "tag_ids",
+            "tags", "tag_ids", "submit_count",
         ]
         read_only_fields = [
             "acceptance_rate", "like_count", "view_count",
