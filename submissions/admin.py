@@ -209,9 +209,9 @@ class EditorialLikeInline(TabularInline):
 
 @admin.register(Editorial)
 class EditorialAdmin(ModelAdmin):
-    list_display = ('title', 'problem_id', 'author', 'display_status', 'display_is_official', 'likes_count', 'views_count', 'created_at')
-    list_filter = ('status', 'is_official')
-    search_fields = ('title', 'problem_id', 'author__username', 'content')
+    list_display = ('id', 'problem_id', 'author', 'display_status', 'likes_count', 'views_count', 'created_at')
+    list_filter = ('status',)
+    search_fields = ('problem_id', 'author__username', 'content')
     ordering = ('-created_at',)
     readonly_fields = ('id', 'likes_count', 'views_count', 'created_at', 'updated_at')
     inlines = [EditorialLikeInline]
@@ -219,13 +219,13 @@ class EditorialAdmin(ModelAdmin):
     
     fieldsets = (
         ("題解資訊", {
-            "fields": ("id", "title", "problem_id", "author", "difficulty_rating"),
+            "fields": ("id", "problem_id", "author"),
         }),
         ("內容", {
             "fields": ("content",),
         }),
         ("狀態", {
-            "fields": ("status", "is_official", "published_at"),
+            "fields": ("status", "published_at"),
         }),
         ("統計", {
             "fields": ("likes_count", "views_count"),
@@ -244,10 +244,6 @@ class EditorialAdmin(ModelAdmin):
     })
     def display_status(self, instance):
         return instance.status
-    
-    @display(description="官方題解", label=True)
-    def display_is_official(self, instance):
-        return instance.is_official
 
 
 @admin.register(EditorialLike)
