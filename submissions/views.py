@@ -1118,10 +1118,18 @@ def submission_output_view(request, id, task_no, case_no):
             ).order_by('-created_at').first()
         
         if not result:
-            return api_response(None, "output not found", 404)
+            return api_response(
+                None, 
+                f"找不到測資結果：submission_id={submission.id}, task_no={task_no}, case_no={case_no}, test_case_id={test_case_id}",
+                404
+            )
     except Exception as e:
         logger.error(f'Error fetching submission result: {str(e)}')
-        return api_response(None, "output not found", 404)
+        return api_response(
+            None, 
+            f"查詢測資結果時發生錯誤：{str(e)}",
+            404
+        )
 
     # 6. 回傳
     payload = {
