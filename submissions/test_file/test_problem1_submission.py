@@ -266,7 +266,7 @@ print(a + b)
         'checker_name': 'diff',
         'use_static_analysis': False,
         'priority': 0,
-        'callback_url': f'{settings.BACKEND_BASE_URL}/submissions/callback/',
+        'callback_url': settings.BACKEND_BASE_URL.rstrip('/'),
     }
     
     from io import BytesIO

@@ -8,12 +8,14 @@ from rest_framework import status, permissions
 from django.db.models import Max,Sum
 from django.db.models import Sum, Count, Max, Q
 from decimal import Decimal
+import decimal
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from collections import defaultdict
 from .serializers import to_epoch_from_dt
 import datetime
+import math
 
 from assignments.models import Assignments, Assignment_problems
 from courses.models import Courses, Course_members
@@ -30,6 +32,9 @@ from .serializers import (
     HomeworkDeadlineSerializer,
     HomeworkStatsSerializer,
     HomeworkScoreboardSerializer,
+    AcSubmissionRatioSerializer,
+    HomeworkProblemStateSerializer,
+    HomeworkStatsPageSerializer,
 )
 
 # --------- 權限 & 工具 ---------
@@ -67,6 +72,12 @@ def require_course_member_or_staff(request_user, course):
         message="permission denied: user is not a member of this course",
         status_code=status.HTTP_403_FORBIDDEN,
     )
+def pop_std(xs: list[float]) -> float:
+    if not xs:
+        return 0.0
+    mean = sum(xs) / len(xs)
+    var = sum((x - mean) ** 2 for x in xs) / len(xs)  # population variance
+    return math.sqrt(var)
 
 # --------- 統一回傳格式 ---------
 def api_response(data=None, message="OK", status_code=200):
@@ -257,6 +268,155 @@ class HomeworkDetailView(APIView):
         return api_response(
             data=payload,
             message="get homework",
+            status_code=status.HTTP_200_OK,
+        )
+    @transaction.atomic
+    def put(self, request, homework_id: int):
+        hw = self._get_hw(homework_id)
+        course = hw.course
+
+        if not is_teacher_or_ta(request.user, course):
+            return api_response(
+                data=None,
+                message="user must be the teacher or ta of this course",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        ser = HomeworkUpdateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        vd = ser.validated_data
+
+        # 基本欄位
+        if "name" in vd:
+            new_title = (vd["name"] or "").strip()
+            # 可選：避免空白名稱
+            if not new_title:
+                return api_response(
+                    data=None,
+                    message="name cannot be blank",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # ✅ 同課程內名稱不得與「其他作業」重複（排除自己 hw.id）
+            exists = Assignments.objects.filter(
+                course=hw.course,
+                title=new_title,
+            ).exclude(id=hw.id).exists()
+
+            if exists:
+                return api_response(
+                    data=None,
+                    message="homework exists in this course",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+
+            hw.title = new_title
+        if "markdown" in vd:
+            hw.description = vd.get("markdown", "") or ""
+        if "start" in vd:
+            hw.start_time = vd.get("_start_dt")
+        if "end" in vd:
+            hw.due_time = vd.get("_end_dt")
+
+        # penalty -> late_penalty（Decimal 0~100）
+        if "penalty" in vd:
+            # 你的 serializer penalty 是 CharField，這裡做轉換
+            raw = (vd.get("penalty") or "").strip()
+            if raw == "":
+                hw.late_penalty = Decimal("0.00")
+            else:
+                try:
+                    val = Decimal(raw)
+                except (ValueError, decimal.InvalidOperation):
+                    return api_response(
+                        data=None,
+                        message="penalty must be a number string (0~100)",
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                    )
+                if val < 0 or val > 100:
+                    return api_response(
+                        data=None,
+                        message="penalty must be between 0 and 100",
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                    )
+                hw.late_penalty = val
+
+        # max_attempts（如果你想支援就從 request.data 讀；你 serializer 沒這欄）
+        if "max_attempts" in request.data:
+            try:
+                ma = int(request.data.get("max_attempts"))
+            except (ValueError, TypeError):
+                return api_response(
+                    data=None,
+                    message="max_attempts must be int (-1 or >=1)",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+            if ma != -1 and ma < 1:
+                return api_response(
+                    data=None,
+                    message="max_attempts must be -1 or >=1",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+            hw.max_attempts = ma
+
+        hw.save()
+
+        # 題目整包覆蓋
+        if "problem_ids" in vd:
+            new_pids = vd.get("problem_ids") or []
+            Assignment_problems.objects.filter(assignment=hw).delete()
+            for idx, pid in enumerate(new_pids, start=1):
+                Assignment_problems.objects.create(
+                    assignment=hw,
+                    problem_id=pid,
+                    order_index=idx,
+                    weight=Decimal("1.00"),
+                    special_judge=False,
+                )
+
+        payload = {
+            "id": hw.id,
+            "name": hw.title,
+            "start": to_epoch_from_dt(hw.start_time),
+            "end": to_epoch_from_dt(hw.due_time),
+            "problem_ids": collect_problem_ids(hw),   
+            "markdown": hw.description or "",
+            "late_penalty": str(hw.late_penalty),     
+            "max_attempts": hw.max_attempts,          
+        }
+        return api_response(
+            data=payload,
+            message="update homework",
+            status_code=status.HTTP_200_OK,
+        )
+    @transaction.atomic
+    def delete(self, request, homework_id: int):
+        """
+        DELETE /homework/<homework_id>
+        刪除作業（老師/TA）
+        行為：
+          - 會連帶刪除 assignment_problems（因為 FK on_delete=CASCADE）
+          - 不會刪除 Problems / Submissions（submissions 仍存在於題目層級）
+        """
+        hw = self._get_hw(homework_id)
+        course = hw.course
+
+        # 權限：只有老師/TA
+        if not is_teacher_or_ta(request.user, course):
+            return api_response(
+                data=None,
+                message="user must be the teacher or ta of this course",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+
+        # 刪除
+        hw_id = hw.id
+        hw_title = hw.title
+        hw.delete()
+
+        return api_response(
+            data={"id": hw_id, "name": hw_title},
+            message="delete homework",
             status_code=status.HTTP_200_OK,
         )
     
@@ -528,49 +688,6 @@ class HomeworkDeadlineView(APIView):
         )
 # --------- NEW: GET /homework/<homework_id>/stats ---------
 class HomeworkStatsView(APIView):
-    """
-    GET /homework/{homework_id}/stats
-    取得指定作業的統計資訊（只有課程教師或 TA 可看）
-
-    回傳格式（包在 api_response 的 data 裡）：
-
-    {
-      "homework_id": 1,
-      "course_id": 3,
-      "title": "HW1",
-      "description": "...",
-      "start_time": "...",
-      "due_time": "...",
-      "problem_count": 3,
-      "overview": {
-        "participant_count": 25,
-        "total_submission_count": 120,
-        "avg_submissions_per_user": 4.8,
-        "avg_total_score": 230.5,
-        "max_total_score": 300,
-        "solved_all_problem_user_count": 8,
-        "partially_solved_user_count": 12,
-        "unsolved_all_problem_user_count": 5
-      },
-      "problems": [
-        {
-          "problem_id": 101,
-          "order_index": 1,
-          "weight": "1.00",
-          "title": "A - Two Sum",
-          "participant_count": 20,
-          "total_submission_count": 80,
-          "avg_attempts_per_user": 4.0,
-          "avg_score": 75.5,
-          "ac_user_count": 10,
-          "partial_user_count": 5,
-          "unsolved_user_count": 5,
-          "first_ac_time": "2025-11-02T12:34:56Z"
-        }
-      ]
-    }
-    """
-
     def get(self, request, homework_id: int):
         # 1) 找作業
         try:
@@ -582,7 +699,7 @@ class HomeworkStatsView(APIView):
                 status_code=status.HTTP_404_NOT_FOUND,
             )
 
-        # 2) 權限檢查：沿用你原本的 is_teacher_or_ta
+        # 2) 權限：老師/TA
         if not is_teacher_or_ta(request.user, hw.course):
             return api_response(
                 data=None,
@@ -590,181 +707,100 @@ class HomeworkStatsView(APIView):
                 status_code=status.HTTP_403_FORBIDDEN,
             )
 
-        # 3) 抓作業題目列表
-        problems_qs = Assignment_problems.objects.filter(
-            assignment=hw,
-            is_active=True,
-        ).select_related("problem")
+        # 3) 作業題目（依 order_index 排序）
+        aps = list(
+            Assignment_problems.objects.filter(assignment=hw, is_active=True)
+            .select_related("problem")
+            .order_by("order_index", "id")
+        )
+        problem_ids = [ap.problem_id for ap in aps]
 
-        problems = list(problems_qs)
-        problem_ids = [p.problem_id for p in problems]
-
-        # 如果沒有題目 → 回傳空統計
-        if not problems:
+        # 4) 沒題目：仍回前端能吃的結構（state 空）
+        if not problem_ids:
             payload = {
-                "homework_id": hw.id,
-                "course_id": hw.course_id,
-                "title": hw.title,
-                "description": hw.description,
-                "start_time": hw.start_time,
-                "due_time": hw.due_time,
-                "problem_count": 0,
-                "overview": {
-                    "participant_count": 0,
-                    "total_submission_count": 0,
-                    "avg_submissions_per_user": 0.0,
-                    "avg_total_score": 0.0,
-                    "max_total_score": 0,
-                    "solved_all_problem_user_count": 0,
-                    "partially_solved_user_count": 0,
-                    "unsolved_all_problem_user_count": 0,
-                },
-                "problems": [],
+                "name": hw.title,
+                "markdown": hw.description or "",
+                "start": to_epoch_from_dt(hw.start_time),
+                "end": to_epoch_from_dt(hw.due_time),
+                "penalty": "",
+                "problemIds": [],
+                "studentStatus": {},
+                "state": {},
             }
-            serializer = HomeworkStatsSerializer(payload)
             return api_response(
-                data=serializer.data,
-                message="取得作業統計成功（目前作業沒有題目）",
+                data=payload,
+                message="get homework stats",
                 status_code=status.HTTP_200_OK,
             )
 
-        # 4) 用 UserProblemStats 當統計基礎
-        stats_qs = UserProblemStats.objects.filter(
-            assignment_id=hw.id,
-            problem_id__in=problem_ids,
-        ).select_related("user", "best_submission")
-
-        # 4-1) 整體 overview
-        participant_count = stats_qs.values("user_id").distinct().count()
-        total_submission_count = (
-            stats_qs.aggregate(total=Sum("total_submissions"))["total"] or 0
+        # 5) 統計來源：UserProblemStats（每人每題一筆）
+        stats_qs = list(
+            UserProblemStats.objects.filter(
+                assignment_id=hw.id,
+                problem_id__in=problem_ids,
+            ).only(
+                "user_id",
+                "problem_id",
+                "best_score",
+                "solve_status",
+                "total_submissions",
+            )
         )
 
-        from collections import defaultdict
-        user_summary = defaultdict(
-            lambda: {
-                "total_score": 0,
-                "max_total": 0,
-                "solved_count": 0,
+        # 6) 依題目分組
+        by_pid: dict[int, list[UserProblemStats]] = {pid: [] for pid in problem_ids}
+        for s in stats_qs:
+            by_pid[s.problem_id].append(s)
+
+        # 7) 組 state（每題）
+        state = {}
+        for ap in aps:
+            pid = ap.problem_id
+            s_list = by_pid.get(pid, [])
+
+            # tried users：有 stats 的人數（通常代表有至少一次提交）
+            tried_user_ids = {s.user_id for s in s_list}
+            num_users_tried = len(tried_user_ids)
+
+            # AC users：solve_status == solved
+            num_ac_users = sum(1 for s in s_list if s.solve_status == "solved")
+
+            # 分數用 best_score
+            scores = [float(s.best_score or 0) for s in s_list]
+            avg_score = (sum(scores) / len(scores)) if scores else 0.0
+            std_score = pop_std(scores)
+
+            # 你目前沒有「AC submissions」明細，先用 AC users / tried users 給前端顯示
+            state[str(pid)] = {
+                "problemId": pid,
+                "numUsersTried": num_users_tried,
+                "numAcUsers": num_ac_users,
+                "acSubmissionRatio": {
+                    "ac": num_ac_users,
+                    "tried": num_users_tried,
+                },
+                "averageScore": round(avg_score, 2),
+                "standardDeviation": round(std_score, 2),
             }
-        )
 
-        for s in stats_qs:
-            u = s.user_id
-            user_summary[u]["total_score"] += s.best_score
-            user_summary[u]["max_total"] += s.max_possible_score
-            if s.solve_status == "solved":
-                user_summary[u]["solved_count"] += 1
-
-        user_count = len(user_summary)
-        if user_count > 0:
-            avg_total_score = sum(
-                v["total_score"] for v in user_summary.values()
-            ) / user_count
-        else:
-            avg_total_score = 0.0
-
-        total_problems = len(problems)
-        max_total_score = 100 * total_problems  # 先假設每題滿分 100
-
-        solved_all_problem_user_count = 0
-        partially_solved_user_count = 0
-        unsolved_all_problem_user_count = 0
-
-        if total_problems > 0:
-            for v in user_summary.values():
-                if v["solved_count"] == 0:
-                    unsolved_all_problem_user_count += 1
-                elif v["solved_count"] == total_problems:
-                    solved_all_problem_user_count += 1
-                else:
-                    partially_solved_user_count += 1
-
-        avg_submissions_per_user = (
-            float(total_submission_count) / participant_count
-            if participant_count > 0
-            else 0.0
-        )
-
-        overview = {
-            "participant_count": participant_count,
-            "total_submission_count": total_submission_count,
-            "avg_submissions_per_user": avg_submissions_per_user,
-            "avg_total_score": avg_total_score,
-            "max_total_score": max_total_score,
-            "solved_all_problem_user_count": solved_all_problem_user_count,
-            "partially_solved_user_count": partially_solved_user_count,
-            "unsolved_all_problem_user_count": unsolved_all_problem_user_count,
-        }
-
-        # 4-2) 每題的統計
-        stats_by_problem = {p.problem_id: [] for p in problems}
-        for s in stats_qs:
-            stats_by_problem[s.problem_id].append(s)
-
-        problem_stats_list = []
-        for ap in problems:
-            s_list = stats_by_problem.get(ap.problem_id, [])
-
-            participant_ids_p = {s.user_id for s in s_list}
-            participant_count_p = len(participant_ids_p)
-            total_submission_count_p = sum(s.total_submissions for s in s_list)
-
-            if participant_count_p > 0:
-                avg_attempts_per_user = (
-                    float(total_submission_count_p) / participant_count_p
-                )
-            else:
-                avg_attempts_per_user = 0.0
-
-            if s_list:
-                avg_score_p = sum(s.best_score for s in s_list) / len(s_list)
-            else:
-                avg_score_p = 0.0
-
-            ac_user_count = sum(1 for s in s_list if s.solve_status == "solved")
-            partial_user_count = sum(1 for s in s_list if s.solve_status == "partial")
-            unsolved_user_count = sum(1 for s in s_list if s.solve_status == "unsolved")
-
-            first_ac_time = min(
-                (s.first_ac_time for s in s_list if s.first_ac_time is not None),
-                default=None,
-            )
-
-            problem_stats_list.append(
-                {
-                    "problem_id": ap.problem_id,
-                    "order_index": ap.order_index,
-                    "weight": ap.weight,
-                    "title": str(ap.problem),
-                    "participant_count": participant_count_p,
-                    "total_submission_count": total_submission_count_p,
-                    "avg_attempts_per_user": avg_attempts_per_user,
-                    "avg_score": avg_score_p,
-                    "ac_user_count": ac_user_count,
-                    "partial_user_count": partial_user_count,
-                    "unsolved_user_count": unsolved_user_count,
-                    "first_ac_time": first_ac_time,
-                }
-            )
-
-        # 5) 組 payload → serializer 驗證 → api_response
+        # 8) 最終 payload：沿用前端吃的 homework detail 欄位 + state
         payload = {
-            "homework_id": hw.id,
-            "course_id": hw.course_id,
-            "title": hw.title,
-            "description": hw.description,
-            "start_time": hw.start_time,
-            "due_time": hw.due_time,
-            "problem_count": len(problems),
-            "overview": overview,
-            "problems": problem_stats_list,
-        }
+            "name": hw.title,
+            "markdown": hw.description or "",
+            "start": to_epoch_from_dt(hw.start_time),
+            "end": to_epoch_from_dt(hw.due_time),
+            "penalty": "",
+            "problemIds": problem_ids,
 
-        serializer = HomeworkStatsSerializer(payload)
+            # stats 頁若不需要 studentStatus，就留空避免爆大包
+            "studentStatus": {},
+
+            "state": state,
+        }
+        serializer = HomeworkStatsPageSerializer(payload)
         return api_response(
             data=serializer.data,
-            message="取得作業統計成功",
+            message="get homework stats",
             status_code=status.HTTP_200_OK,
         )
 # --------- GET /homework/<id>/scoreboard ---------

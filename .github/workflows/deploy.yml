@@ -3,9 +3,8 @@ name: Deploy to dev
 on:
   push:
     branches:
-      - deploy/add-email-sender
       - dev
-      - feat/api-SandBox
+      - feat/finish_all_submission_function
 
 concurrency: deploy-dev
 
