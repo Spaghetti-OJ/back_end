@@ -1090,22 +1090,58 @@ def submission_output_view(request, id, task_no, case_no):
         return api_response(None, "task_no not found", 404)
 
     # 4. 找 test_case（task_no + case_no）
+    # 注意：我們嘗試找 test_case 來驗證，但實際查詢 SubmissionResult 時主要用 test_case_index
+    test_case = None
+    test_case_id = None
     try:
         test_case = Test_cases.objects.get(
             subtask_id=subtask.id,
             idx=case_no
         )
+        test_case_id = test_case.id
     except Test_cases.DoesNotExist:
-        return api_response(None, "case_no not found", 404)
+        logger.warning(f'Test case not found: subtask_id={subtask.id}, idx={case_no}')
+        # 即使找不到 test_case，也繼續用 test_case_index 查詢
 
     # 5. 找結果
+    # 重要：查詢需要 subtask_id + test_case_index（因為 test_case_index 只是相對於 subtask 的編號）
     try:
-        result = SubmissionResult.objects.get(
+        result = SubmissionResult.objects.filter(
             submission_id=submission.id,
-            test_case_id=test_case.id
+            subtask_id=subtask.id,
+            test_case_index=case_no
+        ).order_by('-created_at').first()
+        
+        if not result:
+            # 提供詳細的診斷資訊
+            all_results = SubmissionResult.objects.filter(submission_id=submission.id)
+            total_results = all_results.count()
+            
+            # 列出該 submission 所有現有的測資結果
+            existing_cases = []
+            for r in all_results[:10]:  # 最多顯示 10 筆
+                existing_cases.append(f"subtask_id={r.subtask_id}, case_index={r.test_case_index}")
+            
+            error_detail = (
+                f"找不到測資結果。"
+                f"查詢條件: submission_id={submission.id}, subtask_id={subtask.id}, case_no={case_no}. "
+                f"該 submission 共有 {total_results} 筆測資結果"
+                f"{': ' + ', '.join(existing_cases) if existing_cases else '（無任何測資結果）'}. "
+                f"可能原因: 1) 判題尚未完成 2) subtask_id 不匹配 3) case_no 超出範圍"
+            )
+            
+            return api_response(
+                None, 
+                error_detail,
+                404
+            )
+    except Exception as e:
+        logger.error(f'Error fetching submission result: {str(e)}')
+        return api_response(
+            None, 
+            f"查詢測資結果時發生錯誤：{str(e)}",
+            404
         )
-    except SubmissionResult.DoesNotExist:
-        return api_response(None, "output not found", 404)
 
     # 6. 回傳
     payload = {
@@ -1888,7 +1924,8 @@ class SubmissionCallbackAPIView(APIView):
             memory_usage = data.get('memory_usage', 0)
             test_results = data.get('test_results', [])
             
-            logger.info(f'Received callback for submission {submission_id}: status={judge_status}, score={total_score}')
+            logger.info(f'Received callback for submission {submission_id}: status={judge_status}, score={total_score}, test_results count={len(test_results)}')
+            logger.debug(f'Full callback payload: {data}')
             
             if not submission_id:
                 return api_response(
@@ -1926,24 +1963,142 @@ class SubmissionCallbackAPIView(APIView):
                 logger.info(f'Updated submission {submission_id}: status={submission.status}, score={total_score}')
                 
                 # 4. 建立 SubmissionResult 記錄
-                for test_result in test_results:
-                    # 轉換 status 為字串格式（SubmissionResult 使用字串）
-                    result_status = test_result.get('status', 'runtime_error')
-                    
-                    SubmissionResult.objects.create(
-                        submission=submission,  # 使用 submission 而非 submission_id
-                        problem_id=submission.problem_id,
-                        test_case_id=test_result.get('test_case_id'),
-                        test_case_index=test_result.get('test_case_index', 0),
-                        status=result_status,  # SubmissionResult 的 status 是字串類型
-                        execution_time=test_result.get('execution_time'),
-                        memory_usage=test_result.get('memory_usage'),
-                        score=test_result.get('score', 0),
-                        max_score=test_result.get('max_score', 100),
-                        error_message=test_result.get('error_message'),
-                    )
+                from problems.models import Problem_subtasks, Test_cases
                 
-                logger.info(f'Created {len(test_results)} test results for submission {submission_id}')
+                # 特殊處理：如果是 CE/SE 且 test_results 數量不足，為所有測資創建相同的錯誤記錄
+                if judge_status in ['compile_error', 'system_error']:
+                    # 取得該題目的所有測資
+                    all_test_cases = []
+                    subtasks = Problem_subtasks.objects.filter(problem_id=submission.problem_id).order_by('subtask_no')
+                    for subtask in subtasks:
+                        test_cases = Test_cases.objects.filter(subtask_id=subtask.id).order_by('idx')
+                        all_test_cases.extend(test_cases)
+                    
+                    # 取得錯誤訊息（從第一筆 test_result 或使用預設值）
+                    error_message = data.get('error_message', f'{judge_status.replace("_", " ").title()}')
+                    if test_results and len(test_results) > 0:
+                        error_message = test_results[0].get('error_message', error_message)
+                    
+                    # 為每個測資創建或更新錯誤記錄
+                    for test_case in all_test_cases:
+                        SubmissionResult.objects.update_or_create(
+                            submission=submission,
+                            subtask_id=test_case.subtask_id.id,
+                            test_case_index=test_case.idx,
+                            defaults={
+                                'problem_id': submission.problem_id,
+                                'test_case_id': None,  # CE/SE 時不關聯具體測資
+                                'status': judge_status,
+                                'execution_time': 0,
+                                'memory_usage': 0,
+                                'score': 0,
+                                'max_score': 100,
+                                'error_message': error_message,
+                            }
+                        )
+                    
+                    logger.info(f'Created {len(all_test_cases)} {judge_status} results for all test cases of submission {submission_id}')
+                elif judge_status == 'accepted' and len(test_results) == 0:
+                    # 特殊處理：AC 但沒有回傳 test_results，為所有測資創建 AC 記錄
+                    logger.info(f'Processing test_result: specail AC with no test_results')
+                    all_test_cases = []
+                    subtasks = Problem_subtasks.objects.filter(problem_id=submission.problem_id).order_by('subtask_no')
+                    for subtask in subtasks:
+                        test_cases = Test_cases.objects.filter(subtask_id=subtask.id).order_by('idx')
+                        all_test_cases.extend(test_cases)
+                    
+                    total_cases = len(all_test_cases)
+                    score_per_case = submission.max_score // total_cases if total_cases > 0 else 0
+                    
+                    for test_case in all_test_cases:
+                        SubmissionResult.objects.update_or_create(
+                            submission=submission,
+                            subtask_id=test_case.subtask_id.id,
+                            test_case_index=test_case.idx,
+                            defaults={
+                                'problem_id': submission.problem_id,
+                                'test_case_id': None,
+                                'status': 'accepted',
+                                'execution_time': execution_time // total_cases if total_cases > 0 else execution_time,
+                                'memory_usage': memory_usage,
+                                'score': score_per_case,
+                                'max_score': score_per_case,
+                                'error_message': None,
+                            }
+                        )
+                    
+                    logger.info(f'Created {len(all_test_cases)} accepted results for all test cases of submission {submission_id}')
+                else:
+                    # 正常情況：處理每個測資結果
+                    logger.info(f'Processing {len(test_results)} test results normally')
+                    
+                    if len(test_results) == 0:
+                        logger.warning(f'Submission {submission_id} has status={judge_status} but test_results is empty!')
+                    
+                    for test_result in test_results:
+                        # 轉換 status 為字串格式（SubmissionResult 使用字串）
+                        result_status = test_result.get('status', 'runtime_error')
+                        
+                        # 重要：Sandbox 文件中的欄位映射
+                        # - Sandbox 的 test_case_id → 實際是 subtask_no（第幾個 subtask）
+                        # - Sandbox 的 test_case_index → 測資編號（相對於 subtask）
+                        subtask_no = test_result.get('test_case_id')  # Sandbox 用這個欄位傳 subtask 編號
+                        test_case_index = test_result.get('test_case_index', 1)  # 測資編號
+                        
+                        logger.info(f'Processing test_result: subtask_no={subtask_no} (type={type(subtask_no)}), test_case_index={test_case_index}, status={result_status}')
+                        
+                        if subtask_no is None:
+                            logger.warning(f'Missing subtask_no (test_case_id) in test_result')
+                            continue
+                        
+                        # 容錯：嘗試轉換 subtask_no 為整數（防止型別不匹配）
+                        try:
+                            subtask_no = int(subtask_no)
+                        except (ValueError, TypeError):
+                            logger.error(f'Invalid subtask_no format: {subtask_no}')
+                            continue
+                        
+                        # 根據 subtask_no 找到實際的 subtask_id
+                        try:
+                            subtask = Problem_subtasks.objects.get(
+                                problem_id=submission.problem_id,
+                                subtask_no=subtask_no
+                            )
+                            subtask_id = subtask.id
+                            logger.info(f'Found subtask: subtask_no={subtask_no} -> subtask_id={subtask_id}')
+                        except Problem_subtasks.DoesNotExist:
+                            # 容錯：如果找不到，嘗試 subtask_no+1（因為 Sandbox 可能從 0 開始）
+                            try:
+                                logger.warning(f'Subtask not found with subtask_no={subtask_no}, trying subtask_no={subtask_no+1}')
+                                subtask = Problem_subtasks.objects.get(
+                                    problem_id=submission.problem_id,
+                                    subtask_no=subtask_no + 1
+                                )
+                                subtask_id = subtask.id
+                                logger.info(f'Found subtask with adjusted index: subtask_no={subtask_no+1} -> subtask_id={subtask_id}')
+                            except Problem_subtasks.DoesNotExist:
+                                logger.error(f'Subtask not found even with adjusted index: problem_id={submission.problem_id}, subtask_no={subtask_no} or {subtask_no+1}')
+                                continue
+                        
+                        # 創建或更新記錄
+                        result, created = SubmissionResult.objects.update_or_create(
+                            submission=submission,
+                            subtask_id=subtask_id,
+                            test_case_index=test_case_index,
+                            defaults={
+                                'problem_id': submission.problem_id,
+                                'test_case_id': None,  # 實際的 test_case_id 不使用
+                                'status': result_status,
+                                'execution_time': test_result.get('execution_time', 0),
+                                'memory_usage': test_result.get('memory_usage', 0),
+                                'score': test_result.get('score', 0),
+                                'max_score': test_result.get('max_score', 100),
+                                'error_message': test_result.get('error_message'),
+                            }
+                        )
+                        logger.info(f'SubmissionResult {"created" if created else "updated"}: subtask_id={subtask_id}, test_case_index={test_case_index}')
+                    
+                    logger.info(f'Created {len(test_results)} test results for submission {submission_id}')
                 
                 # 5. 更新 UserProblemSolveStatus（全域層級）
                 update_user_problem_stats(submission)
