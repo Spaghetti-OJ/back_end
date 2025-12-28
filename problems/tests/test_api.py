@@ -188,12 +188,19 @@ def test_sandbox_checksum_and_meta(api_client, teacher, course, settings):
     except Exception:
         pass
     _storage.save(rel, mem)
+    
+    # 計算並儲存 SHA256 hash
+    import hashlib
+    with _storage.open(rel, 'rb') as fh:
+        sha256_hash = hashlib.sha256(fh.read()).hexdigest()
+    p.testcase_hash = sha256_hash
+    p.save(update_fields=['testcase_hash'])
 
     # checksum 正確 token
     res = api_client.get(f"/problem/{p.id}/checksum", {'token': settings.SANDBOX_TOKEN})
     assert res.status_code == 200
     body = res.json()
-    assert 'checksum' in body['data'] and len(body['data']['checksum']) == 32
+    assert 'checksum' in body['data'] and len(body['data']['checksum']) == 64
 
     # checksum 錯誤 token
     res_bad = api_client.get(f"/problem/{p.id}/checksum", {'token': 'wrong'})
