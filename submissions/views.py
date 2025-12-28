@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 from problems.models import Problems, Problem_subtasks, Test_cases
 from user.models import User
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 import logging
 
 # 統一的 API 響應格式
@@ -694,7 +694,7 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
         if before:
             try:
                 # 將 Unix 時間戳記轉換為 timezone-aware datetime 物件 (UTC)
-                before_dt = datetime.fromtimestamp(int(before), tz=timezone.utc)
+                before_dt = datetime.fromtimestamp(int(before), tz=dt_timezone.utc)
                 queryset = queryset.filter(created_at__lt=before_dt)
             except (ValueError, TypeError, OSError):
                 pass  # 忽略無效的時間格式
@@ -702,7 +702,7 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
         if after:
             try:
                 # 將 Unix 時間戳記轉換為 timezone-aware datetime 物件 (UTC)
-                after_dt = datetime.fromtimestamp(int(after), tz=timezone.utc)
+                after_dt = datetime.fromtimestamp(int(after), tz=dt_timezone.utc)
                 queryset = queryset.filter(created_at__gt=after_dt)
             except (ValueError, TypeError, OSError):
                 pass  # 忽略無效的時間格式
