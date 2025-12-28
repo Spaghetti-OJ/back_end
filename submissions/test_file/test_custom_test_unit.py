@@ -255,6 +255,7 @@ class TestSandboxClient:
     def test_submit_selftest_to_sandbox(self, mock_post):
         """測試提交自定義測試到 Sandbox"""
         from submissions.sandbox_client import submit_selftest_to_sandbox
+        import uuid
         
         # Mock HTTP 回應
         mock_response = MagicMock()
@@ -266,8 +267,10 @@ class TestSandboxClient:
         }
         mock_post.return_value = mock_response
         
-        # 調用函數
+        # 調用函數（現在需要傳入 test_id）
+        test_id = f"selftest-{uuid.uuid4()}"
         result = submit_selftest_to_sandbox(
+            test_id=test_id,
             problem_id=1,
             language_type=2,
             source_code='print("test")',
@@ -277,7 +280,7 @@ class TestSandboxClient:
         # 驗證結果
         assert result['submission_id'] == 'test-sub-001'
         assert result['status'] == 'queued'
-        assert result['test_id'].startswith('selftest-')
+        assert result['test_id'] == test_id  # 現在應該返回傳入的 test_id
         
         # 驗證 HTTP 請求
         mock_post.assert_called_once()

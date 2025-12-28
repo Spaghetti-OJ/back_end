@@ -112,6 +112,7 @@ def submit_selftest_to_sandbox_task(self, test_id, user_id, problem_id, language
         # 1. 提交到 Sandbox
         logger.info(f'Submitting selftest to Sandbox: {test_id}')
         result = submit_selftest_to_sandbox(
+            test_id=test_id,
             problem_id=problem_id,
             language_type=language_type,
             source_code=source_code,

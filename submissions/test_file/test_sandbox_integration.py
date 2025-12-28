@@ -174,9 +174,9 @@ def test_rejudge_flow(token, submission_id):
     except Exception as e:
         print(f" 請求失敗: {e}")
 
-def test_bulk_submissions(token, problem_id=1, total=200, rate_per_second=20):
-    """批量提交測試 - 一秒 20 筆，總共 200 筆"""
-    print_section(f"批量測試: {total} 筆提交 ({rate_per_second} 筆/秒)")
+def test_bulk_submissions(token, problem_id=1, total=10, rate_per_second=0.15):
+    """批量提交測試 - 預設每 7 秒 1 筆，總共 10 筆（符合速率限制）"""
+    print_section(f"批量測試: {total} 筆提交 ({rate_per_second:.2f} 筆/秒)")
     
     headers = {
         "Authorization": f"Bearer {token}",
@@ -255,51 +255,57 @@ print(f"Hello, {name}!")
                 results['errors'].append(str(e))
                 print(f"  [{batch_num:02d}-{index_in_batch:02d}] ✗ Exception: {e}")
     
-    # 計算需要多少批次
-    batches = total // rate_per_second
-    remaining = total % rate_per_second
+    # 計算批次和延遲
+    if rate_per_second >= 1:
+        # 高速率：每秒多筆
+        items_per_batch = int(rate_per_second)
+        delay_between_batches = 1.0
+        batches = (total + items_per_batch - 1) // items_per_batch  # 向上取整
+    else:
+        # 低速率：每批 1 筆，批次間有延遲
+        items_per_batch = 1
+        delay_between_batches = 1.0 / rate_per_second  # 例如 0.15 筆/秒 = 每 6.67 秒
+        batches = total
     
     print(f"\n開始批量提交:")
     print(f"  總數: {total} 筆")
-    print(f"  速率: {rate_per_second} 筆/秒")
-    print(f"  批次: {batches} 批 + {remaining} 筆")
-    print(f"  預計時間: {batches + (1 if remaining > 0 else 0)} 秒\n")
+    print(f"  速率: {rate_per_second:.2f} 筆/秒")
+    print(f"  批次: {batches} 批，每批 {items_per_batch} 筆")
+    print(f"  批次間隔: {delay_between_batches:.1f} 秒")
+    print(f"  預計時間: {batches * delay_between_batches:.1f} 秒\n")
     
     start_time = datetime.now()
     
     # 執行批次提交
-    for batch_num in range(batches):
+    submitted_count = 0
+    for batch_num in range(1, batches + 1):
         batch_start = time.time()
+        
+        # 計算這批要提交幾筆
+        items_in_this_batch = min(items_per_batch, total - submitted_count)
+        if items_in_this_batch <= 0:
+            break
+            
+        start_idx = submitted_count + 1
+        end_idx = submitted_count + items_in_this_batch
+        print(f"批次 {batch_num}/{batches} (第 {start_idx}-{end_idx} 筆):")
+        
         threads = []
-        
-        print(f"批次 {batch_num + 1}/{batches} (第 {batch_num * rate_per_second + 1}-{(batch_num + 1) * rate_per_second} 筆):")
-        
-        # 在這一秒內啟動 rate_per_second 個執行緒
-        for i in range(rate_per_second):
-            thread = threading.Thread(target=submit_one, args=(batch_num + 1, i + 1))
+        for i in range(items_in_this_batch):
+            thread = threading.Thread(target=submit_one, args=(batch_num, i + 1))
             threads.append(thread)
             thread.start()
         
-        # 等待所有執行緒完成
+        # 等待所有線程完成
         for thread in threads:
             thread.join()
         
-        # 確保這一批次至少花費 1 秒
+        submitted_count += items_in_this_batch
+        
+        # 確保批次間有適當延遲
         elapsed = time.time() - batch_start
-        if elapsed < 1.0 and batch_num < batches - 1:
-            time.sleep(1.0 - elapsed)
-    
-    # 處理剩餘的提交
-    if remaining > 0:
-        print(f"\n最後一批 (第 {batches * rate_per_second + 1}-{total} 筆):")
-        threads = []
-        for i in range(remaining):
-            thread = threading.Thread(target=submit_one, args=(batches + 1, i + 1))
-            threads.append(thread)
-            thread.start()
-        
-        for thread in threads:
-            thread.join()
+        if batch_num < batches and elapsed < delay_between_batches:
+            time.sleep(delay_between_batches - elapsed)
     
     end_time = datetime.now()
     duration = (end_time - start_time).total_seconds()
@@ -347,20 +353,37 @@ def main():
     # 測試 2: 完整提交流程
     print_section("選擇測試模式")
     print("1. 單筆測試 (詳細流程)")
-    print("2. 批量測試 (200 筆，20 筆/秒)")
+    print("2. 批量測試 (預設 10 筆，每 7 秒 1 筆)")
     mode = input("\n請選擇測試模式 (1/2，預設 1): ").strip() or "1"
     
     if mode == "2":
         # 批量測試模式
         problem_id = input("請輸入 Problem ID（預設 1）: ").strip() or "1"
-        total = input("總提交數（預設 200）: ").strip() or "200"
-        rate = input("每秒提交數（預設 20）: ").strip() or "20"
+        total = input("總提交數（預設 10）: ").strip() or "10"
+        rate = input("每秒提交數（預設 0.15，約每 7 秒 1 筆）: ").strip() or "0.15"
         
         confirm = input(f"\n將提交 {total} 筆到 Problem {problem_id}，速率 {rate} 筆/秒。確認？(y/N): ").strip().lower()
         if confirm == 'y':
-            test_bulk_submissions(token, int(problem_id), int(total), int(rate))
+            result = test_bulk_submissions(token, int(problem_id), int(total), float(rate))
+            
+            # 批量測試結束，直接返回
+            print_section("測試完成")
+            print(f"""
+批量測試已完成！
+
+ 統計:
+  - 總提交數: {result['success'] + result['failed']}
+  - 成功: {result['success']} 筆
+  - 失敗: {result['failed']} 筆
+  
+ 注意:
+  - 如果看到 429 錯誤，表示觸發速率限制（每分鐘 10 次）
+  - 建議降低測試數量或速率，例如：10 筆，1 筆/秒
+            """)
+            return
         else:
             print("已取消批量測試")
+            return
     else:
         # 單筆測試模式
         problem_id = input("請輸入要測試的 Problem ID（預設 1）: ").strip() or "1"
@@ -375,9 +398,9 @@ def main():
         if rejudge == 'y':
             test_rejudge_flow(token, submission_id)
     
-    # 總結
-    print_section("測試總結")
-    print(f"""
+        # 總結（只在單筆測試時顯示）
+        print_section("測試總結")
+        print(f"""
 測試完成！
 
  已完成的測試:

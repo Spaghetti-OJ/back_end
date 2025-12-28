@@ -187,12 +187,13 @@ def submit_to_sandbox(submission):
         raise
 
 
-def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_data):
+def submit_selftest_to_sandbox(test_id, problem_id, language_type, source_code, stdin_data):
     """
     提交自定義測試到 Sandbox
     使用 /api/v1/selftest-submissions 端點
     
     Args:
+        test_id: 測試 ID (selftest-uuid)，從外部傳入以確保 ID 一致
         problem_id: 題目 ID
         language_type: 語言類型（0=C, 1=C++, 2=Python, 3=Java, 4=JavaScript）
         source_code: 程式碼
@@ -201,7 +202,6 @@ def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_dat
     Returns:
         dict: Sandbox 回應，包含 submission_id 和 status
     """
-    import uuid
     import hashlib
     from problems.models import Problems
     
@@ -213,9 +213,6 @@ def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_dat
             logger.error(f'Problem {problem_id} not found for selftest')
             return None
         
-        # 產生臨時 ID（不存 DB，只用於追蹤）
-        temp_id = f"selftest-{uuid.uuid4()}"
-        
         # 轉換語言代碼
         language = convert_language_code(language_type)
         
@@ -225,7 +222,7 @@ def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_dat
         
         # 組裝 payload
         data = {
-            'submission_id': temp_id,
+            'submission_id': test_id,
             'problem_id': str(problem_id),
             'problem_hash': f'selftest-{problem_id}',  # 特殊標記，區分自定義測試
             'mode': 'normal',
@@ -283,7 +280,7 @@ def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_dat
         
         # 發送到 selftest 端點
         url = f'{SANDBOX_API_URL}/api/v1/selftest-submissions'
-        logger.info(f'Submitting selftest: temp_id={temp_id}, problem_id={problem_id}, language={language}')
+        logger.info(f'Submitting selftest: test_id={test_id}, problem_id={problem_id}, language={language}')
         logger.debug(f'Selftest payload: {data}')
         logger.debug(f'File hash: {file_hash}, file size: {len(file_content)} bytes')
             
@@ -307,8 +304,8 @@ def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_dat
         
         logger.info(f'Selftest response: {result}')
         return {
-            'test_id': temp_id,
-            'submission_id': result.get('submission_id', temp_id),
+            'test_id': test_id,
+            'submission_id': result.get('submission_id', test_id),
             'status': result.get('status', 'queued'),
             'queue_position': result.get('queue_position'),
         }
