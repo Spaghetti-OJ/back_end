@@ -21,14 +21,22 @@ def api_response(data=None, message="OK", status_code=200):
     return Response({"data": data, "message": message, "status": status_str}, status=status_code)
 
 class CopycatView(APIView):
-    authentication_classes = [SessionAuthentication, JWTAuthentication, ApiTokenAuthentication]
-    permission_classes = [IsAuthenticated, IsEmailVerified]
+    # authentication_classes = [SessionAuthentication, JWTAuthentication, ApiTokenAuthentication]  # Commented to use global default
+    # permission_classes = [IsAuthenticated, IsEmailVerified]  # Commented to use global default
 
     def _has_problem_edit_permission(self, user, problem_id):
         """
         檢查使用者是否有該題目的編輯權限
-        必須是該題所屬課程的老師或助教
+        必須是該題所屬課程的老師或助教，或者是管理員
         """
+        # 管理員擁有所有權限
+        if user.is_superuser:
+            try:
+                problem = Problems.objects.select_related('course_id').get(pk=problem_id)
+                return True, None
+            except Problems.DoesNotExist:
+                return False, "題目不存在"
+        
         try:
             problem = Problems.objects.select_related('course_id').get(pk=problem_id)
         except Problems.DoesNotExist:

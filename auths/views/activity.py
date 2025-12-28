@@ -29,7 +29,7 @@ class UserActivityCreateView(APIView):
     POST /auth/activity
     記錄使用者活動。
     """
-    authentication_classes = [SessionAuthentication] 
+    # authentication_classes = [SessionAuthentication]  # Commented to use global default (includes JWTAuthentication)
     # permission_classes = [IsAuthenticated]  # Removed to use global default (IsAuthenticated + IsEmailVerified)
 
     def post(self, request):
@@ -71,7 +71,7 @@ class UserActivityListView(APIView):
     GET /auth/activity/<uuid:user_id>/
     查看特定使用者的活動記錄 (僅限管理員)。
     """
-    authentication_classes = [SessionAuthentication]
+    # authentication_classes = [SessionAuthentication]  # Commented to use global default (includes JWTAuthentication)
     permission_classes = [IsAdminUser, IsEmailVerified] 
 
     def get(self, request, user_id):
