@@ -130,6 +130,9 @@ def submit_to_sandbox(submission):
         )
         
         # 7. 檢查回應
+        logger.info(f'Sandbox response status: {response.status_code}')
+        if response.status_code >= 400:
+            logger.error(f'Sandbox error response: {response.text}')
         response.raise_for_status()
         result = response.json()
         

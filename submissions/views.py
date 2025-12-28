@@ -1950,22 +1950,15 @@ class SubmissionCallbackAPIView(APIView):
                     # 轉換 status 為字串格式（SubmissionResult 使用字串）
                     result_status = test_result.get('status', 'runtime_error')
                     
-                    # 從 test_result 中取得 subtask_no 和 case_no（Sandbox 回傳格式）
-                    subtask_no = test_result.get('subtask_no', 1)  # 預設第 1 個 subtask
-                    case_index = test_result.get('case_no', 1)     # 預設第 1 個 case
+                    # 從 test_result 中取得 test_case_id 和 test_case_index（按照文件規格）
+                    test_case_id = test_result.get('test_case_id')  # 資料庫 ID
+                    test_case_index = test_result.get('test_case_index', 1)  # 顯示編號
                     
-                    # 找到對應的 test_case
-                    test_case_id = None
-                    try:
-                        subtask = subtasks.get(subtask_no=subtask_no)
-                        test_case = Test_cases.objects.get(subtask_id=subtask.id, idx=case_index)
-                        test_case_id = test_case.id
-                    except (Problem_subtasks.DoesNotExist, Test_cases.DoesNotExist):
-                        logger.warning(f'Test case not found: subtask_no={subtask_no}, case_no={case_index}')
-                        # CE 或系統錯誤時，即使找不到 test_case 也要儲存錯誤訊息
-                        if result_status == 'compile_error' or test_result.get('error_message'):
-                            test_case_id = None  # 允許 None
-                        else:
+                    # CE 或系統錯誤時，test_case_id 可能為 None
+                    if test_case_id is None:
+                        logger.warning(f'Test case ID is None for case_index={test_case_index}')
+                        # CE 或有 error_message 時允許 None
+                        if result_status != 'compile_error' and not test_result.get('error_message'):
                             continue  # 其他情況跳過
                     
                     # 使用 update_or_create 避免重複呼叫 callback 時產生重複記錄
@@ -1973,7 +1966,7 @@ class SubmissionCallbackAPIView(APIView):
                     lookup_fields = {
                         'submission': submission,
                         'problem_id': submission.problem_id,
-                        'test_case_index': case_index,
+                        'test_case_index': test_case_index,
                     }
                     if test_case_id is not None:
                         lookup_fields['test_case_id'] = test_case_id
