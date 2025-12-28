@@ -108,6 +108,7 @@ class SubmissionResult(models.Model):
     STATUS_CHOICES = [
         ('accepted', 'Accepted'),
         ('wrong_answer', 'Wrong Answer'),
+        ('compile_error', 'Compile Error'),
         ('time_limit_exceeded', 'Time Limit Exceeded'),
         ('memory_limit_exceeded', 'Memory Limit Exceeded'),
         ('runtime_error', 'Runtime Error'),
@@ -125,7 +126,7 @@ class SubmissionResult(models.Model):
     # Foreign keys
     problem_id = models.IntegerField()
     submission = models.ForeignKey(Submission, on_delete=models.CASCADE, related_name='results')
-    test_case_id = models.IntegerField()
+    test_case_id = models.IntegerField(null=True, blank=True)  # CE 時可能為 None
     test_case_index = models.IntegerField()
     
     # Status and scoring

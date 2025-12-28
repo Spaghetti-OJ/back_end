@@ -1090,20 +1090,32 @@ def submission_output_view(request, id, task_no, case_no):
         return api_response(None, "task_no not found", 404)
 
     # 4. 找 test_case（task_no + case_no）
+    test_case = None
+    test_case_id = None
     try:
         test_case = Test_cases.objects.get(
             subtask_id=subtask.id,
             idx=case_no
         )
+        test_case_id = test_case.id
     except Test_cases.DoesNotExist:
-        return api_response(None, "case_no not found", 404)
+        logger.warning(f'Test case not found: subtask_id={subtask.id}, idx={case_no}')
+        # CE 等錯誤可能沒有對應的 test_case，繼續嘗試用其他方式查找
 
     # 5. 找結果
     try:
-        result = SubmissionResult.objects.get(
-            submission_id=submission.id,
-            test_case_id=test_case.id
-        )
+        if test_case_id:
+            # 優先用 test_case_id 查找
+            result = SubmissionResult.objects.get(
+                submission_id=submission.id,
+                test_case_id=test_case_id
+            )
+        else:
+            # 如果沒有 test_case_id（例如 CE），用 test_case_index 查找
+            result = SubmissionResult.objects.get(
+                submission_id=submission.id,
+                test_case_index=case_no
+            )
     except SubmissionResult.DoesNotExist:
         return api_response(None, "output not found", 404)
 
@@ -1926,16 +1938,38 @@ class SubmissionCallbackAPIView(APIView):
                 logger.info(f'Updated submission {submission_id}: status={submission.status}, score={total_score}')
                 
                 # 4. 建立 SubmissionResult 記錄
+                # 先取得所有 subtasks 和 test_cases 的對應關係
+                from problems.models import Problem_subtasks, Test_cases
+                subtasks = Problem_subtasks.objects.filter(problem_id=submission.problem_id).order_by('subtask_no')
+                
                 for test_result in test_results:
                     # 轉換 status 為字串格式（SubmissionResult 使用字串）
                     result_status = test_result.get('status', 'runtime_error')
                     
+                    # 從 test_result 中取得 subtask_no 和 case_no（Sandbox 回傳格式）
+                    subtask_no = test_result.get('subtask_no', 1)  # 預設第 1 個 subtask
+                    case_index = test_result.get('case_no', 1)     # 預設第 1 個 case
+                    
+                    # 找到對應的 test_case
+                    test_case_id = None
+                    try:
+                        subtask = subtasks.get(subtask_no=subtask_no)
+                        test_case = Test_cases.objects.get(subtask_id=subtask.id, idx=case_index)
+                        test_case_id = test_case.id
+                    except (Problem_subtasks.DoesNotExist, Test_cases.DoesNotExist):
+                        logger.warning(f'Test case not found: subtask_no={subtask_no}, case_no={case_index}')
+                        # CE 或系統錯誤時，即使找不到 test_case 也要儲存錯誤訊息
+                        if result_status == 'compile_error' or test_result.get('error_message'):
+                            test_case_id = None  # 允許 None
+                        else:
+                            continue  # 其他情況跳過
+                    
                     SubmissionResult.objects.create(
-                        submission=submission,  # 使用 submission 而非 submission_id
+                        submission=submission,
                         problem_id=submission.problem_id,
-                        test_case_id=test_result.get('test_case_id'),
-                        test_case_index=test_result.get('test_case_index', 0),
-                        status=result_status,  # SubmissionResult 的 status 是字串類型
+                        test_case_id=test_case_id,
+                        test_case_index=case_index,
+                        status=result_status,
                         execution_time=test_result.get('execution_time'),
                         memory_usage=test_result.get('memory_usage'),
                         score=test_result.get('score', 0),
