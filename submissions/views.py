@@ -110,10 +110,10 @@ def update_user_problem_stats(submission):
             stats.solve_status = 'fully_solved'
         elif stats.best_score > 0:
             stats.solve_status = 'partial_solved'
-        elif stats.total_submissions > 0:
-            stats.solve_status = 'attempted'
-        else:
+        elif stats.total_submissions == 0:
             stats.solve_status = 'never_tried'
+        else:
+            stats.solve_status = 'attempted'
         
         stats.save()
         
@@ -712,22 +712,30 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
             try:
                 # 支援 CIDR 格式 (例如 192.168.1.0/24) 或簡單前綴 (例如 192.168.)
                 if '/' in ip_prefix:
-                    # CIDR 格式：使用 ipaddress 模組
+                    # CIDR 格式：使用 ipaddress 模組進行正確的 IP 範圍過濾
                     import ipaddress
+                    from django.db.models import Q
+                    import struct
+                    import socket
+                    
                     network = ipaddress.ip_network(ip_prefix, strict=False)
-                    # 獲取網段範圍
-                    start_ip = str(network.network_address)
-                    end_ip = str(network.broadcast_address)
-                    # 篩選 IP 在範圍內的提交
-                    queryset = queryset.filter(
-                        ip_address__gte=start_ip,
-                        ip_address__lte=end_ip
-                    )
+                    
+                    # 使用 Django ORM 的自定義過濾
+                    # 由於 IP 地址存儲為字符串，我們需要逐一檢查
+                    matching_ips = []
+                    for submission in queryset:
+                        try:
+                            ip_obj = ipaddress.ip_address(submission.ip_address)
+                            if ip_obj in network:
+                                matching_ips.append(submission.id)
+                        except (ValueError, AttributeError):
+                            continue
+                    
+                    queryset = queryset.filter(id__in=matching_ips)
                 else:
                     # 簡單前綴匹配：例如 "192.168." 會匹配所有 192.168.x.x
                     queryset = queryset.filter(ip_address__startswith=ip_prefix)
             except (ValueError, TypeError) as e:
-                import logging
                 logger = logging.getLogger(__name__)
                 logger.warning(f'Invalid ip_prefix parameter: {ip_prefix}, error: {e}')
                 pass  # 忽略無效的 IP 前綴
