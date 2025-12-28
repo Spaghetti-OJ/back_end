@@ -250,7 +250,8 @@ class EditorialAdmin(ModelAdmin):
 class EditorialLikeAdmin(ModelAdmin):
     list_display = ('editorial', 'user', 'created_at')
     list_filter = ('editorial',)
-    search_fields = ('editorial__title', 'user__username')
+    search_fields = ('editorial__problem_id', 'editorial__author__username', 'user__username')
     ordering = ('-created_at',)
     readonly_fields = ('created_at',)
+    autocomplete_fields = ['editorial', 'user']
     list_per_page = 25
