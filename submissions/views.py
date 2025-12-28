@@ -1824,18 +1824,19 @@ def get_custom_test_result(request, custom_test_id):
         
         test_info = json.loads(cached)
         
-        # 如果狀態是 pending，表示還在處理中
-        if test_info.get('status') == 'pending':
+        # 如果狀態是 pending 或 queued，表示還在處理中
+        if test_info.get('status') in ['pending', 'queued', 'processing']:
             return api_response(
                 data={
                     'test_id': custom_test_id,
                     'problem_id': test_info['problem_id'],
                     'language': test_info['language'],
-                    'status': 'pending',
+                    'status': 'processing',
+                    'message': '測試正在執行中，請稍候再查詢',
                     'created_at': test_info.get('created_at'),
                 },
-                message='測試正在處理中',
-                status_code=status.HTTP_200_OK
+                message='測試正在處理中，請稍後再查詢',
+                status_code=status.HTTP_202_ACCEPTED
             )
         
         # 如果已經有錯誤，直接返回
@@ -1870,6 +1871,8 @@ def get_custom_test_result(request, custom_test_id):
                     'problem_id': test_info['problem_id'],
                     'language': test_info['language'],
                     'status': test_info.get('status', 'completed'),
+                    'sandbox_status': test_info.get('sandbox_status', ''),
+                    'is_error': test_info.get('is_error', False),
                     'stdout': test_info.get('stdout', ''),
                     'stderr': test_info.get('stderr', ''),
                     'time': test_info.get('time'),
@@ -1879,75 +1882,22 @@ def get_custom_test_result(request, custom_test_id):
                     'created_at': test_info.get('created_at'),
                     'completed_at': test_info.get('completed_at'),
                 },
-                message='here you are, bro',
+                message='測試完成',
                 status_code=status.HTTP_200_OK
             )
         
-        # 4. 如果 Redis 還沒有結果，從 Sandbox API 查詢（fallback）
-        import requests
-        from .sandbox_client import SANDBOX_API_URL, SANDBOX_API_KEY
-        
-        url = f'{SANDBOX_API_URL}/api/v1/submissions/{submission_id}'
-        headers = {'X-API-KEY': SANDBOX_API_KEY}
-        
-        try:
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
-            sandbox_result = response.json()
-        except requests.RequestException as e:
-            return api_response(
-                data=None,
-                message=f'無法從 Sandbox 取得結果: {str(e)}',
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-        
-        # 5. 檢查是否完成（有輸出或明確狀態）
-        sandbox_status = sandbox_result.get('status', 'unknown')
-        has_output = 'stdout' in sandbox_result or 'stderr' in sandbox_result
-        is_completed = sandbox_status in ['completed', 'accepted', 'wrong_answer', 'runtime_error', 
-                                          'time_limit_exceeded', 'memory_limit_exceeded', 'compile_error']
-        
-        # 如果還在處理中，返回處理中狀態
-        if not has_output and not is_completed:
-            return api_response(
-                data={
-                    'test_id': custom_test_id,
-                    'problem_id': test_info['problem_id'],
-                    'status': sandbox_status or 'processing',
-                    'message': 'Job is currently running',
-                },
-                message='測試正在處理中，請稍後再查詢',
-                status_code=status.HTTP_202_ACCEPTED
-            )
-        
-        # 6. 將 Sandbox 結果更新到 Redis（供下次查詢使用）
-        test_info['status'] = sandbox_status
-        test_info['stdout'] = sandbox_result.get('stdout', '')
-        test_info['stderr'] = sandbox_result.get('stderr', '')
-        test_info['time'] = sandbox_result.get('time')
-        test_info['memory'] = sandbox_result.get('memory')
-        test_info['message'] = sandbox_result.get('message', '')
-        test_info['compile_info'] = sandbox_result.get('compile_info', '')
-        test_info['completed_at'] = str(timezone.now())
-        redis_client.setex(cache_key, 1800, json.dumps(test_info))
-        
-        # 7. 返回完整結果
+        # 4. 如果 Redis 還沒有結果，返回處理中狀態（讓前端繼續輪詢）
         return api_response(
             data={
                 'test_id': custom_test_id,
                 'problem_id': test_info['problem_id'],
                 'language': test_info['language'],
-                'status': sandbox_status,
-                'stdout': sandbox_result.get('stdout', ''),
-                'stderr': sandbox_result.get('stderr', ''),
-                'time': sandbox_result.get('time'),
-                'memory': sandbox_result.get('memory'),
-                'message': sandbox_result.get('message', ''),
-                'compile_info': sandbox_result.get('compile_info'),
+                'status': 'processing',
+                'message': '測試正在執行中，請稍候再查詢',
                 'created_at': test_info.get('created_at'),
             },
-            message='here you are, bro',
-            status_code=status.HTTP_200_OK
+            message='測試正在處理中',
+            status_code=status.HTTP_202_ACCEPTED
         )
         
     except json.JSONDecodeError:
@@ -2343,8 +2293,20 @@ class CustomTestCallbackAPIView(APIView):
                 
                 test_info = json.loads(cached)
                 
+                # 正規化 status（Sandbox 返回 OK/WA/TLE 等，轉換為 completed/error）
+                normalized_status = 'completed'
+                is_error = False
+                if test_status in ['CE', 'RE', 'MLE', 'TLE', 'OLE', 'IE', 'error']:
+                    normalized_status = 'error'
+                    is_error = True
+                elif test_status in ['OK', 'AC', 'completed', 'success']:
+                    normalized_status = 'completed'
+                    is_error = False
+                
                 # 更新結果
-                test_info['status'] = test_status
+                test_info['status'] = normalized_status
+                test_info['sandbox_status'] = test_status  # 保留原始 Sandbox 狀態
+                test_info['is_error'] = is_error
                 test_info['stdout'] = stdout
                 test_info['stderr'] = stderr
                 test_info['time'] = execution_time

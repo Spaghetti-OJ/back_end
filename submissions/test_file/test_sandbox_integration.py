@@ -174,7 +174,7 @@ def test_rejudge_flow(token, submission_id):
     except Exception as e:
         print(f" 請求失敗: {e}")
 
-def test_bulk_submissions(token, problem_id=1, total=10, rate_per_second=0.15):
+def test_bulk_submissions(token, problem_id=1, total=10, rate_per_second=5):
     """批量提交測試 - 預設每 7 秒 1 筆，總共 10 筆（符合速率限制）"""
     print_section(f"批量測試: {total} 筆提交 ({rate_per_second:.2f} 筆/秒)")
     
