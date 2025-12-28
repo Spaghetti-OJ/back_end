@@ -1,5 +1,5 @@
 from django.shortcuts import render, get_object_or_404
-from django.db import models, transaction
+from django.db import models, transaction, IntegrityError
 from django.http import Http404
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
@@ -837,31 +837,9 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                     status_code=status.HTTP_403_FORBIDDEN
                 )
             
-            # 3. Quota 檢查 - 檢查用戶是否還有提交配額
-            from .models import UserProblemQuota
-            try:
-                with transaction.atomic():
-                    quota = UserProblemQuota.objects.select_for_update().get(
-                        user=user,
-                        problem_id=problem_id,
-                        assignment_id__isnull=True  # 全域配額
-                    )
-                    if quota.remaining_attempts == 0:
-                        return api_response(
-                            data=None,
-                            message="you have used all your quotas",
-                            status_code=status.HTTP_403_FORBIDDEN
-                        )
-                    # 減少配額（如果不是無限制）
-                    if quota.remaining_attempts > 0:
-                        quota.remaining_attempts -= 1
-                        quota.save()
-            except UserProblemQuota.DoesNotExist:
-                # 沒有配額限制，允許提交
-                pass
-            
-            # 4. 題目權限檢查
+            # 3. 題目權限檢查（先檢查題目是否存在，並獲取 quota 設定）
             from problems.models import Problems
+            from .models import UserProblemQuota
             try:
                 problem = Problems.objects.get(id=problem_id)
                 
@@ -902,7 +880,83 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                     status_code=status.HTTP_404_NOT_FOUND
                 )
             
-            submission = serializer.save()
+            # 4. Quota 檢查 - 檢查用戶是否還有提交配額
+            # 先檢查題目層級的 total_quota 設定
+            problem_quota = problem.total_quota  # -1 = 無限制, >= 0 = 有限制
+            
+            # Wrap quota check and submission save in a single atomic transaction
+            # to ensure consistency (prevent quota decrement without submission save)
+            with transaction.atomic():
+                if problem_quota >= 0:
+                    # 題目有配額限制，需要檢查/建立 UserProblemQuota 記錄
+                    # Use explicit try-except pattern to avoid race condition with get_or_create
+                    try:
+                        # Try to get existing quota record with row-level lock
+                        quota = UserProblemQuota.objects.select_for_update().get(
+                            user=user,
+                            problem_id=problem_id,
+                            assignment_id=None  # Global quota (no assignment)
+                        )
+                    except UserProblemQuota.DoesNotExist:
+                        # Record doesn't exist, create it
+                        # The unique constraint will handle concurrent creates
+                        try:
+                            quota = UserProblemQuota.objects.create(
+                                user=user,
+                                problem_id=problem_id,
+                                assignment_id=None,
+                                total_quota=problem_quota,
+                                remaining_attempts=problem_quota
+                            )
+                        except IntegrityError:
+                            # If another thread created it concurrently, get it with lock
+                            quota = UserProblemQuota.objects.select_for_update().get(
+                                user=user,
+                                problem_id=problem_id,
+                                assignment_id=None
+                            )
+                    
+                    # 如果記錄已存在但 total_quota 與題目設定不同，可能是題目設定更新了
+                    # 這裡我們不自動更新，保持原有配額（避免用戶突然獲得更多或更少配額）
+                    
+                    if quota.remaining_attempts == 0:
+                        return api_response(
+                            data=None,
+                            message="you have used all your quotas",
+                            status_code=status.HTTP_403_FORBIDDEN
+                        )
+                    
+                    # 減少配額
+                    # Note: remaining_attempts can be -1 (unlimited) if manually set by admin
+                    # In this case, we preserve the unlimited quota by not decrementing
+                    if quota.remaining_attempts > 0:
+                        quota.remaining_attempts -= 1
+                        quota.save()
+                else:
+                    # 題目無配額限制，但仍檢查是否有手動設定的 UserProblemQuota
+                    try:
+                        quota = UserProblemQuota.objects.select_for_update().get(
+                            user=user,
+                            problem_id=problem_id,
+                            assignment_id=None  # Global quota (no assignment)
+                        )
+                        if quota.remaining_attempts == 0:
+                            return api_response(
+                                data=None,
+                                message="you have used all your quotas",
+                                status_code=status.HTTP_403_FORBIDDEN
+                            )
+                        # Note: remaining_attempts can be -1 (unlimited) if manually set
+                        # In this case, we preserve the unlimited quota by not decrementing
+                        if quota.remaining_attempts > 0:
+                            quota.remaining_attempts -= 1
+                            quota.save()
+                    except UserProblemQuota.DoesNotExist:
+                        # 沒有任何配額限制，允許提交
+                        pass
+                
+                # Save submission within the same transaction to ensure atomicity
+                submission = serializer.save()
             
             # NOJ 格式響應
             return api_response(
