@@ -3,7 +3,7 @@ from rest_framework import generics, status
 from rest_framework.exceptions import ErrorDetail
 from ..common.responses import api_response
 
-from ..models import Courses
+from ..models import Courses, Course_members
 from ..serializers import (
     CourseCreateSerializer,
     CourseListSerializer,

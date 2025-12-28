@@ -851,8 +851,8 @@ class HomeworkScoreboardView(APIView):
         # 如果完全沒有統計資料，直接回空排行榜
         if not stats_qs.exists():
             payload = {
-                "homework_id": assignment.id,
-                "homework_title": assignment.title,
+                "assignment_id": assignment.id,
+                "title": assignment.title,
                 "course_id": assignment.course_id,
                 "items": [],
             }
@@ -948,8 +948,8 @@ class HomeworkScoreboardView(APIView):
 
         # 7. 組成 payload -> serializer -> api_response
         payload = {
-            "homework_id": assignment.id,
-            "homework_title": assignment.title,
+            "assignment_id": assignment.id,
+            "title": assignment.title,
             "course_id": assignment.course_id,
             "items": items,
         }

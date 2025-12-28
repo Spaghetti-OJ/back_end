@@ -30,7 +30,7 @@ def to_epoch_from_dt(dt):
 
 class HomeworkCreateSerializer(serializers.Serializer):
     name = serializers.CharField(required=True)
-    course_id = serializers.UUIDField()
+    course_id = serializers.IntegerField()
     markdown = serializers.CharField(required=False, allow_blank=True, default="")
     start = serializers.IntegerField(required=False, allow_null=True)
     end = serializers.IntegerField(required=False, allow_null=True)
@@ -192,7 +192,7 @@ class HomeworkDeadlineSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     markdown = serializers.CharField(allow_blank=True)
-    course_id = serializers.UUIDField()
+    course_id = serializers.IntegerField()
     start = serializers.DateTimeField(allow_null=True)
     end = serializers.DateTimeField(allow_null=True)
     is_overdue = serializers.BooleanField()
@@ -218,7 +218,7 @@ class HomeworkProblemStatsSerializer(serializers.Serializer):
 
 class HomeworkStatsSerializer(serializers.Serializer):
     homework_id = serializers.IntegerField()
-    course_id = serializers.UUIDField()
+    course_id = serializers.IntegerField()
 
     title = serializers.CharField()
     description = serializers.CharField(allow_blank=True, allow_null=True)
@@ -253,7 +253,7 @@ class ScoreboardRowSerializer(serializers.Serializer):
 class HomeworkScoreboardSerializer(serializers.Serializer):
     assignment_id = serializers.IntegerField()
     title = serializers.CharField()
-    course_id = serializers.UUIDField()
+    course_id = serializers.IntegerField()
     items = ScoreboardRowSerializer(many=True)
 
 class HomeworkSubmissionListItemSerializer(serializers.ModelSerializer):
