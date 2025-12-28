@@ -352,7 +352,7 @@ class SubmissionBaseCreateSerializer(serializers.ModelSerializer):
         min_value=0,
         max_value=4,
         error_messages={
-            'invalid': 'invalid data!',
+            'invalid': 'languageType 格式錯誤：必須是 0-4 的整數 (收到的類型不正確)',
             'required': 'post data missing!',
             'min_value': 'not allowed language',
             'max_value': 'not allowed language'

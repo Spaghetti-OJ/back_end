@@ -39,17 +39,28 @@ class SubmissionAPITestSetup:
     @classmethod
     def create_test_users(cls):
         """創建測試用戶"""
+        from user.models import UserProfile
+        
         # 普通學生
         cls.student1 = User.objects.create_user(
             username='api_student1',
             email='api_student1@test.com',
             password='testpass123'
         )
+        # 設置郵箱驗證
+        profile1, _ = UserProfile.objects.get_or_create(user=cls.student1)
+        profile1.email_verified = True
+        profile1.save()
+        
         cls.student2 = User.objects.create_user(
             username='api_student2', 
             email='api_student2@test.com',
             password='testpass123'
         )
+        # 設置郵箱驗證
+        profile2, _ = UserProfile.objects.get_or_create(user=cls.student2)
+        profile2.email_verified = True
+        profile2.save()
         
         # 老師
         cls.teacher = User.objects.create_user(
@@ -57,6 +68,10 @@ class SubmissionAPITestSetup:
             email='api_teacher@test.com',
             password='testpass123'
         )
+        # 設置郵箱驗證
+        profile_teacher, _ = UserProfile.objects.get_or_create(user=cls.teacher)
+        profile_teacher.email_verified = True
+        profile_teacher.save()
         
         # TA
         cls.ta = User.objects.create_user(
@@ -64,6 +79,10 @@ class SubmissionAPITestSetup:
             email='api_ta@test.com',
             password='testpass123'
         )
+        # 設置郵箱驗證
+        profile_ta, _ = UserProfile.objects.get_or_create(user=cls.ta)
+        profile_ta.email_verified = True
+        profile_ta.save()
         
         # 管理員
         cls.admin = User.objects.create_user(
@@ -73,6 +92,11 @@ class SubmissionAPITestSetup:
             is_staff=True,
             is_superuser=True
         )
+        # 設置郵箱驗證
+        profile_admin, _ = UserProfile.objects.get_or_create(user=cls.admin)
+        profile_admin.email_verified = True
+        profile_admin.save()
+
     
     @classmethod
     def create_test_courses(cls):
@@ -117,6 +141,7 @@ class SubmissionAPITestSetup:
             description='API測試：給定一個整數數組，返回兩個數字的索引',
             course_id=cls.course1,
             creator_id=cls.teacher,  # 添加必需的 creator_id
+            is_public='course',  # 設置為課程可見
             difficulty=Problems.Difficulty.EASY
         )
         
@@ -126,6 +151,7 @@ class SubmissionAPITestSetup:
             description='API測試：反轉一個單鏈表',
             course_id=cls.course2,
             creator_id=cls.teacher,  # 添加必需的 creator_id
+            is_public='course',  # 設置為課程可見
             difficulty=Problems.Difficulty.MEDIUM
         )
         
@@ -136,6 +162,7 @@ class SubmissionAPITestSetup:
             description='API測試：用於測試權限的題目（關聯到 course2）',
             course_id=cls.course2,  # 修改：不能為 None，使用 course2
             creator_id=cls.teacher,  # 添加必需的 creator_id
+            is_public='course',  # 設置為課程可見
             difficulty=Problems.Difficulty.HARD
         )
     
@@ -289,6 +316,11 @@ class TestSubmissionCreateAPI(SubmissionAPIBaseTestCase):
         }
         
         response = self.client.post(self.get_submission_create_url(), data)
+        
+        # 調試：打印響應內容
+        if response.status_code != status.HTTP_201_CREATED:
+            print(f"\n錯誤狀態碼: {response.status_code}")
+            print(f"響應內容: {response.data}")
         
         # 驗證 NOJ 格式響應 (通過 api_response 包裝)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
