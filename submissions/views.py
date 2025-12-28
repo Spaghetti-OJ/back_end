@@ -12,6 +12,7 @@ from problems.models import Problems, Problem_subtasks, Test_cases
 from user.models import User
 import uuid
 from datetime import datetime
+import logging
 
 # 統一的 API 響應格式
 def api_response(data=None, message="OK", status_code=200):
@@ -41,6 +42,198 @@ from .serializers import (
 from problems.models import Problems
 from courses.models import Courses, Course_members
 
+
+def update_user_problem_stats(submission):
+    """
+    更新使用者題目解題統計（全域層級）
+    
+    根據提交結果更新 UserProblemSolveStatus，包括：
+    - 總提交數
+    - AC 提交數
+    - 最佳分數
+    - 首次解題時間
+    - 最後提交時間
+    - 解題狀態（never_tried/attempted/partial_solved/fully_solved）
+    - 最佳執行時間和記憶體使用
+    """
+    from django.utils import timezone
+    from django.db.models import F
+    
+    try:
+        # 取得或創建 UserProblemSolveStatus
+        stats, created = UserProblemSolveStatus.objects.get_or_create(
+            user=submission.user,
+            problem_id=submission.problem_id,
+            defaults={
+                'total_submissions': 0,
+                'ac_submissions': 0,
+                'best_score': 0,
+                'solve_status': 'never_tried',
+            }
+        )
+        
+        # 更新總提交數
+        stats.total_submissions = F('total_submissions') + 1
+        
+        # 更新最後提交時間
+        stats.last_submission_time = submission.created_at
+        
+        # 如果是 AC (status='0')
+        if submission.status == '0':
+            stats.ac_submissions = F('ac_submissions') + 1
+            
+            # 更新首次解題時間（如果是第一次 AC）
+            if not stats.first_solve_time:
+                stats.first_solve_time = submission.judged_at or timezone.now()
+        
+        # 先保存以計算 F() 表達式
+        stats.save()
+        stats.refresh_from_db()
+        
+        # 更新最佳分數
+        if submission.score > stats.best_score:
+            stats.best_score = submission.score
+        
+        # 更新最佳執行時間（只在有效時更新）
+        if submission.execution_time > 0:
+            if stats.best_execution_time is None or submission.execution_time < stats.best_execution_time:
+                stats.best_execution_time = submission.execution_time
+            stats.total_execution_time += submission.execution_time
+        
+        # 更新最佳記憶體使用（只在有效時更新）
+        if submission.memory_usage > 0:
+            if stats.best_memory_usage is None or submission.memory_usage < stats.best_memory_usage:
+                stats.best_memory_usage = submission.memory_usage
+        
+        # 更新解題狀態
+        if stats.best_score >= 100:
+            stats.solve_status = 'fully_solved'
+        elif stats.best_score > 0:
+            stats.solve_status = 'partial_solved'
+        elif stats.total_submissions > 0:
+            stats.solve_status = 'attempted'
+        else:
+            stats.solve_status = 'never_tried'
+        
+        stats.save()
+        
+        logger = logging.getLogger(__name__)
+        logger.info(f'Updated solve status for user {submission.user.id} problem {submission.problem_id}: '
+                   f'status={stats.solve_status}, best_score={stats.best_score}, '
+                   f'total_submissions={stats.total_submissions}')
+        
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f'Failed to update user problem solve status: {str(e)}', exc_info=True)
+
+''' 這邊不再需要了，算成績的部分交給前端處理
+def update_user_assignment_stats(submission, assignment_id):
+    """
+    更新使用者作業題目統計（作業層級）
+    
+    根據提交結果更新 UserProblemStats，包括：
+    - 總提交數
+    - 最佳分數
+    - 首次 AC 時間
+    - 最後提交時間
+    - 解題狀態（unsolved/partial/solved）
+    - 最佳執行時間和記憶體使用
+    - 遲交處理
+    """
+    from django.utils import timezone
+    from django.db.models import F
+    from .models import UserProblemStats
+    from assignments.models import Assignments, Assignment_problems
+    
+    try:
+        # 檢查是否屬於作業
+        if not assignment_id:
+            return
+        
+        # 檢查 assignment 和 problem 的關聯
+        try:
+            assignment = Assignments.objects.get(id=assignment_id)
+            assignment_problem = Assignment_problems.objects.get(
+                assignment=assignment,
+                problem_id=submission.problem_id
+            )
+        except (Assignments.DoesNotExist, Assignment_problems.DoesNotExist):
+            # 如果作業或題目不存在，跳過
+            return
+        
+        # 取得或創建 UserProblemStats
+        stats, created = UserProblemStats.objects.get_or_create(
+            user=submission.user,
+            assignment_id=assignment_id,
+            problem_id=submission.problem_id,
+            defaults={
+                'total_submissions': 0,
+                'best_score': 0,
+                'max_possible_score': assignment_problem.weight * 100 if assignment_problem.weight else 100,
+                'solve_status': 'unsolved',
+            }
+        )
+        
+        # 更新總提交數
+        stats.total_submissions = F('total_submissions') + 1
+        
+        # 更新最後提交時間
+        stats.last_submission_time = submission.created_at
+        
+        # 檢查是否遲交
+        if assignment.due_time and submission.created_at > assignment.due_time:
+            stats.is_late = True
+            # 計算遲交罰分
+            if assignment.late_penalty > 0:
+                stats.penalty_score = assignment.late_penalty
+        
+        # 先保存以計算 F() 表達式
+        stats.save()
+        stats.refresh_from_db()
+        
+        # 更新最佳分數（考慮遲交罰分）
+        final_score = submission.score
+        if stats.is_late and stats.penalty_score > 0:
+            final_score = int(submission.score * (1 - float(stats.penalty_score) / 100))
+        
+        if final_score > stats.best_score:
+            stats.best_score = final_score
+            stats.best_submission = submission
+        
+        # 如果是 AC (status='0') 且還沒有 first_ac_time
+        if submission.status == '0' and not stats.first_ac_time:
+            stats.first_ac_time = submission.judged_at or timezone.now()
+        
+        # 更新最佳執行時間
+        if submission.execution_time > 0:
+            if stats.best_execution_time is None or submission.execution_time < stats.best_execution_time:
+                stats.best_execution_time = submission.execution_time
+        
+        # 更新最佳記憶體使用
+        if submission.memory_usage > 0:
+            if stats.best_memory_usage is None or submission.memory_usage < stats.best_memory_usage:
+                stats.best_memory_usage = submission.memory_usage
+        
+        # 更新解題狀態
+        if stats.best_score >= stats.max_possible_score:
+            stats.solve_status = 'solved'
+        elif stats.best_score > 0:
+            stats.solve_status = 'partial'
+        else:
+            stats.solve_status = 'unsolved'
+        
+        stats.save()
+        
+        logger = logging.getLogger(__name__)
+        logger.info(f'Updated assignment stats for user {submission.user.id} '
+                   f'assignment {assignment_id} problem {submission.problem_id}: '
+                   f'status={stats.solve_status}, best_score={stats.best_score}, '
+                   f'is_late={stats.is_late}')
+        
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f'Failed to update user assignment stats: {str(e)}', exc_info=True)
+'''
 
 class BasePermissionMixin:
     """基礎權限檢查 Mixin - 提供通用權限檢查方法"""
@@ -469,6 +662,7 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
         language_type = self.request.query_params.get('language_type')
         before = self.request.query_params.get('before')  # Unix 時間戳記 (秒)
         after = self.request.query_params.get('after')    # Unix 時間戳記 (秒)
+        ip_prefix = self.request.query_params.get('ip_prefix')  # IP 網段前綴
         
         # 套用篩選條件
         if problem_id:
@@ -512,6 +706,31 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                 queryset = queryset.filter(created_at__gt=after_dt)
             except (ValueError, TypeError, OSError):
                 pass  # 忽略無效的時間格式
+        
+        # IP 網段前綴篩選
+        if ip_prefix:
+            try:
+                # 支援 CIDR 格式 (例如 192.168.1.0/24) 或簡單前綴 (例如 192.168.)
+                if '/' in ip_prefix:
+                    # CIDR 格式：使用 ipaddress 模組
+                    import ipaddress
+                    network = ipaddress.ip_network(ip_prefix, strict=False)
+                    # 獲取網段範圍
+                    start_ip = str(network.network_address)
+                    end_ip = str(network.broadcast_address)
+                    # 篩選 IP 在範圍內的提交
+                    queryset = queryset.filter(
+                        ip_address__gte=start_ip,
+                        ip_address__lte=end_ip
+                    )
+                else:
+                    # 簡單前綴匹配：例如 "192.168." 會匹配所有 192.168.x.x
+                    queryset = queryset.filter(ip_address__startswith=ip_prefix)
+            except (ValueError, TypeError) as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f'Invalid ip_prefix parameter: {ip_prefix}, error: {e}')
+                pass  # 忽略無效的 IP 前綴
         
         return self.get_viewable_submissions(self.request.user, queryset)
     
@@ -1603,7 +1822,7 @@ class SubmissionCallbackAPIView(APIView):
     接收 Sandbox 判題結果的 callback endpoint
     
     Sandbox 判題完成後會 POST 到這個 endpoint
-    URL: POST /api/submissions/callback/
+    URL: POST /{callback_url}/submissions/callback/
     """
     permission_classes = [permissions.AllowAny]  # Sandbox 不需要 JWT 認證
     
@@ -1717,9 +1936,18 @@ class SubmissionCallbackAPIView(APIView):
                 
                 logger.info(f'Created {len(test_results)} test results for submission {submission_id}')
                 
-                # 5. TODO: 更新 User_problem_stats (之後實現)
-                # update_user_problem_stats(submission)
-            
+                # 5. 更新 UserProblemSolveStatus（全域層級）
+                update_user_problem_stats(submission)
+                '''這邊也不需要了，算成績的部分交給前端處理
+
+                    # 6. 更新 UserProblemStats（作業層級）
+                    # 嘗試從 submission 找到對應的 assignment_id
+                    # submission model 需要加上 assignment_id 欄位，或者從 context 傳入
+                    # 目前先跳過，等 submission model 更新後再啟用
+                    # if hasattr(submission, 'assignment_id') and submission.assignment_id:
+                    #     update_user_assignment_stats(submission, submission.assignment_id)
+
+                '''
             return api_response(
                 data={'submission_id': str(submission_id)},
                 message='Callback processed successfully',
