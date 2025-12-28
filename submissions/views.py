@@ -72,6 +72,7 @@ def update_user_problem_stats(submission):
                 'ac_submissions': 0,
                 'best_score': 0,
                 'solve_status': 'never_tried',
+                'total_execution_time': 0,
             }
         )
         
@@ -606,8 +607,20 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                     
                     # 由於 SQLite 將 IP 存為字串，我們需要在 Python 層面進行過濾
                     # 先獲取所有可能的 IP（基於前綴的簡單過濾以減少數據量）
-                    network_prefix = str(network.network_address).rsplit('.', 2)[0]  # 取得網段的前綴部分
-                    candidate_submissions = queryset.filter(ip_address__startswith=network_prefix)
+                    # 取得網段的前 1-3 個八位元組作為前綴（例如：192.168.1.0/24 -> "192.168"）
+                    network_parts = str(network.network_address).split('.')
+                    if network.prefixlen >= 16:
+                        network_prefix = '.'.join(network_parts[:2])  # 取前兩個八位元組
+                    elif network.prefixlen >= 8:
+                        network_prefix = network_parts[0]  # 取第一個八位元組
+                    else:
+                        network_prefix = ''  # 不使用前綴過濾，檢查所有 IP
+                    
+                    if network_prefix:
+                        candidate_submissions = queryset.filter(ip_address__startswith=network_prefix)
+                    else:
+                        candidate_submissions = queryset
+
                     
                     # 在 Python 中過濾出符合 CIDR 範圍的提交
                     valid_submission_ids = []
