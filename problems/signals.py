@@ -45,16 +45,18 @@ def reset_user_quotas_on_change(sender, instance, created, **kwargs):
         return
     
     # 延遲導入避免循環依賴
+    from django.db import transaction
     from submissions.models import UserProblemQuota
     
     # 重置所有該題目的配額記錄
-    updated_count = UserProblemQuota.objects.filter(
-        problem_id=instance.id,
-        assignment_id__isnull=True  # 只重置全域配額，不影響作業配額
-    ).update(
-        total_quota=new_quota,
-        remaining_attempts=new_quota
-    )
+    with transaction.atomic():
+        updated_count = UserProblemQuota.objects.filter(
+            problem_id=instance.id,
+            assignment_id=None  # 只重置全域配額，不影響作業配額
+        ).update(
+            total_quota=new_quota,
+            remaining_attempts=new_quota
+        )
     
     logger.info(
         f"Problem {instance.id} total_quota changed from {old_quota} to {new_quota}. "
