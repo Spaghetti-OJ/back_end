@@ -1067,7 +1067,8 @@ class ProblemDetailView(APIView):
             if not (user.is_staff or user.is_superuser or getattr(user, 'identity', None) in ['admin', 'teacher'] or problem.creator_id == user):
                 if visibility_normalized == 'course' and problem.course_id:
                     from courses.models import Course_members
-                    is_course_member = Course_members.objects.filter(course_id=problem.course_id, user_id=user).exists()
+                    # 必須先檢查 user 是否已認證，否則 AnonymousUser 會導致 UUID 轉換失敗
+                    is_course_member = user.is_authenticated and Course_members.objects.filter(course_id=problem.course_id, user_id=user).exists()
                     if not is_course_member:
                         return api_response(None, "Not enough permission", status_code=403)
                 else:
