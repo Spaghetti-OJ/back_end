@@ -38,3 +38,4 @@ xxhash==3.6.0
 mosspy==1.0.9
 django-schema-viewer==0.5.3
 celery==5.4.0
+psycopg[binary]>=3.1
