@@ -230,6 +230,7 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
     allowed_network = serializers.ListField(
         child=serializers.CharField(max_length=255), required=False
     )
+    course_name = serializers.CharField(source="course_id.name", read_only=True)
 
     class Meta:
         model = Problems
@@ -242,7 +243,7 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
             "subtask_description", "supported_languages", "allowed_network",
             # custom checker settings (read-only for students)
             "use_custom_checker", "checker_name",
-            "course_id",
+            "course_id", "course_name",
             "created_at",
             "tags", "tag_ids", "subtasks",
             "submit_count", "high_score", "is_liked_by_user",
