@@ -80,7 +80,11 @@ class Assignments(models.Model):
     )
 
     ip_restriction = models.TextField(blank=True)
-    ip_whitelist = models.TextField(blank=True, validators=[validate_cidr_whitelist])
+    ip_whitelist = models.TextField(
+        blank=True,
+        default="",
+        validators=[validate_cidr_whitelist],
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
