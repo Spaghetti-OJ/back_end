@@ -106,6 +106,7 @@ class HomeworkUpdateSerializer(serializers.Serializer):
     )
     scoreboard_status = serializers.IntegerField(required=False, allow_null=True)
     penalty = serializers.CharField(required=False, allow_blank=True)
+    max_attempts = serializers.IntegerField(required=False, allow_null=True)
 
     def validate(self, attrs):
         # 時間檢查
@@ -125,6 +126,12 @@ class HomeworkUpdateSerializer(serializers.Serializer):
                     not_found.append(pid)
             if not_found:
                 raise serializers.ValidationError({"problem_ids": f"problems not found: {not_found}"})
+
+        # 驗證 max_attempts
+        if "max_attempts" in attrs:
+            ma = attrs.get("max_attempts")
+            if ma is not None and ma != -1 and ma < 1:
+                raise serializers.ValidationError({"max_attempts": "max_attempts must be -1 or >=1"})
 
         attrs["_start_dt"] = start_dt
         attrs["_end_dt"] = end_dt
@@ -287,3 +294,42 @@ class HomeworkSubmissionListItemSerializer(serializers.ModelSerializer):
             "status_display",
         ]
         read_only_fields = fields
+class AcSubmissionRatioSerializer(serializers.Serializer):
+    ac = serializers.IntegerField()
+    tried = serializers.IntegerField()
+
+
+class HomeworkProblemStateSerializer(serializers.Serializer):
+    """
+    單一題目的 state（不含 top10）
+    """
+    problemId = serializers.IntegerField()
+    numUsersTried = serializers.IntegerField()
+    numAcUsers = serializers.IntegerField()
+    acSubmissionRatio = AcSubmissionRatioSerializer()
+    averageScore = serializers.FloatField()
+    standardDeviation = serializers.FloatField()
+
+
+class HomeworkStatsPageSerializer(serializers.Serializer):
+    """
+    GET /homework/{id}/stats 用
+    對應你前端 stats 頁面需要的結構
+    """
+    name = serializers.CharField()
+    markdown = serializers.CharField(allow_blank=True)
+    start = serializers.IntegerField(allow_null=True)
+    end = serializers.IntegerField(allow_null=True)
+    penalty = serializers.CharField(allow_blank=True)
+
+    problemIds = serializers.ListField(
+        child=serializers.IntegerField()
+    )
+
+    # stats 頁目前不一定用到，但欄位要存在
+    studentStatus = serializers.DictField()
+
+    # key 是 problemId（字串），value 是 HomeworkProblemState
+    state = serializers.DictField(
+        child=HomeworkProblemStateSerializer()
+    )

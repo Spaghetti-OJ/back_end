@@ -80,11 +80,14 @@ def submit_to_sandbox(submission):
         # 3. 轉換語言代碼
         language = convert_language_code(submission.language_type)
         
-        # 4. 組裝 payload（multipart/form-data）
+        # 4. 取得測資包 hash（若無則使用 problem_id 作為 fallback）
+        problem_hash = problem.testcase_hash or f'p{submission.problem_id}'
+        
+        # 5. 組裝 payload（multipart/form-data）
         data = {
             'submission_id': str(submission.id),
             'problem_id': str(submission.problem_id),
-            'problem_hash': f'TODO_HASH_{submission.problem_id}',  # TODO: 實現題目包管理後取得真實 hash
+            'problem_hash': problem_hash,
             'mode': 'normal',  # 目前只支援 single file
             'language': language,
             'file_hash': submission.code_hash,
@@ -98,14 +101,14 @@ def submit_to_sandbox(submission):
             'callback_url': settings.BACKEND_BASE_URL.rstrip('/'),  # Sandbox 判題完成後回傳結果的 URL（注意：是 submission 不是 submissions）
         }
         
-        # 5. 準備檔案
+        # 6. 準備檔案
         filename = f'solution.{get_file_extension(language)}'
         file_content = submission.source_code.encode('utf-8')
         files = {
             'file': (filename, BytesIO(file_content), 'text/plain')
         }
         
-        # 6. 發送請求
+        # 7. 發送請求
         url = f'{SANDBOX_API_URL}/api/v1/submissions'
         logger.info(f'Submitting to Sandbox: submission_id={submission.id}, problem_id={submission.problem_id}')
         
