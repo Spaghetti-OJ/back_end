@@ -151,7 +151,7 @@ class SubmissionResultSerializer(serializers.ModelSerializer):
     class Meta:
         model = SubmissionResult
         fields = '__all__'
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['created_at']  # 移除 'id'，因為不再有單一主鍵
 
 
 class UserProblemStatsSerializer(serializers.ModelSerializer):

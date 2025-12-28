@@ -120,14 +120,14 @@ class SubmissionResult(models.Model):
         ('solved', 'Solved'),
     ]
     
-    # Primary key - UUID
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
-    # Foreign keys
-    problem_id = models.IntegerField()
+    # Foreign keys - 複合主鍵的一部分
     submission = models.ForeignKey(Submission, on_delete=models.CASCADE, related_name='results')
+    subtask_id = models.IntegerField()  # 複合主鍵：第幾個子題
+    test_case_index = models.IntegerField()  # 複合主鍵：第幾筆測資（相對於 subtask）
+    
+    # Other foreign keys
+    problem_id = models.IntegerField()
     test_case_id = models.IntegerField(null=True, blank=True)  # CE 時可能為 None
-    test_case_index = models.IntegerField()
     
     # Status and scoring
     status = models.CharField(max_length=30, choices=STATUS_CHOICES)
@@ -150,10 +150,12 @@ class SubmissionResult(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
+        # 複合主鍵：submission + subtask_id + test_case_index
+        unique_together = [['submission', 'subtask_id', 'test_case_index']]
         indexes = [
-            models.Index(fields=['submission', 'test_case_index']),
+            models.Index(fields=['submission', 'subtask_id', 'test_case_index']),
         ]
-        ordering = ['test_case_index']
+        ordering = ['subtask_id', 'test_case_index']
         db_table = 'submission_results'
     
     def __str__(self):
