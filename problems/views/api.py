@@ -660,10 +660,10 @@ class ProblemTestCaseZipUploadView(APIView):
             pass
         saved = _storage.save(rel, out_buf)
         
-        # 計算 SHA256 hash 並儲存到 problem
+        # 計算已儲存檔案的 SHA256 hash 並儲存到 problem
         import hashlib
-        out_buf.seek(0)
-        sha256_hash = hashlib.sha256(out_buf.read()).hexdigest()
+        with _storage.open(rel, 'rb') as fh:
+            sha256_hash = hashlib.sha256(fh.read()).hexdigest()
         problem.testcase_hash = sha256_hash
         problem.save(update_fields=['testcase_hash'])
         
@@ -685,15 +685,10 @@ class ProblemTestCaseChecksumView(APIView):
         if not token_expected or token_req != token_expected:
             return api_response(None, "Invalid sandbox token", status_code=401)
         problem = get_object_or_404(Problems, pk=pk)
-        from ..services.storage import _storage
-        rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
-        if not _storage.exists(rel):
-            raise Http404("Test case archive not found")
-        # 計算 SHA256
-        import hashlib
-        with _storage.open(rel, 'rb') as fh:
-            sha256 = hashlib.sha256(fh.read()).hexdigest()
-        return api_response({"checksum": sha256}, "OK", status_code=200)
+        # 使用儲存的 testcase_hash
+        if not problem.testcase_hash:
+            return api_response(None, "Test case hash not available", status_code=404)
+        return api_response({"checksum": problem.testcase_hash}, "OK", status_code=200)
 
 
 class ProblemTestCaseMetaView(APIView):
@@ -714,10 +709,9 @@ class ProblemTestCaseMetaView(APIView):
         rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
         if not _storage.exists(rel):
             raise Http404("Test case archive not found")
-        import zipfile, hashlib, json
+        import zipfile, json
         with _storage.open(rel, 'rb') as fh:
             data = fh.read()
-        sha256 = hashlib.sha256(data).hexdigest()
         from io import BytesIO
         buffer = BytesIO(data)
         # 優先讀取 zip 內的 meta.json；若不存在則回退為檔名掃描

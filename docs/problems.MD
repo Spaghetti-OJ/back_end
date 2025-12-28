@@ -163,7 +163,7 @@ curl "http://127.0.0.1:8000/problem/30/test-case" -H "Authorization: Bearer $TOK
 - 成功回應：
 ```json
 {
-  "data": { "checksum": "a3f2b8c9d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1" },
+  "data": { "checksum": "EXAMPLE_SHA256_CHECKSUM" },
   "message": "OK",
   "status": "200"
 }
