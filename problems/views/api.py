@@ -1091,7 +1091,7 @@ class ProblemDetailView(APIView):
             # Static analysis settings
             'static_analysis_rules': getattr(problem, 'static_analysis_rules', []),
             'forbidden_functions': getattr(problem, 'forbidden_functions', []),
-            'use_static_analysis': problem.use_static_analysis if hasattr(problem, 'use_static_analysis') else False,
+            'use_static_analysis': getattr(problem, 'use_static_analysis', False),
             'static_analysis_config': problem.get_static_analysis_config() if hasattr(problem, 'get_static_analysis_config') else {'enabled': False},
         }
 

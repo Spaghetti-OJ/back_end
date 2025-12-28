@@ -414,7 +414,7 @@ def test_static_analysis_forbid_functions_validation(api_client, teacher, course
         "forbidden_functions": [],  # 空列表應該失敗
     }
     res = api_client.post("/problem/manage", payload, format="json")
-    assert res.status_code == 422  # API returns 422 for validation errors
+    assert res.status_code == 422  # DRF returns 422 for validation errors in this endpoint
     
     # Test 2: 提供函數列表後應該成功
     payload["forbidden_functions"] = ["sort", "sorted"]
@@ -444,7 +444,7 @@ def test_static_analysis_empty_function_name_validation(api_client, teacher, cou
         "forbidden_functions": ["sort", "", "printf"],  # 包含空字串
     }
     res = api_client.post("/problem/manage", payload, format="json")
-    assert res.status_code == 422  # API returns 422 for validation errors
+    assert res.status_code == 422  # DRF returns 422 for validation errors in this endpoint
     body = res.json()
     # 應該包含錯誤訊息
     assert "forbidden_functions" in str(body).lower() or "函數" in str(body)
@@ -559,7 +559,7 @@ def test_static_analysis_invalid_rule(api_client, teacher, course):
     }
     res = api_client.post("/problem/manage", payload, format="json")
     # 應該失敗，因為 invalid-rule 不是有效的規則
-    assert res.status_code == 422  # API returns 422 for validation errors
+    assert res.status_code == 422  # DRF returns 422 for validation errors in this endpoint
 
 
 @pytest.mark.django_db

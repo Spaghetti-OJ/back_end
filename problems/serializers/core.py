@@ -130,15 +130,14 @@ class ProblemSerializer(serializers.ModelSerializer):
             for field, value in attrs.items():
                 setattr(instance, field, value)
         else:
-            # 建立臨時實例用於驗證（需要必填欄位）
+            # 建立臨時實例用於驗證
+            # 注意：我們只使用 clean() 驗證靜態分析欄位，不會實際存取外鍵
             temp_attrs = attrs.copy()
-            # 確保必填欄位存在
-            if 'creator_id' not in temp_attrs:
-                # 使用假的 creator_id 僅用於驗證
-                temp_attrs['creator_id_id'] = 1
-            if 'course_id' not in temp_attrs:
-                # 使用假的 course_id 僅用於驗證
-                temp_attrs['course_id_id'] = 1
+            # 提供必填外鍵的臨時值（僅用於建立物件，不會實際查詢資料庫）
+            if 'creator_id' not in temp_attrs and 'creator_id_id' not in temp_attrs:
+                temp_attrs['creator_id_id'] = None  # clean() 不會驗證此欄位
+            if 'course_id' not in temp_attrs and 'course_id_id' not in temp_attrs:
+                temp_attrs['course_id_id'] = None  # clean() 不會驗證此欄位
             instance = Problems(**temp_attrs)
 
         # 將實際驗證委派給模型的 clean()，避免重複邏輯
