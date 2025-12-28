@@ -1160,7 +1160,7 @@ class TestSubmissionQuotaEnforcement(SubmissionAPITestSetup, APITestCase):
         )
         
         self.client = APIClient()
-        self.url = reverse('submissions-list')
+        self.url = reverse('submissions:submission-list-create')
     
     def test_problem_with_quota_limit_initialization(self):
         """測試有配額限制的題目，首次提交時會初始化配額記錄"""
