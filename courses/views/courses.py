@@ -73,6 +73,13 @@ class CourseListCreateView(generics.GenericAPIView):
             )
 
         course = serializer.save()
+
+        Course_members.objects.get_or_create(
+            course_id=course,
+            user_id=teacher,
+            defaults={"role": Course_members.Role.TEACHER},
+        )
+        
         return api_response(
             data={"course": {"id": course.id}},
             message="Success.",
