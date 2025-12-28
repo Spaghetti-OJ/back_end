@@ -2004,13 +2004,24 @@ class SubmissionCallbackAPIView(APIView):
                         result_status = test_result.get('status', 'runtime_error')
                         
                         # 重要：Sandbox 文件中的欄位映射
-                        # - Sandbox 的 test_case_id → Backend 的 subtask_id（subtask 的資料庫 ID）
-                        # - Sandbox 的 test_case_index → Backend 的 test_case_index（測資編號）
-                        subtask_id = test_result.get('test_case_id')  # Sandbox 用這個欄位傳 subtask ID
+                        # - Sandbox 的 test_case_id → 實際是 subtask_no（第幾個 subtask）
+                        # - Sandbox 的 test_case_index → 測資編號（相對於 subtask）
+                        subtask_no = test_result.get('test_case_id')  # Sandbox 用這個欄位傳 subtask 編號
                         test_case_index = test_result.get('test_case_index', 1)  # 測資編號
                         
-                        if not subtask_id:
-                            logger.warning(f'Missing subtask_id (test_case_id) in test_result')
+                        if not subtask_no:
+                            logger.warning(f'Missing subtask_no (test_case_id) in test_result')
+                            continue
+                        
+                        # 根據 subtask_no 找到實際的 subtask_id
+                        try:
+                            subtask = Problem_subtasks.objects.get(
+                                problem_id=submission.problem_id,
+                                subtask_no=subtask_no
+                            )
+                            subtask_id = subtask.id
+                        except Problem_subtasks.DoesNotExist:
+                            logger.warning(f'Subtask not found: problem_id={submission.problem_id}, subtask_no={subtask_no}')
                             continue
                         
                         # 創建或更新記錄
