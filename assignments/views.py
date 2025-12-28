@@ -8,6 +8,7 @@ from rest_framework import status, permissions
 from django.db.models import Max,Sum
 from django.db.models import Sum, Count, Max, Q
 from decimal import Decimal
+import decimal
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
@@ -326,7 +327,7 @@ class HomeworkDetailView(APIView):
             else:
                 try:
                     val = Decimal(raw)
-                except Exception:
+                except (ValueError, decimal.InvalidOperation):
                     return api_response(
                         data=None,
                         message="penalty must be a number string (0~100)",
@@ -344,7 +345,7 @@ class HomeworkDetailView(APIView):
         if "max_attempts" in request.data:
             try:
                 ma = int(request.data.get("max_attempts"))
-            except Exception:
+            except (ValueError, TypeError):
                 return api_response(
                     data=None,
                     message="max_attempts must be int (-1 or >=1)",
@@ -749,7 +750,7 @@ class HomeworkStatsView(APIView):
         # 6) 依題目分組
         by_pid: dict[int, list[UserProblemStats]] = {pid: [] for pid in problem_ids}
         for s in stats_qs:
-            by_pid.setdefault(s.problem_id, []).append(s)
+            by_pid[s.problem_id].append(s)
 
         # 7) 組 state（每題）
         state = {}
