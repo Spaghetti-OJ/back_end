@@ -1139,6 +1139,7 @@ class ProblemDetailView(APIView):
             },
             'tags': tags_data,
             'allowedLanguage': allowed_lang_mask,
+            'allowedNetwork': list(getattr(problem, 'allowed_network', []) or []),
             'courses': courses_data,
             'quota': getattr(problem, 'total_quota', -1),
             'defaultCode': default_code,

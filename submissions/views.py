@@ -1,5 +1,5 @@
 from django.shortcuts import render, get_object_or_404
-from django.db import models, transaction
+from django.db import models, transaction, IntegrityError
 from django.http import Http404
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
