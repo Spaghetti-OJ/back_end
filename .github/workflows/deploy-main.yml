@@ -169,6 +169,29 @@ jobs:
           # 重新載入 nginx
           sudo systemctl reload nginx
 
+      - name: Setup Gunicorn systemd service
+        run: |
+          # 安裝 gunicorn（如果還沒安裝）
+          source "${VENV_PATH}/bin/activate"
+          pip install gunicorn
+          
+          # 建立 log 目錄
+          sudo mkdir -p /var/log/gunicorn
+          sudo chown $USER:$USER /var/log/gunicorn
+          
+          # 複製 systemd service 檔案
+          sudo cp "${APP_DIR}/deploy/django-production.service" /etc/systemd/system/
+          
+          # 替換使用者名稱（如果需要）
+          sudo sed -i "s|lance20501|$USER|g" /etc/systemd/system/django-production.service
+          sudo sed -i "s|/home/lance20501|$HOME|g" /etc/systemd/system/django-production.service
+          
+          # 重新載入 systemd
+          sudo systemctl daemon-reload
+          
+          # 啟用服務（開機自動啟動）
+          sudo systemctl enable django-production
+
       - name: Restart application (Gunicorn via Systemd)
         run: |
           sudo systemctl restart django-production
