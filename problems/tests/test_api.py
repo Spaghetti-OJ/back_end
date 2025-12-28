@@ -196,10 +196,15 @@ def test_sandbox_checksum_and_meta(api_client, teacher, course, settings):
     res_meta = api_client.get(f"/problem/{p.id}/meta", {'token': settings.SANDBOX_TOKEN})
     assert res_meta.status_code == 200
     meta = res_meta.json()['data']
-    assert meta['task_count'] == 2
-    assert meta['missing_pairs'] == []
-    assert len(meta['tasks']) == 2
-    assert meta['tasks'][0]['in'].endswith('.in') and meta['tasks'][0]['out'].endswith('.out')
+    # 新格式：tasks 陣列包含子題設定，testcases 陣列包含測資檔案資訊
+    assert 'tasks' in meta
+    assert 'testcases' in meta
+    assert len(meta['tasks']) == 1  # 0001, 0002 都屬於 subtask 00
+    assert len(meta['testcases']) == 2  # 共兩個測資
+    # 驗證 testcases 結構
+    tc0 = meta['testcases'][0]
+    assert tc0['in'].endswith('.in') and tc0['out'].endswith('.out')
+    assert 'stem' in tc0 and 'no' in tc0 and 'subtask' in tc0
 
     # meta 錯誤 token
     res_meta_bad = api_client.get(f"/problem/{p.id}/meta", {'token': 'wrong'})
