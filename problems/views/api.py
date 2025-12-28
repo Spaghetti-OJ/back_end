@@ -508,6 +508,35 @@ class ProblemTestCaseDownloadView(APIView):
         return resp
 
 
+def _build_testcases_list(pairs_map: dict, max_ss: int) -> list:
+    """
+    建立 testcases 列表，記錄每個測資檔案的詳細資訊
+    
+    Args:
+        pairs_map (dict): 映射 subtask_index -> {'in': set(tt), 'out': set(tt)}
+        max_ss (int): 最大的 subtask index
+    
+    Returns:
+        list: 包含每個測資詳細資訊的列表，每個元素包含 stem, no, in, out, subtask 欄位
+    """
+    testcases = []
+    testcase_no = 1
+    for ss in range(max_ss + 1):
+        entry = pairs_map.get(ss, {'in': set(), 'out': set()})
+        matched_tts = sorted(entry['in'] & entry['out'])
+        for tt in matched_tts:
+            stem = f"{ss:02d}{tt:02d}"
+            testcases.append({
+                "stem": stem,
+                "no": testcase_no,
+                "in": f"{stem}.in",
+                "out": f"{stem}.out",
+                "subtask": ss + 1  # subtask 從 1 開始
+            })
+            testcase_no += 1
+    return testcases
+
+
 class ProblemTestCaseZipUploadView(APIView):
     """
     POST /problem/<pk>/test-cases/upload-zip
@@ -586,8 +615,10 @@ class ProblemTestCaseZipUploadView(APIView):
             max_ss = max(case_counts.keys())
         else:
             max_ss = -1
+        
         meta = {
-            "tasks": [build_meta_entry(ss) for ss in range(max_ss + 1)]
+            "tasks": [build_meta_entry(ss) for ss in range(max_ss + 1)],
+            "testcases": _build_testcases_list(pairs_map, max_ss)
         }
 
         # 重打包 zip：複製原檔案並加入 meta.json
@@ -725,7 +756,11 @@ class ProblemTestCaseMetaView(APIView):
                         "timeLimit": time_limit,
                     }
                 max_ss = max(case_counts.keys()) if case_counts else -1
-                meta = {"tasks": [build_meta_entry(ss) for ss in range(max_ss + 1)]}
+                
+                meta = {
+                    "tasks": [build_meta_entry(ss) for ss in range(max_ss + 1)],
+                    "testcases": _build_testcases_list(pairs_map, max_ss)
+                }
         except zipfile.BadZipFile:
             return api_response(None, "Corrupted test case archive", status_code=500)
         # 回傳 fallback 生成的 meta 結構
