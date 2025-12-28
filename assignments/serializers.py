@@ -294,3 +294,42 @@ class HomeworkSubmissionListItemSerializer(serializers.ModelSerializer):
             "status_display",
         ]
         read_only_fields = fields
+class AcSubmissionRatioSerializer(serializers.Serializer):
+    ac = serializers.IntegerField()
+    tried = serializers.IntegerField()
+
+
+class HomeworkProblemStateSerializer(serializers.Serializer):
+    """
+    單一題目的 state（不含 top10）
+    """
+    problemId = serializers.IntegerField()
+    numUsersTried = serializers.IntegerField()
+    numAcUsers = serializers.IntegerField()
+    acSubmissionRatio = AcSubmissionRatioSerializer()
+    averageScore = serializers.FloatField()
+    standardDeviation = serializers.FloatField()
+
+
+class HomeworkStatsPageSerializer(serializers.Serializer):
+    """
+    GET /homework/{id}/stats 用
+    對應你前端 stats 頁面需要的結構
+    """
+    name = serializers.CharField()
+    markdown = serializers.CharField(allow_blank=True)
+    start = serializers.IntegerField(allow_null=True)
+    end = serializers.IntegerField(allow_null=True)
+    penalty = serializers.CharField(allow_blank=True)
+
+    problemIds = serializers.ListField(
+        child=serializers.IntegerField()
+    )
+
+    # stats 頁目前不一定用到，但欄位要存在
+    studentStatus = serializers.DictField()
+
+    # key 是 problemId（字串），value 是 HomeworkProblemState
+    state = serializers.DictField(
+        child=HomeworkProblemStateSerializer()
+    )
