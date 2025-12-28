@@ -44,6 +44,15 @@ def _is_valid_domain(value: str) -> bool:
     domain_pattern = r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])\.)+[a-z]{2,}$"
     return re.match(domain_pattern, v) is not None
 
+def default_static_analysis_rules():
+    """預設的靜態分析規則（空列表表示不使用）"""
+    return []
+
+
+def default_forbidden_functions():
+    """預設的禁止函數列表（空列表）"""
+    return []
+
 
 class Tags(models.Model):
     id = models.AutoField(primary_key=True)
@@ -59,15 +68,23 @@ class Problems(models.Model):
         EASY = 'easy', 'Easy'
         MEDIUM = 'medium', 'Medium'
         HARD = 'hard', 'Hard'
+    
+    class StaticAnalysisRule(models.TextChoices):
+        """靜態分析規則選項"""
+        FORBID_LOOPS = 'forbid-loops', 'Forbid Loops'
+        FORBID_ARRAYS = 'forbid-arrays', 'Forbid Arrays'
+        FORBID_STL = 'forbid-stl', 'Forbid STL'
+        FORBID_FUNCTIONS = 'forbid-functions', 'Forbid Functions'
+    
+    class Visibility(models.TextChoices):
+        HIDDEN = 'hidden', 'Hidden'
+        COURSE = 'course', 'Course only'
+        PUBLIC = 'public', 'Public'
 
     id = models.AutoField(primary_key=True)
     title = models.CharField(max_length=200)
     difficulty = models.CharField(max_length=10, choices=Difficulty.choices, default=Difficulty.MEDIUM)
     max_score = models.IntegerField(default=100)
-    class Visibility(models.TextChoices):
-        HIDDEN = 'hidden', 'Hidden'
-        COURSE = 'course', 'Course only'
-        PUBLIC = 'public', 'Public'
 
     # Visibility of problem: hidden (only owner/admin), course (course members), public (everyone)
     # Keep field name `is_public` for backward compatibility, but store tri-state choice value.
@@ -111,6 +128,24 @@ class Problems(models.Model):
         default='diff', 
         blank=True, 
         help_text="Name of the checker to use. 'diff' is the standard default checker when use_custom_checker is False. Common values: 'diff' (exact text match, default), 'float' (floating-point comparison), 'token' (token-based), 'custom' (problem-specific)."
+    )
+    # --- Static analysis settings ---
+    static_analysis_rules = models.JSONField(
+        default=default_static_analysis_rules,
+        blank=True,
+        help_text="List of static analysis rules to apply. Valid values: 'forbid-loops', 'forbid-arrays', 'forbid-stl', 'forbid-functions'. Empty list means no static analysis."
+    )
+    forbidden_functions = models.JSONField(
+        default=default_forbidden_functions,
+        blank=True,
+        help_text="List of function names that are forbidden when 'forbid-functions' rule is enabled. Required if 'forbid-functions' is in static_analysis_rules."
+    )
+    # --- Testcase package hash ---
+    testcase_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        null=True,
+        help_text="SHA256 hash of the testcase package (problem.zip). Updated when testcases are uploaded."
     )
     creator_id = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_problems')
     course_id = models.ForeignKey('courses.Courses', on_delete=models.PROTECT, null=False, blank=False, related_name='courses')
@@ -162,6 +197,51 @@ class Problems(models.Model):
         if bad:
             raise ValidationError({'allowed_network': f'格式錯誤的網域：{", ".join(map(str, bad))}（請使用如 example.com 的純網域）'})
 
+        # Validate static_analysis_rules
+        valid_rules = {choice[0] for choice in self.StaticAnalysisRule.choices}
+        rules = self.static_analysis_rules or []
+        
+        if not isinstance(rules, list):
+            raise ValidationError({'static_analysis_rules': '靜態分析規則必須是列表格式。'})
+        
+        for rule in rules:
+            if rule not in valid_rules:
+                raise ValidationError({
+                    'static_analysis_rules': f'無效的靜態分析規則: {rule}。有效值為: {", ".join(valid_rules)}'
+                })
+        
+        # Validate forbidden_functions when forbid-functions is enabled
+        if 'forbid-functions' in rules:
+            functions = self.forbidden_functions or []
+            if not isinstance(functions, list):
+                raise ValidationError({'forbidden_functions': '禁止函數列表必須是列表格式。'})
+            if len(functions) == 0:
+                raise ValidationError({
+                    'forbidden_functions': '當啟用 forbid-functions 規則時，必須至少指定一個禁止使用的函數。'
+                })
+            for func in functions:
+                if not isinstance(func, str) or not func.strip():
+                    raise ValidationError({'forbidden_functions': '函數名稱必須是非空字串。'})
+            
+    @property
+    def use_static_analysis(self) -> bool:
+        """是否啟用靜態分析"""
+        return bool(self.static_analysis_rules)
+
+    def get_static_analysis_config(self) -> dict:
+        """取得靜態分析配置（供 Sandbox 使用）"""
+        if not self.static_analysis_rules:
+            return {'enabled': False}
+        
+        config = {
+            'enabled': True,
+            'rules': self.static_analysis_rules,
+        }
+        
+        if 'forbid-functions' in self.static_analysis_rules:
+            config['forbidden_functions'] = self.forbidden_functions or []
+        
+        return config
 
 class Problem_subtasks(models.Model):
     id = models.AutoField(primary_key=True)  
