@@ -1316,9 +1316,7 @@ class TestSubmissionQuotaEnforcement(SubmissionAPITestSetup, APITestCase):
     
     def test_concurrent_submission_race_condition(self):
         """測試並發提交時的競爭條件處理"""
-        from django.db import connection
         from threading import Thread
-        import time
         
         self.client.force_authenticate(user=self.student1)
         
