@@ -13,6 +13,9 @@ from user.models import User
 import uuid
 from datetime import datetime
 import logging
+import ipaddress
+
+logger = logging.getLogger(__name__)
 
 # 統一的 API 響應格式
 def api_response(data=None, message="OK", status_code=200):
@@ -69,6 +72,7 @@ def update_user_problem_stats(submission):
                 'ac_submissions': 0,
                 'best_score': 0,
                 'solve_status': 'never_tried',
+                'total_execution_time': 0,
             }
         )
         
@@ -110,130 +114,20 @@ def update_user_problem_stats(submission):
             stats.solve_status = 'fully_solved'
         elif stats.best_score > 0:
             stats.solve_status = 'partial_solved'
-        elif stats.total_submissions > 0:
-            stats.solve_status = 'attempted'
         else:
-            stats.solve_status = 'never_tried'
+            stats.solve_status = 'attempted'
         
         stats.save()
         
-        logger = logging.getLogger(__name__)
         logger.info(f'Updated solve status for user {submission.user.id} problem {submission.problem_id}: '
                    f'status={stats.solve_status}, best_score={stats.best_score}, '
                    f'total_submissions={stats.total_submissions}')
         
     except Exception as e:
-        logger = logging.getLogger(__name__)
         logger.error(f'Failed to update user problem solve status: {str(e)}', exc_info=True)
 
-''' 這邊不再需要了，算成績的部分交給前端處理
-def update_user_assignment_stats(submission, assignment_id):
-    """
-    更新使用者作業題目統計（作業層級）
-    
-    根據提交結果更新 UserProblemStats，包括：
-    - 總提交數
-    - 最佳分數
-    - 首次 AC 時間
-    - 最後提交時間
-    - 解題狀態（unsolved/partial/solved）
-    - 最佳執行時間和記憶體使用
-    - 遲交處理
-    """
-    from django.utils import timezone
-    from django.db.models import F
-    from .models import UserProblemStats
-    from assignments.models import Assignments, Assignment_problems
-    
-    try:
-        # 檢查是否屬於作業
-        if not assignment_id:
-            return
-        
-        # 檢查 assignment 和 problem 的關聯
-        try:
-            assignment = Assignments.objects.get(id=assignment_id)
-            assignment_problem = Assignment_problems.objects.get(
-                assignment=assignment,
-                problem_id=submission.problem_id
-            )
-        except (Assignments.DoesNotExist, Assignment_problems.DoesNotExist):
-            # 如果作業或題目不存在，跳過
-            return
-        
-        # 取得或創建 UserProblemStats
-        stats, created = UserProblemStats.objects.get_or_create(
-            user=submission.user,
-            assignment_id=assignment_id,
-            problem_id=submission.problem_id,
-            defaults={
-                'total_submissions': 0,
-                'best_score': 0,
-                'max_possible_score': assignment_problem.weight * 100 if assignment_problem.weight else 100,
-                'solve_status': 'unsolved',
-            }
-        )
-        
-        # 更新總提交數
-        stats.total_submissions = F('total_submissions') + 1
-        
-        # 更新最後提交時間
-        stats.last_submission_time = submission.created_at
-        
-        # 檢查是否遲交
-        if assignment.due_time and submission.created_at > assignment.due_time:
-            stats.is_late = True
-            # 計算遲交罰分
-            if assignment.late_penalty > 0:
-                stats.penalty_score = assignment.late_penalty
-        
-        # 先保存以計算 F() 表達式
-        stats.save()
-        stats.refresh_from_db()
-        
-        # 更新最佳分數（考慮遲交罰分）
-        final_score = submission.score
-        if stats.is_late and stats.penalty_score > 0:
-            final_score = int(submission.score * (1 - float(stats.penalty_score) / 100))
-        
-        if final_score > stats.best_score:
-            stats.best_score = final_score
-            stats.best_submission = submission
-        
-        # 如果是 AC (status='0') 且還沒有 first_ac_time
-        if submission.status == '0' and not stats.first_ac_time:
-            stats.first_ac_time = submission.judged_at or timezone.now()
-        
-        # 更新最佳執行時間
-        if submission.execution_time > 0:
-            if stats.best_execution_time is None or submission.execution_time < stats.best_execution_time:
-                stats.best_execution_time = submission.execution_time
-        
-        # 更新最佳記憶體使用
-        if submission.memory_usage > 0:
-            if stats.best_memory_usage is None or submission.memory_usage < stats.best_memory_usage:
-                stats.best_memory_usage = submission.memory_usage
-        
-        # 更新解題狀態
-        if stats.best_score >= stats.max_possible_score:
-            stats.solve_status = 'solved'
-        elif stats.best_score > 0:
-            stats.solve_status = 'partial'
-        else:
-            stats.solve_status = 'unsolved'
-        
-        stats.save()
-        
-        logger = logging.getLogger(__name__)
-        logger.info(f'Updated assignment stats for user {submission.user.id} '
-                   f'assignment {assignment_id} problem {submission.problem_id}: '
-                   f'status={stats.solve_status}, best_score={stats.best_score}, '
-                   f'is_late={stats.is_late}')
-        
-    except Exception as e:
-        logger = logging.getLogger(__name__)
-        logger.error(f'Failed to update user assignment stats: {str(e)}', exc_info=True)
-'''
+
+
 
 class BasePermissionMixin:
     """基礎權限檢查 Mixin - 提供通用權限檢查方法"""
@@ -613,8 +507,6 @@ def editorial_like_toggle(request, problem_id, solution_id):
     
     except Exception as e:
         # 記錄完整錯誤但不回傳給客戶端
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Editorial update failed: {str(e)}", exc_info=True)
         
         return api_response(
@@ -680,8 +572,6 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                 problem_ids = Problems.objects.filter(course_id=course_id).values_list('id', flat=True)
                 queryset = queryset.filter(problem_id__in=problem_ids)
             except (ValueError, TypeError) as e:
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.warning(f'Invalid course_id parameter: {course_id}, error: {e}')
                 queryset = queryset.none()  # 查詢失敗返回空結果
         
@@ -712,25 +602,51 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
             try:
                 # 支援 CIDR 格式 (例如 192.168.1.0/24) 或簡單前綴 (例如 192.168.)
                 if '/' in ip_prefix:
-                    # CIDR 格式：使用 ipaddress 模組
-                    import ipaddress
+                    # CIDR 格式：使用 ipaddress 模組進行範圍檢查
                     network = ipaddress.ip_network(ip_prefix, strict=False)
-                    # 獲取網段範圍
-                    start_ip = str(network.network_address)
-                    end_ip = str(network.broadcast_address)
-                    # 篩選 IP 在範圍內的提交
-                    queryset = queryset.filter(
-                        ip_address__gte=start_ip,
-                        ip_address__lte=end_ip
-                    )
+                    
+                    # 由於 SQLite 將 IP 存為字串，我們需要在 Python 層面進行過濾
+                    # 先獲取所有可能的 IP（基於前綴的簡單過濾以減少數據量）
+                    # 取得網段的前綴（例如：192.168.1.0/24 -> "192.168.1"）
+                    network_parts = str(network.network_address).split('.')
+                    if network.prefixlen >= 24:
+                        network_prefix = '.'.join(network_parts[:3]) + '.'  # 取前三個八位元組
+                    elif network.prefixlen >= 16:
+                        network_prefix = '.'.join(network_parts[:2]) + '.'  # 取前兩個八位元組
+                    elif network.prefixlen >= 8:
+                        network_prefix = network_parts[0] + '.'  # 取第一個八位元組（加點避免誤匹配）
+                    else:
+                        network_prefix = ''  # 不使用前綴過濾，檢查所有 IP
+                    
+                    if network_prefix:
+                        # 使用 values_list 只獲取需要的欄位以提高效能
+                        candidate_data = queryset.filter(
+                            ip_address__startswith=network_prefix
+                        ).values_list('id', 'ip_address')
+                    else:
+                        candidate_data = queryset.values_list('id', 'ip_address')
+
+                    
+                    # 在 Python 中過濾出符合 CIDR 範圍的提交
+                    valid_submission_ids = []
+                    for sub_id, ip_addr in candidate_data:
+                        try:
+                            ip = ipaddress.ip_address(ip_addr)
+                            if ip in network:
+                                valid_submission_ids.append(sub_id)
+                        except (ValueError, AttributeError):
+                            # 忽略無效的 IP 地址
+                            pass
+                    
+                    queryset = queryset.filter(id__in=valid_submission_ids)
                 else:
                     # 簡單前綴匹配：例如 "192.168." 會匹配所有 192.168.x.x
                     queryset = queryset.filter(ip_address__startswith=ip_prefix)
             except (ValueError, TypeError) as e:
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.warning(f'Invalid ip_prefix parameter: {ip_prefix}, error: {e}')
-                pass  # 忽略無效的 IP 前綴
+                # 返回錯誤而不是靜默忽略
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({'ip_prefix': f'Invalid IP prefix format: {ip_prefix}'})
         
         return self.get_viewable_submissions(self.request.user, queryset)
     
@@ -760,8 +676,6 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
         
         try:
             # Debug logging
-            import logging
-            logger = logging.getLogger(__name__)
             logger.info(f'POST /submission/ data: {request.data}')
             
             serializer = self.get_serializer(data=request.data)
@@ -912,8 +826,6 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
         
         except Exception as e:
             # 其他系統錯誤
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"提交創建失敗: {str(e)}", exc_info=True)
             return api_response(data=None, message=f"系統錯誤: {str(e)[:200]}", status_code=status.HTTP_400_BAD_REQUEST)
     
@@ -1289,12 +1201,8 @@ def submission_rejudge(request, id):
         from .tasks import submit_to_sandbox_task
         try:
             submit_to_sandbox_task.delay(str(submission.id))
-            import logging
-            logger = logging.getLogger(__name__)
             logger.info(f'Rejudge queued for submission: {submission.id}')
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f'Failed to queue rejudge for {submission.id}: {str(e)}')
             # 即使 celery 失敗，也回傳成功（submission 已經重設為 pending）
         
@@ -1485,8 +1393,6 @@ try:
     )
     redis_client.ping()  # 測試連接
 except Exception as e:
-    import logging
-    logger = logging.getLogger(__name__)
     logger.error(f'Redis connection failed: {str(e)}')
     redis_client = None
 
@@ -1668,8 +1574,6 @@ def submit_custom_test(request, problem_id):
         )
         
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f'Custom test submission error: {str(e)}')
         return api_response(
             data=None,
@@ -1804,8 +1708,6 @@ def get_custom_test_result(request, custom_test_id):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f'Get custom test result error: {str(e)}')
         return api_response(
             data=None,
@@ -1823,7 +1725,7 @@ class SubmissionCallbackAPIView(APIView):
     接收 Sandbox 判題結果的 callback endpoint
     
     Sandbox 判題完成後會 POST 到這個 endpoint
-    URL: POST /{callback_url}/submissions/callback/
+    URL: POST /api/submissions/callback/
     """
     permission_classes = [permissions.AllowAny]  # Sandbox 不需要 JWT 認證
     
@@ -1853,11 +1755,8 @@ class SubmissionCallbackAPIView(APIView):
             ]
         }
         """
-        import logging
         from .models import Submission, SubmissionResult
         from django.conf import settings
-        
-        logger = logging.getLogger(__name__)
         
         try:
             # 1. 驗證請求來源（API Key）
@@ -1939,16 +1838,7 @@ class SubmissionCallbackAPIView(APIView):
                 
                 # 5. 更新 UserProblemSolveStatus（全域層級）
                 update_user_problem_stats(submission)
-                '''這邊也不需要了，算成績的部分交給前端處理
-
-                    # 6. 更新 UserProblemStats（作業層級）
-                    # 嘗試從 submission 找到對應的 assignment_id
-                    # submission model 需要加上 assignment_id 欄位，或者從 context 傳入
-                    # 目前先跳過，等 submission model 更新後再啟用
-                    # if hasattr(submission, 'assignment_id') and submission.assignment_id:
-                    #     update_user_assignment_stats(submission, submission.assignment_id)
-
-                '''
+                
             return api_response(
                 data={'submission_id': str(submission_id)},
                 message='Callback processed successfully',
@@ -1989,11 +1879,8 @@ class CustomTestCallbackAPIView(APIView):
             "exit_code": 0
         }
         """
-        import logging
         from .models import CustomTest
         from django.conf import settings
-        
-        logger = logging.getLogger(__name__)
         
         try:
             # 1. 驗證請求來源（API Key）
