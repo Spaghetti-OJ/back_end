@@ -46,6 +46,66 @@ def get_file_extension(language):
     return extension_map.get(language, 'txt')
 
 
+def build_static_analysis_config(problem):
+    """
+    Build static analysis configuration from problem settings
+    
+    Args:
+        problem: Problems model instance
+        
+    Returns:
+        dict: Dictionary with 'static_analysis_config' and optionally 'forbidden_functions'
+    """
+    config = {}
+    
+    if problem.use_static_analysis and problem.static_analysis_rules:
+        rules = problem.static_analysis_rules
+        config_parts = []
+        
+        for rule in rules:
+            if rule == 'forbid-loops':
+                config_parts.append('--forbid-loops')
+            elif rule == 'forbid-arrays':
+                config_parts.append('--forbid-arrays')
+            elif rule == 'forbid-stl':
+                config_parts.append('--forbid-stl')
+            elif rule == 'forbid-functions':
+                # forbidden_functions 會單獨傳遞
+                config_parts.append('--forbid-functions')
+        
+        if config_parts:
+            config['static_analysis_config'] = ' '.join(config_parts)
+        
+        # 如果有禁止函數列表，加入 payload
+        if 'forbid-functions' in rules and problem.forbidden_functions:
+            # 將列表轉為逗號分隔字串
+            config['forbidden_functions'] = ','.join(problem.forbidden_functions)
+    
+    return config
+
+
+def build_network_config(problem):
+    """
+    Build network configuration from problem settings
+    
+    Args:
+        problem: Problems model instance
+        
+    Returns:
+        dict: Dictionary with 'allow_network' and optionally 'network_whitelist'
+    """
+    config = {}
+    
+    if problem.allowed_network:
+        config['allow_network'] = True
+        # 將列表轉為逗號分隔字串
+        config['network_whitelist'] = ','.join(problem.allowed_network)
+    else:
+        config['allow_network'] = False
+    
+    return config
+
+
 def submit_to_sandbox(submission):
     """
     將 submission 提交到 Sandbox 進行判題
@@ -102,36 +162,12 @@ def submit_to_sandbox(submission):
         }
         
         # 6. 靜態分析設定（從 problem.static_analysis_rules 和 forbidden_functions 組合）
-        if problem.use_static_analysis and problem.static_analysis_rules:
-            rules = problem.static_analysis_rules or []
-            config_parts = []
-            
-            for rule in rules:
-                if rule == 'forbid-loops':
-                    config_parts.append('--forbid-loops')
-                elif rule == 'forbid-arrays':
-                    config_parts.append('--forbid-arrays')
-                elif rule == 'forbid-stl':
-                    config_parts.append('--forbid-stl')
-                elif rule == 'forbid-functions':
-                    # forbidden_functions 會單獨傳遞
-                    config_parts.append('--forbid-functions')
-            
-            if config_parts:
-                data['static_analysis_config'] = ' '.join(config_parts)
-            
-            # 如果有禁止函數列表，加入 payload
-            if 'forbid-functions' in rules and problem.forbidden_functions:
-                # 將列表轉為逗號分隔字串
-                data['forbidden_functions'] = ','.join(problem.forbidden_functions)
+        static_analysis_config = build_static_analysis_config(problem)
+        data.update(static_analysis_config)
         
         # 7. 網路設定（從 problem.allowed_network）
-        if problem.allowed_network:
-            data['allow_network'] = True
-            # 將列表轉為逗號分隔字串
-            data['network_whitelist'] = ','.join(problem.allowed_network)
-        else:
-            data['allow_network'] = False
+        network_config = build_network_config(problem)
+        data.update(network_config)
         
         # 8. 準備檔案
         filename = f'solution.{get_file_extension(language)}'
@@ -242,33 +278,12 @@ def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_dat
         }
         
         # 靜態分析設定（從 problem.static_analysis_rules 和 forbidden_functions 組合）
-        if problem.use_static_analysis and problem.static_analysis_rules:
-            rules = problem.static_analysis_rules or []
-            config_parts = []
-            
-            for rule in rules:
-                if rule == 'forbid-loops':
-                    config_parts.append('--forbid-loops')
-                elif rule == 'forbid-arrays':
-                    config_parts.append('--forbid-arrays')
-                elif rule == 'forbid-stl':
-                    config_parts.append('--forbid-stl')
-                elif rule == 'forbid-functions':
-                    config_parts.append('--forbid-functions')
-            
-            if config_parts:
-                data['static_analysis_config'] = ' '.join(config_parts)
-            
-            # 如果有禁止函數列表，加入 payload
-            if 'forbid-functions' in rules and problem.forbidden_functions:
-                data['forbidden_functions'] = ','.join(problem.forbidden_functions)
+        static_analysis_config = build_static_analysis_config(problem)
+        data.update(static_analysis_config)
         
         # 網路設定（從 problem.allowed_network）
-        if problem.allowed_network:
-            data['allow_network'] = True
-            data['network_whitelist'] = ','.join(problem.allowed_network)
-        else:
-            data['allow_network'] = False
+        network_config = build_network_config(problem)
+        data.update(network_config)
         
         # 準備檔案
         filename = f'solution.{get_file_extension(language)}'
