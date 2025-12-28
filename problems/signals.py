@@ -52,7 +52,7 @@ def reset_user_quotas_on_change(sender, instance, created, **kwargs):
     with transaction.atomic():
         updated_count = UserProblemQuota.objects.filter(
             problem_id=instance.id,
-            assignment_id__isnull=True  # 只重置全域配額，不影響作業配額
+            assignment_id=None  # 只重置全域配額，不影響作業配額
         ).update(
             total_quota=new_quota,
             remaining_attempts=new_quota
