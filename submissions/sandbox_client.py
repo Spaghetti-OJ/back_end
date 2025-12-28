@@ -93,7 +93,7 @@ def submit_to_sandbox(submission):
             # 只有在啟用自訂 checker 時才使用設定的 checker_name，否則強制使用 'diff'
             'use_checker': problem.use_custom_checker,
             'checker_name': problem.checker_name if problem.use_custom_checker else 'diff',
-            'use_static_analysis': False,  # TODO: 從 assignment 設定取得
+            'use_static_analysis': problem.use_static_analysis,
             'priority': 0,  # 一般優先級
             'callback_url': settings.BACKEND_BASE_URL.rstrip('/'),  # Sandbox 判題完成後回傳結果的 URL（注意：是 submission 不是 submissions）
         }
@@ -158,8 +158,16 @@ def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_dat
     """
     import uuid
     import hashlib
+    from problems.models import Problems
     
     try:
+        # 取得題目資訊（用於靜態分析設定）
+        try:
+            problem = Problems.objects.get(id=problem_id)
+        except Problems.DoesNotExist:
+            logger.error(f'Problem {problem_id} not found for selftest')
+            return None
+        
         # 產生臨時 ID（不存 DB，只用於追蹤）
         temp_id = f"selftest-{uuid.uuid4()}"
         
@@ -183,7 +191,7 @@ def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_dat
             'memory_limit': 262144,  # 256 MB
             'use_checker': False,
             'checker_name': 'diff',
-            'use_static_analysis': False,
+            'use_static_analysis': problem.use_static_analysis,
             'priority': -1,  # 低優先級（自定義測試不影響正式提交）
             'callback_url': settings.BACKEND_BASE_URL.rstrip('/'),  # Custom test callback URL
         }
