@@ -153,17 +153,17 @@ curl "http://127.0.0.1:8000/problem/30/test-case" -H "Authorization: Bearer $TOK
 
 沙盒在判題前會：
 1. 下載 zip 檔案。
-2. 呼叫 checksum 端點確認 MD5 是否一致（避免網路傳輸損毀）。
+2. 呼叫 checksum 端點確認 SHA256 是否一致（避免網路傳輸損毀）。
 3. 呼叫 meta 端點取得測資對列表（in/out）以便依序執行。
 
 安全驗證：使用 query string `token` 與後端設定的 `SANDBOX_TOKEN` 比對；不需一般登入權限。若 token 缺失或不符 → 401。
 
-#### 1) 取得 MD5 校驗和
+#### 1) 取得 SHA256 校驗和
 - 路徑：`GET /problem/<problem_id>/checksum?token=<sandbox_token>`
 - 成功回應：
 ```json
 {
-  "data": { "checksum": "d41d8cd98f00b204e9800998ecf8427e" },
+  "data": { "checksum": "a3f2b8c9d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1" },
   "message": "OK",
   "status": "200"
 }
@@ -178,7 +178,7 @@ curl "http://127.0.0.1:8000/problem/30/checksum?token=$SANDBOX_TOKEN"
 #### 2) 取得測資元資料
 - 路徑：`GET /problem/<problem_id>/meta?token=<sandbox_token>`
 - 回傳欄位：
-  - `checksum`: 與 /checksum 相同 MD5（方便比對）
+  - `checksum`: 與 /checksum 相同 SHA256（方便比對）
   - `task_count`: 總測試對數量
   - `missing_pairs`: 缺失配對的 stem 列表（理想應為空）
   - `tasks`: 陣列，每項包含 `no`, `stem`, `in`, `out`
@@ -187,7 +187,7 @@ curl "http://127.0.0.1:8000/problem/30/checksum?token=$SANDBOX_TOKEN"
 ```json
 {
   "data": {
-    "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+    "checksum": "a3f2b8c9d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1",
     "task_count": 2,
     "missing_pairs": [],
     "tasks": [
@@ -241,7 +241,7 @@ curl "http://127.0.0.1:8000/problem/30/testdata?token=$SANDBOX_TOKEN" -o testdat
 
 # 2. 取得 checksum 並驗證完整性
 CHECKSUM=$(curl -s "http://127.0.0.1:8000/problem/30/checksum?token=$SANDBOX_TOKEN" | jq -r '.data.checksum')
-echo "$CHECKSUM  testdata.zip" | md5sum -c
+echo "$CHECKSUM  testdata.zip" | sha256sum -c
 
 # 3. 取得測資結構資訊
 curl "http://127.0.0.1:8000/problem/30/meta?token=$SANDBOX_TOKEN" | jq '.data.tasks'
