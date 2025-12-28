@@ -1840,14 +1840,22 @@ def get_custom_test_result(request, custom_test_id):
         
         # 如果已經有錯誤，直接返回
         if test_info.get('status') == 'failed':
+            error_msg = test_info.get('error', 'Unknown error')
             return api_response(
                 data={
                     'test_id': custom_test_id,
                     'problem_id': test_info['problem_id'],
                     'status': 'failed',
-                    'error': test_info.get('error', 'Unknown error'),
+                    'error': error_msg,
+                    'error_detail': {
+                        'message': error_msg,
+                        'submission_id': test_info.get('submission_id'),
+                        'language': test_info.get('language'),
+                        'created_at': test_info.get('created_at'),
+                        'help': '請檢查：1) Sandbox API 是否正常運作 2) 程式碼語法是否正確 3) 網路連線是否正常'
+                    }
                 },
-                message='測試失敗',
+                message=f'測試失敗: {error_msg}',
                 status_code=status.HTTP_200_OK
             )
         
