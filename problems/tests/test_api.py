@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.conf import settings
 import os
 import zipfile
+import json
 from io import BytesIO
 from problems.services.storage import _storage
 from user.models import UserProfile
@@ -180,6 +181,12 @@ def test_sandbox_checksum_and_meta(api_client, teacher, course, settings):
         zf.writestr('0002.out', 'output2')
     mem.seek(0)
     rel = os.path.join('testcases', f'p{p.id}', 'problem.zip')
+    # Clean up any existing file to ensure test isolation
+    try:
+        if _storage.exists(rel):
+            _storage.delete(rel)
+    except Exception:
+        pass
     _storage.save(rel, mem)
 
     # checksum 正確 token
@@ -259,7 +266,6 @@ def test_upload_zip_with_meta(api_client, teacher, course):
     with _storage.open(rel, 'rb') as f:
         with zipfile.ZipFile(f, 'r') as zf:
             assert 'meta.json' in zf.namelist()
-            import json
             meta = json.loads(zf.read('meta.json'))
             
             # 驗證 meta 結構

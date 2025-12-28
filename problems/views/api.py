@@ -513,11 +513,11 @@ def _build_testcases_list(pairs_map: dict, max_ss: int) -> list:
     建立 testcases 列表，記錄每個測資檔案的詳細資訊
     
     Args:
-        pairs_map: 映射 subtask_index -> {'in': set(tt), 'out': set(tt)}
-        max_ss: 最大的 subtask index
+        pairs_map (dict): 映射 subtask_index -> {'in': set(tt), 'out': set(tt)}
+        max_ss (int): 最大的 subtask index
     
     Returns:
-        包含每個測資詳細資訊的列表
+        list: 包含每個測資詳細資訊的列表，每個元素包含 stem, no, in, out, subtask 欄位
     """
     testcases = []
     testcase_no = 1
