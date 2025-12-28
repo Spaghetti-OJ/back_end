@@ -1879,18 +1879,37 @@ def get_custom_test_result(request, custom_test_id):
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE
             )
         
-        # 4. 更新 Redis 中的狀態
-        test_info['status'] = sandbox_result.get('status', 'unknown')
+        # 4. 檢查測試是否完成（必須有 stdout 或明確的錯誤狀態）
+        sandbox_status = sandbox_result.get('status', 'unknown')
+        has_output = 'stdout' in sandbox_result or 'stderr' in sandbox_result
+        is_completed = sandbox_status in ['completed', 'accepted', 'wrong_answer', 'runtime_error', 
+                                          'time_limit_exceeded', 'memory_limit_exceeded', 'compile_error']
+        
+        # 如果還在處理中（沒有輸出且狀態不是完成），返回處理中狀態
+        if not has_output and not is_completed:
+            return api_response(
+                data={
+                    'test_id': custom_test_id,
+                    'problem_id': test_info['problem_id'],
+                    'status': sandbox_status or 'processing',
+                    'message': 'Job is currently running',
+                },
+                message='測試正在處理中，請稍後再查詢',
+                status_code=status.HTTP_202_ACCEPTED  # 202 表示已接受但未完成
+            )
+        
+        # 5. 更新 Redis 中的狀態（只有完成時才更新）
+        test_info['status'] = sandbox_status
         test_info['last_updated'] = str(timezone.now())
         redis_client.setex(cache_key, 1800, json.dumps(test_info))
         
-        # 5. 返回結果（使用 api_response）
+        # 6. 返回完整結果（使用 api_response）
         return api_response(
             data={
                 'test_id': custom_test_id,
                 'problem_id': test_info['problem_id'],
                 'language': test_info['language'],
-                'status': sandbox_result.get('status'),
+                'status': sandbox_status,
                 'stdout': sandbox_result.get('stdout', ''),
                 'stderr': sandbox_result.get('stderr', ''),
                 'time': sandbox_result.get('time'),
