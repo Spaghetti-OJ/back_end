@@ -284,6 +284,8 @@ def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_dat
         # 發送到 selftest 端點
         url = f'{SANDBOX_API_URL}/api/v1/selftest-submissions'
         logger.info(f'Submitting selftest: temp_id={temp_id}, problem_id={problem_id}, language={language}')
+        logger.debug(f'Selftest payload: {data}')
+        logger.debug(f'File hash: {file_hash}, file size: {len(file_content)} bytes')
             
         response = requests.post(
             url,
@@ -292,6 +294,13 @@ def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_dat
             headers=headers,
             timeout=SANDBOX_TIMEOUT
         )
+        
+        # 記錄響應狀態
+        logger.info(f'Selftest response status: {response.status_code}')
+        
+        # 如果不是成功狀態，記錄詳細錯誤
+        if response.status_code >= 400:
+            logger.error(f'Selftest API error response: {response.text}')
         
         response.raise_for_status()
         result = response.json()
