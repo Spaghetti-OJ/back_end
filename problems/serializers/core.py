@@ -75,6 +75,9 @@ class ProblemSerializer(serializers.ModelSerializer):
     )
     course_name = serializers.CharField(source="course_id.name", read_only=True)
     submit_count = serializers.IntegerField(read_only=True, default=0)
+    allowed_network = serializers.ListField(
+        child=serializers.CharField(max_length=255), required=False
+    )
 
     class Meta:
         model = Problems
@@ -84,7 +87,7 @@ class ProblemSerializer(serializers.ModelSerializer):
             "like_count", "view_count", "total_quota",
             "description", "input_description", "output_description",
             "sample_input", "sample_output", "hint",
-            "subtask_description", "supported_languages",
+            "subtask_description", "supported_languages", "allowed_network",
             # solution code fields for test generation
             "solution_code", "solution_code_language",
             # custom checker settings
@@ -185,6 +188,9 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
         child=serializers.IntegerField(min_value=1), write_only=True, required=False
     )
     subtasks = SubtaskSerializer(many=True, read_only=True)
+    allowed_network = serializers.ListField(
+        child=serializers.CharField(max_length=255), required=False
+    )
 
     class Meta:
         model = Problems
@@ -194,7 +200,7 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
             "like_count", "view_count", "total_quota",
             "description", "input_description", "output_description",
             "sample_input", "sample_output", "hint",
-            "subtask_description", "supported_languages",
+            "subtask_description", "supported_languages", "allowed_network",
             # custom checker settings
             "use_custom_checker", "checker_name",
             "creator_id", "course_id",
@@ -221,6 +227,9 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
     submit_count = serializers.IntegerField(read_only=True, default=0)
     high_score = serializers.IntegerField(read_only=True, default=0)
     is_liked_by_user = serializers.SerializerMethodField()
+    allowed_network = serializers.ListField(
+        child=serializers.CharField(max_length=255), required=False
+    )
 
     class Meta:
         model = Problems
@@ -230,7 +239,7 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
             "total_quota",
             "description", "input_description", "output_description",
             "sample_input", "sample_output", "hint",
-            "subtask_description", "supported_languages",
+            "subtask_description", "supported_languages", "allowed_network",
             # custom checker settings (read-only for students)
             "use_custom_checker", "checker_name",
             "course_id",
