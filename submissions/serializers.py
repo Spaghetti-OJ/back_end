@@ -151,7 +151,7 @@ class SubmissionResultSerializer(serializers.ModelSerializer):
     class Meta:
         model = SubmissionResult
         fields = '__all__'
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['created_at']  # 移除 'id'，因為不再有單一主鍵
 
 
 class UserProblemStatsSerializer(serializers.ModelSerializer):
@@ -352,7 +352,7 @@ class SubmissionBaseCreateSerializer(serializers.ModelSerializer):
         min_value=0,
         max_value=4,
         error_messages={
-            'invalid': 'invalid data!',
+            'invalid': 'languageType 格式錯誤：必須是 0-4 的整數 (收到的類型不正確)',
             'required': 'post data missing!',
             'min_value': 'not allowed language',
             'max_value': 'not allowed language'

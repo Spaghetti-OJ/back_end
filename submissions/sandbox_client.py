@@ -80,11 +80,14 @@ def submit_to_sandbox(submission):
         # 3. 轉換語言代碼
         language = convert_language_code(submission.language_type)
         
-        # 4. 組裝 payload（multipart/form-data）
+        # 4. 取得測資包 hash（若無則使用 problem_id 作為 fallback）
+        problem_hash = problem.testcase_hash or f'p{submission.problem_id}'
+        
+        # 5. 組裝 payload（multipart/form-data）
         data = {
             'submission_id': str(submission.id),
             'problem_id': str(submission.problem_id),
-            'problem_hash': f'TODO_HASH_{submission.problem_id}',  # TODO: 實現題目包管理後取得真實 hash
+            'problem_hash': problem_hash,
             'mode': 'normal',  # 目前只支援 single file
             'language': language,
             'file_hash': submission.code_hash,
@@ -93,19 +96,19 @@ def submit_to_sandbox(submission):
             # 只有在啟用自訂 checker 時才使用設定的 checker_name，否則強制使用 'diff'
             'use_checker': problem.use_custom_checker,
             'checker_name': problem.checker_name if problem.use_custom_checker else 'diff',
-            'use_static_analysis': False,  # TODO: 從 assignment 設定取得
+            'use_static_analysis': problem.use_static_analysis,
             'priority': 0,  # 一般優先級
-            'callback_url': f'{settings.BACKEND_BASE_URL}/submissions/callback/',  # Sandbox 判題完成後回傳結果的 URL
+            'callback_url': settings.BACKEND_BASE_URL.rstrip('/'),  # Sandbox 判題完成後回傳結果的 URL（注意：是 submission 不是 submissions）
         }
         
-        # 5. 準備檔案
+        # 6. 準備檔案
         filename = f'solution.{get_file_extension(language)}'
         file_content = submission.source_code.encode('utf-8')
         files = {
             'file': (filename, BytesIO(file_content), 'text/plain')
         }
         
-        # 6. 發送請求
+        # 7. 發送請求
         url = f'{SANDBOX_API_URL}/api/v1/submissions'
         logger.info(f'Submitting to Sandbox: submission_id={submission.id}, problem_id={submission.problem_id}')
         
@@ -113,6 +116,13 @@ def submit_to_sandbox(submission):
         headers = {}
         if SANDBOX_API_KEY:
             headers['X-API-KEY'] = SANDBOX_API_KEY
+            logger.info(f'Using API Key: {SANDBOX_API_KEY[:10]}...')  # 只顯示前 10 個字元
+        else:
+            logger.warning('SANDBOX_API_KEY is not set!')
+        
+        logger.debug(f'Request URL: {url}')
+        logger.debug(f'Request data: {data}')
+        logger.debug(f'Request headers: {headers}')
         
         response = requests.post(
             url,
@@ -123,6 +133,9 @@ def submit_to_sandbox(submission):
         )
         
         # 7. 檢查回應
+        logger.info(f'Sandbox response status: {response.status_code}')
+        if response.status_code >= 400:
+            logger.error(f'Sandbox error response: {response.text}')
         response.raise_for_status()
         result = response.json()
         
@@ -158,8 +171,16 @@ def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_dat
     """
     import uuid
     import hashlib
+    from problems.models import Problems
     
     try:
+        # 取得題目資訊（用於靜態分析設定）
+        try:
+            problem = Problems.objects.get(id=problem_id)
+        except Problems.DoesNotExist:
+            logger.error(f'Problem {problem_id} not found for selftest')
+            return None
+        
         # 產生臨時 ID（不存 DB，只用於追蹤）
         temp_id = f"selftest-{uuid.uuid4()}"
         
@@ -183,9 +204,9 @@ def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_dat
             'memory_limit': 262144,  # 256 MB
             'use_checker': False,
             'checker_name': 'diff',
-            'use_static_analysis': False,
+            'use_static_analysis': problem.use_static_analysis,
             'priority': -1,  # 低優先級（自定義測試不影響正式提交）
-            'callback_url': f'{settings.BACKEND_BASE_URL}/submissions/custom-test-callback/',  # Custom test callback URL
+            'callback_url': settings.BACKEND_BASE_URL.rstrip('/'),  # Custom test callback URL
         }
         # POST {url}
         # 準備檔案

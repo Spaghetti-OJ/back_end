@@ -13,7 +13,7 @@ import time
 import json
 
 # 測試配置
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "http://127.0.0.1:8443"  # Django 後端運行在 8443 端口
 SANDBOX_URL = "http://34.81.90.111:8000"
 
 def print_section(title):

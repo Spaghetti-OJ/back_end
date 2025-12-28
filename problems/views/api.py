@@ -508,6 +508,35 @@ class ProblemTestCaseDownloadView(APIView):
         return resp
 
 
+def _build_testcases_list(pairs_map: dict, max_ss: int) -> list:
+    """
+    建立 testcases 列表，記錄每個測資檔案的詳細資訊
+    
+    Args:
+        pairs_map (dict): 映射 subtask_index -> {'in': set(tt), 'out': set(tt)}
+        max_ss (int): 最大的 subtask index
+    
+    Returns:
+        list: 包含每個測資詳細資訊的列表，每個元素包含 stem, no, in, out, subtask 欄位
+    """
+    testcases = []
+    testcase_no = 1
+    for ss in range(max_ss + 1):
+        entry = pairs_map.get(ss, {'in': set(), 'out': set()})
+        matched_tts = sorted(entry['in'] & entry['out'])
+        for tt in matched_tts:
+            stem = f"{ss:02d}{tt:02d}"
+            testcases.append({
+                "stem": stem,
+                "no": testcase_no,
+                "in": f"{stem}.in",
+                "out": f"{stem}.out",
+                "subtask": ss + 1  # subtask 從 1 開始
+            })
+            testcase_no += 1
+    return testcases
+
+
 class ProblemTestCaseZipUploadView(APIView):
     """
     POST /problem/<pk>/test-cases/upload-zip
@@ -586,8 +615,10 @@ class ProblemTestCaseZipUploadView(APIView):
             max_ss = max(case_counts.keys())
         else:
             max_ss = -1
+        
         meta = {
-            "tasks": [build_meta_entry(ss) for ss in range(max_ss + 1)]
+            "tasks": [build_meta_entry(ss) for ss in range(max_ss + 1)],
+            "testcases": _build_testcases_list(pairs_map, max_ss)
         }
 
         # 重打包 zip：複製原檔案並加入 meta.json
@@ -628,14 +659,22 @@ class ProblemTestCaseZipUploadView(APIView):
         except Exception:
             pass
         saved = _storage.save(rel, out_buf)
-        return api_response({"path": saved.replace('\\','/')}, "Zip uploaded with meta", status_code=201)
+        
+        # 計算已儲存檔案的 SHA256 hash 並儲存到 problem
+        import hashlib
+        with _storage.open(rel, 'rb') as fh:
+            sha256_hash = hashlib.sha256(fh.read()).hexdigest()
+        problem.testcase_hash = sha256_hash
+        problem.save(update_fields=['testcase_hash'])
+        
+        return api_response({"path": saved.replace('\\','/'), "testcase_hash": sha256_hash}, "Zip uploaded with meta", status_code=201)
 
 
 class ProblemTestCaseChecksumView(APIView):
     """GET /problem/<pk>/checksum (Sandbox 專用)
-    目的：沙盒下載測資 zip 後驗證 MD5 完整性。
+    目的：沙盒下載測資 zip 後驗證 SHA256 完整性。
     驗證：使用 query string `token` 與後端設定的 SANDBOX_TOKEN 比對。
-    回傳：{"checksum": "<md5>"}
+    回傳：{"checksum": "<sha256>"}
     錯誤：401 token 無效；404 題目或測資不存在。
     """
     permission_classes = []  # 以 sandbox token 驗證，不用一般身份驗證
@@ -646,15 +685,10 @@ class ProblemTestCaseChecksumView(APIView):
         if not token_expected or token_req != token_expected:
             return api_response(None, "Invalid sandbox token", status_code=401)
         problem = get_object_or_404(Problems, pk=pk)
-        from ..services.storage import _storage
-        rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
-        if not _storage.exists(rel):
-            raise Http404("Test case archive not found")
-        # 計算 MD5
-        import hashlib
-        with _storage.open(rel, 'rb') as fh:
-            md5 = hashlib.md5(fh.read()).hexdigest()
-        return api_response({"checksum": md5}, "OK", status_code=200)
+        # 使用儲存的 testcase_hash
+        if not problem.testcase_hash:
+            return api_response(None, "Test case hash not available", status_code=404)
+        return api_response({"checksum": problem.testcase_hash}, "OK", status_code=200)
 
 
 class ProblemTestCaseMetaView(APIView):
@@ -675,10 +709,9 @@ class ProblemTestCaseMetaView(APIView):
         rel = os.path.join("testcases", f"p{problem.id}", "problem.zip")
         if not _storage.exists(rel):
             raise Http404("Test case archive not found")
-        import zipfile, hashlib, json
+        import zipfile, json
         with _storage.open(rel, 'rb') as fh:
             data = fh.read()
-        md5 = hashlib.md5(data).hexdigest()
         from io import BytesIO
         buffer = BytesIO(data)
         # 優先讀取 zip 內的 meta.json；若不存在則回退為檔名掃描
@@ -725,7 +758,11 @@ class ProblemTestCaseMetaView(APIView):
                         "timeLimit": time_limit,
                     }
                 max_ss = max(case_counts.keys()) if case_counts else -1
-                meta = {"tasks": [build_meta_entry(ss) for ss in range(max_ss + 1)]}
+                
+                meta = {
+                    "tasks": [build_meta_entry(ss) for ss in range(max_ss + 1)],
+                    "testcases": _build_testcases_list(pairs_map, max_ss)
+                }
         except zipfile.BadZipFile:
             return api_response(None, "Corrupted test case archive", status_code=500)
         # 回傳 fallback 生成的 meta 結構
@@ -1116,6 +1153,11 @@ class ProblemDetailView(APIView):
             # Custom checker settings
             'use_custom_checker': getattr(problem, 'use_custom_checker', False),
             'checker_name': getattr(problem, 'checker_name', 'diff'),
+            # Static analysis settings
+            'static_analysis_rules': getattr(problem, 'static_analysis_rules', []),
+            'forbidden_functions': getattr(problem, 'forbidden_functions', []),
+            'use_static_analysis': getattr(problem, 'use_static_analysis', False),
+            'static_analysis_config': problem.get_static_analysis_config() if hasattr(problem, 'get_static_analysis_config') else {'enabled': False},
         }
 
         return api_response(data, "Problem can view.", status_code=200)
