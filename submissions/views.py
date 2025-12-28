@@ -1950,48 +1950,69 @@ class SubmissionCallbackAPIView(APIView):
                 logger.info(f'Updated submission {submission_id}: status={submission.status}, score={total_score}')
                 
                 # 4. 建立 SubmissionResult 記錄
-                # 先取得所有 subtasks 和 test_cases 的對應關係
                 from problems.models import Problem_subtasks, Test_cases
-                subtasks = Problem_subtasks.objects.filter(problem_id=submission.problem_id).order_by('subtask_no')
                 
-                for test_result in test_results:
-                    # 轉換 status 為字串格式（SubmissionResult 使用字串）
-                    result_status = test_result.get('status', 'runtime_error')
+                # 特殊處理：如果是 CE/SE 且 test_results 數量不足，為所有測資創建相同的錯誤記錄
+                if judge_status in ['compile_error', 'system_error']:
+                    # 取得該題目的所有測資
+                    all_test_cases = []
+                    subtasks = Problem_subtasks.objects.filter(problem_id=submission.problem_id).order_by('subtask_no')
+                    for subtask in subtasks:
+                        test_cases = Test_cases.objects.filter(subtask_id=subtask.id).order_by('idx')
+                        all_test_cases.extend(test_cases)
                     
-                    # 從 test_result 中取得 test_case_id 和 test_case_index（按照文件規格）
-                    test_case_id = test_result.get('test_case_id')  # 資料庫 ID
-                    test_case_index = test_result.get('test_case_index', 1)  # 顯示編號
+                    # 取得錯誤訊息（從第一筆 test_result 或使用預設值）
+                    error_message = data.get('error_message', f'{judge_status.replace("_", " ").title()}')
+                    if test_results and len(test_results) > 0:
+                        error_message = test_results[0].get('error_message', error_message)
                     
-                    # CE 或系統錯誤時，test_case_id 可能為 None
-                    if test_case_id is None:
-                        logger.warning(f'Test case ID is None for case_index={test_case_index}')
-                        # CE 或有 error_message 時允許 None
-                        if result_status != 'compile_error' and not test_result.get('error_message'):
-                            continue  # 其他情況跳過
+                    # 先刪除可能存在的舊記錄
+                    SubmissionResult.objects.filter(submission=submission).delete()
                     
-                    # 使用 update_or_create 避免重複呼叫 callback 時產生重複記錄
-                    # 當 test_case_id 為 None 時（CE 情況），用 test_case_index 區分不同測資
-                    lookup_fields = {
-                        'submission': submission,
-                        'problem_id': submission.problem_id,
-                        'test_case_index': test_case_index,
-                    }
-                    if test_case_id is not None:
-                        lookup_fields['test_case_id'] = test_case_id
+                    # 為每個測資創建相同的錯誤記錄
+                    for test_case in all_test_cases:
+                        SubmissionResult.objects.create(
+                            submission=submission,
+                            problem_id=submission.problem_id,
+                            test_case_id=None,  # CE/SE 時不關聯具體測資
+                            test_case_index=test_case.idx,
+                            status=judge_status,
+                            execution_time=0,
+                            memory_usage=0,
+                            score=0,
+                            max_score=100,
+                            error_message=error_message,
+                        )
                     
-                    SubmissionResult.objects.update_or_create(
-                        **lookup_fields,
-                        defaults={
-                            'status': result_status,
-                            'execution_time': test_result.get('execution_time'),
-                            'memory_usage': test_result.get('memory_usage'),
-                            'score': test_result.get('score', 0),
-                            'max_score': test_result.get('max_score', 100),
-                            'error_message': test_result.get('error_message'),
-                        }
-                    )
-                
-                logger.info(f'Created {len(test_results)} test results for submission {submission_id}')
+                    logger.info(f'Created {len(all_test_cases)} {judge_status} results for all test cases of submission {submission_id}')
+                else:
+                    # 正常情況：處理每個測資結果
+                    # 先刪除可能存在的舊記錄
+                    SubmissionResult.objects.filter(submission=submission).delete()
+                    
+                    for test_result in test_results:
+                        # 轉換 status 為字串格式（SubmissionResult 使用字串）
+                        result_status = test_result.get('status', 'runtime_error')
+                        
+                        # 從 test_result 中取得 test_case_id 和 test_case_index（按照文件規格）
+                        test_case_id = test_result.get('test_case_id')  # 資料庫 ID
+                        test_case_index = test_result.get('test_case_index', 1)  # 顯示編號
+                        
+                        # 創建新記錄
+                        SubmissionResult.objects.create(
+                            submission=submission,
+                            problem_id=submission.problem_id,
+                            test_case_id=test_case_id,
+                            test_case_index=test_case_index,
+                            status=result_status,
+                            execution_time=test_result.get('execution_time', 0),
+                            memory_usage=test_result.get('memory_usage', 0),
+                            score=test_result.get('score', 0),
+                            max_score=test_result.get('max_score', 100),
+                            error_message=test_result.get('error_message'),
+                        )
+                    
+                    logger.info(f'Created {len(test_results)} test results for submission {submission_id}')
                 
                 # 5. 更新 UserProblemSolveStatus（全域層級）
                 update_user_problem_stats(submission)
