@@ -767,8 +767,9 @@ public class Main {
             SubmissionResult.objects.create(
                 problem_id=problem.id,
                 submission=submission,
+                subtask_id=test_case.subtask_id.id,  # 必填：subtask 的資料庫 ID
                 test_case_id=test_case.id,
-                test_case_index=idx,
+                test_case_index=test_case.idx,  # 使用實際的 test_case.idx 而不是 enumerate 的 idx
                 status=tc_status,
                 execution_time=random.randint(10, 500) if tc_status != 'time_limit_exceeded' else random.randint(1000, 3000),
                 memory_usage=random.randint(256000, 512000) if tc_status == 'memory_limit_exceeded' else random.randint(1000, 30000),
