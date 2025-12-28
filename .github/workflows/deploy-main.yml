@@ -86,6 +86,8 @@ jobs:
           SANDBOX_API_URL: ${{ secrets.SANDBOX_API_URL }}
           SANDBOX_TIMEOUT: ${{ secrets.SANDBOX_TIMEOUT }}
           SANDBOX_API_KEY: ${{ secrets.SANDBOX_API_KEY }}
+          SANDBOX_TOKEN: ${{ secrets.SANDBOX_TOKEN }}
+          BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL }}
           MOSS_USER_ID: ${{ secrets.MOSS_USER_ID }}
         run: |
           cd "${APP_DIR}"
@@ -113,6 +115,8 @@ jobs:
           SANDBOX_API_URL="${SANDBOX_API_URL}"
           SANDBOX_TIMEOUT="${SANDBOX_TIMEOUT}"
           SANDBOX_API_KEY="${SANDBOX_API_KEY}"
+          SANDBOX_TOKEN="${SANDBOX_TOKEN}"
+          BACKEND_BASE_URL="${BACKEND_BASE_URL}"
           MOSS_USER_ID="${MOSS_USER_ID}"
           EOF
           sed -i 's/^[[:space:]]*//' .env
