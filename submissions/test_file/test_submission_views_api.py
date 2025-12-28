@@ -18,7 +18,7 @@ from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 
-from ..models import Submission, SubmissionResult
+from ..models import Submission, SubmissionResult, UserProblemQuota
 from problems.models import Problems
 from courses.models import Courses, Course_members
 from ..serializers import (
@@ -1124,6 +1124,285 @@ class TestSubmissionPermissionEdgeCases(SubmissionAPIBaseTestCase):
         response = self.client.get(self.get_submission_detail_url(self.submission1.id))
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(self.get_api_message(response), "no permission")  # NOJ format
+
+
+class TestSubmissionQuotaEnforcement(SubmissionAPITestSetup, APITestCase):
+    """測試提交配額執行邏輯"""
+    
+    def setUp(self):
+        """設置測試環境"""
+        self.create_test_users()
+        self.create_test_courses()
+        self.create_test_problems()
+        
+        # Create a problem with quota limit for testing
+        self.problem_with_quota = Problems.objects.create(
+            id=3001,
+            title='Quota Test Problem',
+            description='Problem with submission quota',
+            course_id=self.course1,
+            creator_id=self.teacher,
+            is_public='course',
+            difficulty=Problems.Difficulty.EASY,
+            total_quota=3  # Allow 3 submissions
+        )
+        
+        # Create a problem without quota limit
+        self.problem_unlimited = Problems.objects.create(
+            id=3002,
+            title='Unlimited Test Problem',
+            description='Problem with unlimited submissions',
+            course_id=self.course1,
+            creator_id=self.teacher,
+            is_public='course',
+            difficulty=Problems.Difficulty.EASY,
+            total_quota=-1  # Unlimited
+        )
+        
+        self.client = APIClient()
+        self.url = reverse('submissions-list')
+    
+    def test_problem_with_quota_limit_initialization(self):
+        """測試有配額限制的題目，首次提交時會初始化配額記錄"""
+        self.client.force_authenticate(user=self.student1)
+        
+        # 首次提交
+        data = {
+            'problem_id': self.problem_with_quota.id,
+            'language_type': 2,  # Python
+            'source_code': 'print("Hello World")'
+        }
+        response = self.client.post(self.url, data, format='json')
+        
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # 檢查是否創建了配額記錄
+        quota = UserProblemQuota.objects.get(
+            user=self.student1,
+            problem_id=self.problem_with_quota.id,
+            assignment_id=None
+        )
+        self.assertEqual(quota.total_quota, 3)
+        self.assertEqual(quota.remaining_attempts, 2)  # 3 - 1
+    
+    def test_problem_with_quota_limit_enforcement(self):
+        """測試配額限制執行：用戶提交到達上限後應被拒絕"""
+        self.client.force_authenticate(user=self.student1)
+        
+        data = {
+            'problem_id': self.problem_with_quota.id,
+            'language_type': 2,
+            'source_code': 'print("Hello World")'
+        }
+        
+        # 提交 3 次（配額為 3）
+        for i in range(3):
+            response = self.client.post(self.url, data, format='json')
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # 第 4 次提交應該被拒絕
+        response = self.client.post(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn('quota', response.json()['message'].lower())
+    
+    def test_problem_without_quota_limit(self):
+        """測試無配額限制的題目，允許無限次提交"""
+        self.client.force_authenticate(user=self.student1)
+        
+        data = {
+            'problem_id': self.problem_unlimited.id,
+            'language_type': 2,
+            'source_code': 'print("Hello World")'
+        }
+        
+        # 提交多次，都應該成功
+        for i in range(5):
+            response = self.client.post(self.url, data, format='json')
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # 檢查不應該有配額記錄（如果沒有手動設置）
+        quota_exists = UserProblemQuota.objects.filter(
+            user=self.student1,
+            problem_id=self.problem_unlimited.id,
+            assignment_id=None
+        ).exists()
+        self.assertFalse(quota_exists)
+    
+    def test_manual_quota_override_on_unlimited_problem(self):
+        """測試在無配額限制的題目上手動設置用戶配額"""
+        self.client.force_authenticate(user=self.student1)
+        
+        # 手動為用戶創建配額限制（管理員操作）
+        UserProblemQuota.objects.create(
+            user=self.student1,
+            problem_id=self.problem_unlimited.id,
+            assignment_id=None,
+            total_quota=2,
+            remaining_attempts=2
+        )
+        
+        data = {
+            'problem_id': self.problem_unlimited.id,
+            'language_type': 2,
+            'source_code': 'print("Hello World")'
+        }
+        
+        # 提交 2 次應該成功
+        for i in range(2):
+            response = self.client.post(self.url, data, format='json')
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # 第 3 次應該被拒絕
+        response = self.client.post(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+    
+    def test_admin_unlimited_quota_override(self):
+        """測試管理員設置 -1 (無限) 配額覆蓋題目配額限制"""
+        self.client.force_authenticate(user=self.student1)
+        
+        # 手動為用戶設置無限配額（管理員操作）
+        UserProblemQuota.objects.create(
+            user=self.student1,
+            problem_id=self.problem_with_quota.id,
+            assignment_id=None,
+            total_quota=-1,
+            remaining_attempts=-1  # 無限
+        )
+        
+        data = {
+            'problem_id': self.problem_with_quota.id,
+            'language_type': 2,
+            'source_code': 'print("Hello World")'
+        }
+        
+        # 提交多次，都應該成功（即使題目有配額限制）
+        for i in range(5):
+            response = self.client.post(self.url, data, format='json')
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # 檢查配額記錄仍然是 -1
+        quota = UserProblemQuota.objects.get(
+            user=self.student1,
+            problem_id=self.problem_with_quota.id,
+            assignment_id=None
+        )
+        self.assertEqual(quota.remaining_attempts, -1)
+    
+    def test_quota_per_user_isolation(self):
+        """測試配額在用戶之間是獨立的"""
+        self.client.force_authenticate(user=self.student1)
+        
+        data = {
+            'problem_id': self.problem_with_quota.id,
+            'language_type': 2,
+            'source_code': 'print("Hello World")'
+        }
+        
+        # student1 提交 3 次（用完配額）
+        for i in range(3):
+            response = self.client.post(self.url, data, format='json')
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # student1 第 4 次被拒絕
+        response = self.client.post(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        
+        # 切換到 student2
+        self.client.force_authenticate(user=self.student2)
+        
+        # student2 應該仍然可以提交（有自己的配額）
+        response = self.client.post(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+    
+    def test_concurrent_submission_race_condition(self):
+        """測試並發提交時的競爭條件處理"""
+        from django.db import connection
+        from threading import Thread
+        import time
+        
+        self.client.force_authenticate(user=self.student1)
+        
+        # 創建一個配額為 1 的問題
+        problem_race = Problems.objects.create(
+            id=3003,
+            title='Race Condition Test',
+            description='Test concurrent submissions',
+            course_id=self.course1,
+            creator_id=self.teacher,
+            is_public='course',
+            difficulty=Problems.Difficulty.EASY,
+            total_quota=1  # Only 1 submission allowed
+        )
+        
+        results = []
+        
+        def submit():
+            # Create a new client for each thread
+            client = APIClient()
+            client.force_authenticate(user=self.student1)
+            
+            data = {
+                'problem_id': problem_race.id,
+                'language_type': 2,
+                'source_code': 'print("Concurrent test")'
+            }
+            
+            try:
+                response = client.post(self.url, data, format='json')
+                results.append(response.status_code)
+            except Exception as e:
+                results.append(str(e))
+        
+        # 嘗試同時提交 2 次
+        threads = [Thread(target=submit) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        
+        # 應該有一個成功 (201)，一個失敗 (403)
+        success_count = results.count(status.HTTP_201_CREATED)
+        forbidden_count = results.count(status.HTTP_403_FORBIDDEN)
+        
+        # 至少應該有一個成功的
+        self.assertGreaterEqual(success_count, 1)
+        # 配額應該被正確執行（只允許 1 次提交）
+        self.assertLessEqual(success_count, 1)
+    
+    def test_quota_not_synced_with_problem_changes(self):
+        """測試題目配額變更時，已存在的用戶配額不會自動同步"""
+        self.client.force_authenticate(user=self.student1)
+        
+        # 首次提交，初始化配額為 3
+        data = {
+            'problem_id': self.problem_with_quota.id,
+            'language_type': 2,
+            'source_code': 'print("Hello World")'
+        }
+        response = self.client.post(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # 檢查配額
+        quota = UserProblemQuota.objects.get(
+            user=self.student1,
+            problem_id=self.problem_with_quota.id,
+            assignment_id=None
+        )
+        self.assertEqual(quota.total_quota, 3)
+        self.assertEqual(quota.remaining_attempts, 2)
+        
+        # 修改題目配額為 5
+        self.problem_with_quota.total_quota = 5
+        self.problem_with_quota.save()
+        
+        # 再次提交
+        response = self.client.post(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # 檢查用戶配額沒有改變（保持公平性）
+        quota.refresh_from_db()
+        self.assertEqual(quota.total_quota, 3)  # 仍然是 3，不是 5
+        self.assertEqual(quota.remaining_attempts, 1)  # 2 - 1
 
 
 # 運行測試的輔助函數
