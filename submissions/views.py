@@ -1118,9 +1118,27 @@ def submission_output_view(request, id, task_no, case_no):
             ).order_by('-created_at').first()
         
         if not result:
+            # 提供詳細的診斷資訊
+            all_results = SubmissionResult.objects.filter(submission_id=submission.id)
+            total_results = all_results.count()
+            
+            # 列出該 submission 所有現有的測資結果
+            existing_cases = []
+            for r in all_results[:10]:  # 最多顯示 10 筆
+                existing_cases.append(f"case_index={r.test_case_index}(test_case_id={r.test_case_id})")
+            
+            error_detail = (
+                f"找不到測資結果。"
+                f"查詢參數: submission_id={submission.id}, task_no={task_no}, case_no={case_no}, "
+                f"test_case_id={test_case_id}. "
+                f"該 submission 共有 {total_results} 筆測資結果"
+                f"{': ' + ', '.join(existing_cases) if existing_cases else '（無任何測資結果）'}. "
+                f"可能原因: 1) 判題尚未完成 2) test_case_id 不匹配 3) case_no 超出範圍"
+            )
+            
             return api_response(
                 None, 
-                f"找不到測資結果：submission_id={submission.id}, task_no={task_no}, case_no={case_no}, test_case_id={test_case_id}",
+                error_detail,
                 404
             )
     except Exception as e:
