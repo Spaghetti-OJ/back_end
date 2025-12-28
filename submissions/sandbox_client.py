@@ -101,14 +101,46 @@ def submit_to_sandbox(submission):
             'callback_url': settings.BACKEND_BASE_URL.rstrip('/'),  # Sandbox 判題完成後回傳結果的 URL（注意：是 submission 不是 submissions）
         }
         
-        # 6. 準備檔案
+        # 6. 靜態分析設定（從 problem.static_analysis_rules 和 forbidden_functions 組合）
+        if problem.use_static_analysis and problem.static_analysis_rules:
+            rules = problem.static_analysis_rules or []
+            config_parts = []
+            
+            for rule in rules:
+                if rule == 'forbid-loops':
+                    config_parts.append('--forbid-loops')
+                elif rule == 'forbid-arrays':
+                    config_parts.append('--forbid-arrays')
+                elif rule == 'forbid-stl':
+                    config_parts.append('--forbid-stl')
+                elif rule == 'forbid-functions':
+                    # forbidden_functions 會單獨傳遞
+                    config_parts.append('--forbid-functions')
+            
+            if config_parts:
+                data['static_analysis_config'] = ' '.join(config_parts)
+            
+            # 如果有禁止函數列表，加入 payload
+            if 'forbid-functions' in rules and problem.forbidden_functions:
+                # 將列表轉為逗號分隔字串
+                data['forbidden_functions'] = ','.join(problem.forbidden_functions)
+        
+        # 7. 網路設定（從 problem.allowed_network）
+        if problem.allowed_network:
+            data['allow_network'] = True
+            # 將列表轉為逗號分隔字串
+            data['network_whitelist'] = ','.join(problem.allowed_network)
+        else:
+            data['allow_network'] = False
+        
+        # 8. 準備檔案
         filename = f'solution.{get_file_extension(language)}'
         file_content = submission.source_code.encode('utf-8')
         files = {
             'file': (filename, BytesIO(file_content), 'text/plain')
         }
         
-        # 7. 發送請求
+        # 9. 發送請求
         url = f'{SANDBOX_API_URL}/api/v1/submissions'
         logger.info(f'Submitting to Sandbox: submission_id={submission.id}, problem_id={submission.problem_id}')
         
@@ -132,7 +164,7 @@ def submit_to_sandbox(submission):
             timeout=SANDBOX_TIMEOUT
         )
         
-        # 7. 檢查回應
+        # 10. 檢查回應
         logger.info(f'Sandbox response status: {response.status_code}')
         if response.status_code >= 400:
             logger.error(f'Sandbox error response: {response.text}')
@@ -208,7 +240,36 @@ def submit_selftest_to_sandbox(problem_id, language_type, source_code, stdin_dat
             'priority': -1,  # 低優先級（自定義測試不影響正式提交）
             'callback_url': settings.BACKEND_BASE_URL.rstrip('/'),  # Custom test callback URL
         }
-        # POST {url}
+        
+        # 靜態分析設定（從 problem.static_analysis_rules 和 forbidden_functions 組合）
+        if problem.use_static_analysis and problem.static_analysis_rules:
+            rules = problem.static_analysis_rules or []
+            config_parts = []
+            
+            for rule in rules:
+                if rule == 'forbid-loops':
+                    config_parts.append('--forbid-loops')
+                elif rule == 'forbid-arrays':
+                    config_parts.append('--forbid-arrays')
+                elif rule == 'forbid-stl':
+                    config_parts.append('--forbid-stl')
+                elif rule == 'forbid-functions':
+                    config_parts.append('--forbid-functions')
+            
+            if config_parts:
+                data['static_analysis_config'] = ' '.join(config_parts)
+            
+            # 如果有禁止函數列表，加入 payload
+            if 'forbid-functions' in rules and problem.forbidden_functions:
+                data['forbidden_functions'] = ','.join(problem.forbidden_functions)
+        
+        # 網路設定（從 problem.allowed_network）
+        if problem.allowed_network:
+            data['allow_network'] = True
+            data['network_whitelist'] = ','.join(problem.allowed_network)
+        else:
+            data['allow_network'] = False
+        
         # 準備檔案
         filename = f'solution.{get_file_extension(language)}'
         files = {
