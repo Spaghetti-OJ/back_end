@@ -95,6 +95,9 @@ class ProblemSerializer(serializers.ModelSerializer):
         help_text="禁止使用的函數名稱列表。當 static_analysis_rules 包含 'forbid-functions' 時必填"
     )
     submit_count = serializers.IntegerField(read_only=True, default=0)
+    allowed_network = serializers.ListField(
+        child=serializers.CharField(max_length=255), required=False
+    )
 
     class Meta:
         model = Problems
@@ -104,7 +107,7 @@ class ProblemSerializer(serializers.ModelSerializer):
             "like_count", "view_count", "total_quota",
             "description", "input_description", "output_description",
             "sample_input", "sample_output", "hint",
-            "subtask_description", "supported_languages",
+            "subtask_description", "supported_languages", "allowed_network",
             # solution code fields for test generation
             "solution_code", "solution_code_language",
             # custom checker settings
@@ -236,6 +239,9 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
         child=serializers.IntegerField(min_value=1), write_only=True, required=False
     )
     subtasks = SubtaskSerializer(many=True, read_only=True)
+    allowed_network = serializers.ListField(
+        child=serializers.CharField(max_length=255), required=False
+    )
     
     # 靜態分析設定（唯讀，管理員視角顯示用）
     static_analysis_config = serializers.SerializerMethodField()
@@ -249,7 +255,7 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
             "like_count", "view_count", "total_quota",
             "description", "input_description", "output_description",
             "sample_input", "sample_output", "hint",
-            "subtask_description", "supported_languages",
+            "subtask_description", "supported_languages", "allowed_network",
             # custom checker settings
             "use_custom_checker", "checker_name",
             # static analysis settings
@@ -287,6 +293,10 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
     submit_count = serializers.IntegerField(read_only=True, default=0)
     high_score = serializers.IntegerField(read_only=True, default=0)
     is_liked_by_user = serializers.SerializerMethodField()
+    allowed_network = serializers.ListField(
+        child=serializers.CharField(max_length=255), required=False
+    )
+    course_name = serializers.CharField(source="course_id.name", read_only=True)
     
     # 靜態分析設定（學生只需知道是否啟用）
     use_static_analysis = serializers.SerializerMethodField()
@@ -299,12 +309,12 @@ class ProblemStudentSerializer(serializers.ModelSerializer):
             "total_quota",
             "description", "input_description", "output_description",
             "sample_input", "sample_output", "hint",
-            "subtask_description", "supported_languages",
+            "subtask_description", "supported_languages", "allowed_network",
             # custom checker settings (read-only for students)
             "use_custom_checker", "checker_name",
+            "course_id", "course_name",
             # static analysis (read-only for students)
             "static_analysis_rules", "use_static_analysis",
-            "course_id",
             "created_at",
             "tags", "tag_ids", "subtasks",
             "submit_count", "high_score", "is_liked_by_user",

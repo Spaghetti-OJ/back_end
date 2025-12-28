@@ -239,7 +239,7 @@ class ScoreboardRowSerializer(serializers.Serializer):
     rank = serializers.IntegerField()
     user_id = serializers.UUIDField()
     username = serializers.CharField()
-    real_name = serializers.CharField()
+    real_name = serializers.CharField(allow_null=True, required=False)
 
     total_score = serializers.IntegerField()
     max_total_score = serializers.IntegerField()
@@ -251,9 +251,9 @@ class ScoreboardRowSerializer(serializers.Serializer):
     problems = ScoreboardProblemSerializer(many=True)
 
 class HomeworkScoreboardSerializer(serializers.Serializer):
-    assignment_id = serializers.IntegerField()
-    title = serializers.CharField()
-    course_id = serializers.IntegerField()
+    homework_id = serializers.IntegerField()
+    homework_title = serializers.CharField()
+    course_id = serializers.UUIDField()
     items = ScoreboardRowSerializer(many=True)
 
 class HomeworkSubmissionListItemSerializer(serializers.ModelSerializer):

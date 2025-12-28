@@ -15,6 +15,35 @@ def unlimited_or_nonnegative(value: int):
 def default_supported_langs():
     return ["c", "cpp", "java", "python"]
 
+def default_allowed_network():
+    return []
+
+def _is_valid_domain(value: str) -> bool:
+    import re
+    if not isinstance(value, str):
+        return False
+    v = value.strip().lower()
+    if not v:
+        return False
+    
+    # Allow localhost for testing
+    if v == 'localhost':
+        return True
+    
+    # Allow IPv4 addresses
+    ipv4_pattern = r'^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+    if re.match(ipv4_pattern, v):
+        return True
+    
+    # Allow IPv6 addresses (simplified pattern)
+    if ':' in v and re.match(r'^[0-9a-f:]+$', v):
+        return True
+    
+    # Standard domain pattern: labels separated by '.', no scheme/path/port
+    # Allows subdomains; disallows wildcards and protocols
+    domain_pattern = r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])\.)+[a-z]{2,}$"
+    return re.match(domain_pattern, v) is not None
+
 def default_static_analysis_rules():
     """預設的靜態分析規則（空列表表示不使用）"""
     return []
@@ -83,6 +112,9 @@ class Problems(models.Model):
     hint = models.TextField(blank=True, null=True)
     subtask_description = models.TextField(blank=True, null=True)
     supported_languages = models.JSONField(default=default_supported_langs)
+    # Allowed outbound network hosts during sandbox evaluation; empty list blocks network.
+    # Stores plain domains like "example.com"; no scheme, path, or port.
+    allowed_network = models.JSONField(default=default_allowed_network)
     # --- Solution code for test generation (not editorials) ---
     solution_code = models.TextField(blank=True, null=True, help_text="Optional: reference solution code used for test generation.")
     solution_code_language = models.CharField(max_length=50, blank=True, null=True, help_text="Optional: language of solution code. Required if solution code is provided.")
@@ -157,6 +189,14 @@ class Problems(models.Model):
         lang = (self.solution_code_language or '').strip()
         if code and not lang:
             raise ValidationError({'solution_code_language': '當提供 solution code 時，必須指定其語言。'})
+        # Validate allowed_network entries
+        nets = self.allowed_network or []
+        if not isinstance(nets, (list, tuple)):
+            raise ValidationError({'allowed_network': '必須為字串陣列（domain list）。'})
+        bad = [d for d in nets if not _is_valid_domain(str(d))]
+        if bad:
+            raise ValidationError({'allowed_network': f'格式錯誤的網域：{", ".join(map(str, bad))}（請使用如 example.com 的純網域）'})
+
         # Validate static_analysis_rules
         valid_rules = {choice[0] for choice in self.StaticAnalysisRule.choices}
         rules = self.static_analysis_rules or []
