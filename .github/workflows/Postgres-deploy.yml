@@ -101,7 +101,7 @@ jobs:
 
       - name: Restart application
         run: |
-          sudo systemctl restart django-Postgres
+          echo "skip restart (infra not ready)"
 
       - name: Create superuser
         env:
