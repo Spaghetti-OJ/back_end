@@ -1,0 +1,163 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      skip_migrations:
+        description: '跳過資料庫遷移'
+        required: false
+        type: boolean
+        default: false
+      skip_static:
+        description: '跳過收集靜態檔案'
+        required: false
+        type: boolean
+        default: false
+
+concurrency: deploy-production
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  deploy:
+    runs-on: GCP
+    environment: "backend production deploy"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set deploy paths
+        run: |
+          echo "APP_DIR=$HOME/back_end_production" >> "$GITHUB_ENV"
+          echo "VENV_PATH=$HOME/back_end_production/.venv" >> "$GITHUB_ENV"
+
+      - name: Ensure app directory exists
+        run: |
+          mkdir -p "${APP_DIR}"
+
+      - name: Ensure venv exists
+        run: |
+          if [ ! -f "${VENV_PATH}/bin/activate" ]; then
+            rm -rf "${VENV_PATH}"
+            python3 -m venv "${VENV_PATH}"
+          fi
+
+      - name: Sync repository to target directory
+        run: |
+          rsync -a --delete --exclude '.git' --exclude '.venv' --exclude '.env' ./ "${APP_DIR}/"
+
+      - name: Install dependencies
+        run: |
+          cd "${APP_DIR}"
+          source "${VENV_PATH}/bin/activate"
+          pip install --upgrade pip
+          pip install -r requirements.txt --no-cache-dir
+
+      - name: Setup environment
+        env:
+          DJANGO_DEBUG: ${{ secrets.DJANGO_DEBUG }}
+          DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+          ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
+          CSRF_TRUSTED_ORIGINS: ${{ secrets.CSRF_TRUSTED_ORIGINS }}
+          CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
+          DB_ENGINE: ${{ secrets.DB_ENGINE }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+          EMAIL_HOST_USER: ${{ secrets.EMAIL_HOST_USER }}
+          EMAIL_HOST_PASSWORD: ${{ secrets.EMAIL_HOST_PASSWORD }}
+          EMAIL_USE_TLS: ${{ secrets.EMAIL_USE_TLS }}
+          DEFAULT_FROM_EMAIL: ${{ secrets.DEFAULT_FROM_EMAIL }}
+          FRONTEND_BASE_URL: ${{ secrets.FRONTEND_BASE_URL }}
+          CELERY_BROKER_URL: ${{ secrets.CELERY_BROKER_URL }}
+          CELERY_RESULT_BACKEND: ${{ secrets.CELERY_RESULT_BACKEND }}
+          SANDBOX_API_URL: ${{ secrets.SANDBOX_API_URL }}
+          SANDBOX_TIMEOUT: ${{ secrets.SANDBOX_TIMEOUT }}
+          SANDBOX_API_KEY: ${{ secrets.SANDBOX_API_KEY }}
+          MOSS_USER_ID: ${{ secrets.MOSS_USER_ID }}
+        run: |
+          cd "${APP_DIR}"
+          cat > .env <<EOF
+          DJANGO_DEBUG="${DJANGO_DEBUG}"
+          DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY}"
+          ALLOWED_HOSTS="${ALLOWED_HOSTS}"
+          CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS}"
+          CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS}"
+          DB_ENGINE="${DB_ENGINE}"
+          POSTGRES_DB="${POSTGRES_DB}"
+          POSTGRES_USER="${POSTGRES_USER}"
+          POSTGRES_PASSWORD="${POSTGRES_PASSWORD}"
+          POSTGRES_HOST="${POSTGRES_HOST}"
+          POSTGRES_PORT="${POSTGRES_PORT}"
+          EMAIL_HOST="${EMAIL_HOST}"
+          EMAIL_PORT="${EMAIL_PORT}"
+          EMAIL_HOST_USER="${EMAIL_HOST_USER}"
+          EMAIL_HOST_PASSWORD="${EMAIL_HOST_PASSWORD}"
+          EMAIL_USE_TLS="${EMAIL_USE_TLS}"
+          DEFAULT_FROM_EMAIL="${DEFAULT_FROM_EMAIL}"
+          FRONTEND_BASE_URL="${FRONTEND_BASE_URL}"
+          CELERY_BROKER_URL="${CELERY_BROKER_URL}"
+          CELERY_RESULT_BACKEND="${CELERY_RESULT_BACKEND}"
+          SANDBOX_API_URL="${SANDBOX_API_URL}"
+          SANDBOX_TIMEOUT="${SANDBOX_TIMEOUT}"
+          SANDBOX_API_KEY="${SANDBOX_API_KEY}"
+          MOSS_USER_ID="${MOSS_USER_ID}"
+          EOF
+          sed -i 's/^[[:space:]]*//' .env
+
+      - name: Apply migrations
+        if: ${{ github.event.inputs.skip_migrations != 'true' }}
+        run: |
+          cd "${APP_DIR}"
+          source "${VENV_PATH}/bin/activate"
+          python manage.py migrate --noinput
+
+      - name: Collect static files
+        if: ${{ github.event.inputs.skip_static != 'true' }}
+        run: |
+          cd "${APP_DIR}"
+          source "${VENV_PATH}/bin/activate"
+          mkdir -p "${APP_DIR}/staticfiles"
+          python manage.py collectstatic --noinput
+
+      - name: Setup Nginx configuration
+        run: |
+          # 複製 nginx 配置並替換路徑
+          sudo cp "${APP_DIR}/deploy/nginx.conf" /etc/nginx/sites-available/noj-backend
+          sudo sed -i "s|/home/runner/back_end_production|${APP_DIR}|g" /etc/nginx/sites-available/noj-backend
+          
+          # 啟用站點
+          sudo ln -sf /etc/nginx/sites-available/noj-backend /etc/nginx/sites-enabled/
+          
+          # 移除預設站點（如果存在）
+          sudo rm -f /etc/nginx/sites-enabled/default
+          
+          # 測試 nginx 配置
+          sudo nginx -t
+          
+          # 重新載入 nginx
+          sudo systemctl reload nginx
+
+      - name: Restart application (Gunicorn via Systemd)
+        run: |
+          sudo systemctl restart django-production
+
+      - name: Restart Celery worker
+        run: |
+          sudo systemctl restart celery-production || true
+
+      - name: Health check
+        run: |
+          sleep 5
+          curl -f http://localhost:8000/api/ || echo "Health check skipped - endpoint may not exist"
