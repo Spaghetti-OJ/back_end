@@ -254,6 +254,12 @@ SANDBOX_TIMEOUT = int(os.getenv('SANDBOX_TIMEOUT', '30'))  # API 請求超時（
 SANDBOX_API_KEY = os.getenv('SANDBOX_API_KEY', '')  # API Key for authentication
 
 # ====================
+# LLM Test Generation Service Configuration
+# ====================
+LLM_TESTGEN_API_URL = os.getenv('LLM_TESTGEN_API_URL', 'http://34.81.90.111:8001')
+LLM_TESTGEN_TIMEOUT = int(os.getenv('LLM_TESTGEN_TIMEOUT', '120'))  # LLM 生成可能較慢，預設 120 秒
+
+# ====================
 # Backend Configuration
 # ====================
 BACKEND_BASE_URL = os.getenv('BACKEND_BASE_URL', 'http://localhost:8000')  # Backend 公開網址（用於 Sandbox callback）
