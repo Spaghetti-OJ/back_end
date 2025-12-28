@@ -886,15 +886,32 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
             if problem_quota >= 0:
                 # 題目有配額限制，需要檢查/建立該用戶的 UserProblemQuota 記錄
                 with transaction.atomic():
-                    quota, created = UserProblemQuota.objects.select_for_update().get_or_create(
-                        user=user,
-                        problem_id=problem_id,
-                        assignment_id=None,  # 全域配額（非作業）
-                        defaults={
-                            'total_quota': problem_quota,
-                            'remaining_attempts': problem_quota
-                        }
-                    )
+                    try:
+                        # 先嘗試在行鎖下取得現有配額紀錄
+                        quota = UserProblemQuota.objects.select_for_update().get(
+                            user=user,
+                            problem_id=problem_id,
+                            assignment_id=None,  # 全域配額（非作業）
+                        )
+                        created = False
+                    except UserProblemQuota.DoesNotExist:
+                        # 如不存在則嘗試建立，若發生競態導致 IntegrityError，再回頭取得
+                        try:
+                            quota = UserProblemQuota.objects.create(
+                                user=user,
+                                problem_id=problem_id,
+                                assignment_id=None,  # 全域配額（非作業）
+                                total_quota=problem_quota,
+                                remaining_attempts=problem_quota,
+                            )
+                            created = True
+                        except IntegrityError:
+                            quota = UserProblemQuota.objects.select_for_update().get(
+                                user=user,
+                                problem_id=problem_id,
+                                assignment_id=None,  # 全域配額（非作業）
+                            )
+                            created = False
                     
                     if quota.remaining_attempts == 0:
                         return api_response(
@@ -904,9 +921,11 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                         )
                     
                     # 減少配額
-                    if quota.remaining_attempts > 0:
-                        quota.remaining_attempts -= 1
-                        quota.save()
+                    quota.remaining_attempts -= 1
+                    quota.save()
+                    
+                    # 儲存提交記錄，確保配額扣減與提交建立的原子性
+                    submission = serializer.save()
             else:
                 # 題目無配額限制 (total_quota == -1)
                 # 但仍檢查是否有管理員手動設定的 UserProblemQuota（針對特定用戶的限制）
@@ -915,7 +934,7 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                         quota = UserProblemQuota.objects.select_for_update().get(
                             user=user,
                             problem_id=problem_id,
-                            assignment_id__isnull=True
+                            assignment_id=None  # 全域配額（非作業），與上方 get_or_create 邏輯一致
                         )
                         # 只有當 total_quota >= 0 時才檢查（-1 表示此用戶也無限制）
                         if quota.total_quota >= 0:
@@ -925,14 +944,15 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                                     message="you have used all your quotas",
                                     status_code=status.HTTP_403_FORBIDDEN
                                 )
-                            if quota.remaining_attempts > 0:
-                                quota.remaining_attempts -= 1
-                                quota.save()
+                            quota.remaining_attempts -= 1
+                            quota.save()
+                        
+                        # 儲存提交記錄，確保配額扣減與提交建立的原子性
+                        submission = serializer.save()
                 except UserProblemQuota.DoesNotExist:
                     # 沒有任何配額限制，允許提交
-                    pass
+                    submission = serializer.save()
             
-            submission = serializer.save()
             
             # NOJ 格式響應
             return api_response(
