@@ -1924,7 +1924,8 @@ class SubmissionCallbackAPIView(APIView):
             memory_usage = data.get('memory_usage', 0)
             test_results = data.get('test_results', [])
             
-            logger.info(f'Received callback for submission {submission_id}: status={judge_status}, score={total_score}')
+            logger.info(f'Received callback for submission {submission_id}: status={judge_status}, score={total_score}, test_results count={len(test_results)}')
+            logger.debug(f'Full callback payload: {data}')
             
             if not submission_id:
                 return api_response(
@@ -2029,6 +2030,11 @@ class SubmissionCallbackAPIView(APIView):
                     logger.info(f'Created {len(all_test_cases)} accepted results for all test cases of submission {submission_id}')
                 else:
                     # 正常情況：處理每個測資結果
+                    logger.info(f'Processing {len(test_results)} test results normally')
+                    
+                    if len(test_results) == 0:
+                        logger.warning(f'Submission {submission_id} has status={judge_status} but test_results is empty!')
+                    
                     for test_result in test_results:
                         # 轉換 status 為字串格式（SubmissionResult 使用字串）
                         result_status = test_result.get('status', 'runtime_error')
@@ -2039,10 +2045,17 @@ class SubmissionCallbackAPIView(APIView):
                         subtask_no = test_result.get('test_case_id')  # Sandbox 用這個欄位傳 subtask 編號
                         test_case_index = test_result.get('test_case_index', 1)  # 測資編號
                         
-                        logger.info(f'Processing test_result: subtask_no={subtask_no}, test_case_index={test_case_index}, status={result_status}')
+                        logger.info(f'Processing test_result: subtask_no={subtask_no} (type={type(subtask_no)}), test_case_index={test_case_index}, status={result_status}')
                         
-                        if not subtask_no:
+                        if subtask_no is None:
                             logger.warning(f'Missing subtask_no (test_case_id) in test_result')
+                            continue
+                        
+                        # 容錯：嘗試轉換 subtask_no 為整數（防止型別不匹配）
+                        try:
+                            subtask_no = int(subtask_no)
+                        except (ValueError, TypeError):
+                            logger.error(f'Invalid subtask_no format: {subtask_no}')
                             continue
                         
                         # 根據 subtask_no 找到實際的 subtask_id
@@ -2054,8 +2067,18 @@ class SubmissionCallbackAPIView(APIView):
                             subtask_id = subtask.id
                             logger.info(f'Found subtask: subtask_no={subtask_no} -> subtask_id={subtask_id}')
                         except Problem_subtasks.DoesNotExist:
-                            logger.error(f'Subtask not found: problem_id={submission.problem_id}, subtask_no={subtask_no}')
-                            continue
+                            # 容錯：如果找不到，嘗試 subtask_no+1（因為 Sandbox 可能從 0 開始）
+                            try:
+                                logger.warning(f'Subtask not found with subtask_no={subtask_no}, trying subtask_no={subtask_no+1}')
+                                subtask = Problem_subtasks.objects.get(
+                                    problem_id=submission.problem_id,
+                                    subtask_no=subtask_no + 1
+                                )
+                                subtask_id = subtask.id
+                                logger.info(f'Found subtask with adjusted index: subtask_no={subtask_no+1} -> subtask_id={subtask_id}')
+                            except Problem_subtasks.DoesNotExist:
+                                logger.error(f'Subtask not found even with adjusted index: problem_id={submission.problem_id}, subtask_no={subtask_no} or {subtask_no+1}')
+                                continue
                         
                         # 創建或更新記錄
                         result, created = SubmissionResult.objects.update_or_create(
