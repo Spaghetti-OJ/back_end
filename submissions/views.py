@@ -607,28 +607,33 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                     
                     # 由於 SQLite 將 IP 存為字串，我們需要在 Python 層面進行過濾
                     # 先獲取所有可能的 IP（基於前綴的簡單過濾以減少數據量）
-                    # 取得網段的前 1-3 個八位元組作為前綴（例如：192.168.1.0/24 -> "192.168"）
+                    # 取得網段的前綴（例如：192.168.1.0/24 -> "192.168.1"）
                     network_parts = str(network.network_address).split('.')
-                    if network.prefixlen >= 16:
-                        network_prefix = '.'.join(network_parts[:2])  # 取前兩個八位元組
+                    if network.prefixlen >= 24:
+                        network_prefix = '.'.join(network_parts[:3]) + '.'  # 取前三個八位元組
+                    elif network.prefixlen >= 16:
+                        network_prefix = '.'.join(network_parts[:2]) + '.'  # 取前兩個八位元組
                     elif network.prefixlen >= 8:
-                        network_prefix = network_parts[0]  # 取第一個八位元組
+                        network_prefix = network_parts[0] + '.'  # 取第一個八位元組（加點避免誤匹配）
                     else:
                         network_prefix = ''  # 不使用前綴過濾，檢查所有 IP
                     
                     if network_prefix:
-                        candidate_submissions = queryset.filter(ip_address__startswith=network_prefix)
+                        # 使用 values_list 只獲取需要的欄位以提高效能
+                        candidate_data = queryset.filter(
+                            ip_address__startswith=network_prefix
+                        ).values_list('id', 'ip_address')
                     else:
-                        candidate_submissions = queryset
+                        candidate_data = queryset.values_list('id', 'ip_address')
 
                     
                     # 在 Python 中過濾出符合 CIDR 範圍的提交
                     valid_submission_ids = []
-                    for submission in candidate_submissions:
+                    for sub_id, ip_addr in candidate_data:
                         try:
-                            ip = ipaddress.ip_address(submission.ip_address)
+                            ip = ipaddress.ip_address(ip_addr)
                             if ip in network:
-                                valid_submission_ids.append(submission.id)
+                                valid_submission_ids.append(sub_id)
                         except (ValueError, AttributeError):
                             # 忽略無效的 IP 地址
                             pass
