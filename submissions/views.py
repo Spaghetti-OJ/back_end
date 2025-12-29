@@ -880,44 +880,21 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                     status_code=status.HTTP_404_NOT_FOUND
                 )
             
-            # 4. Quota 檢查 - 檢查用戶是否還有提交配額
-            # 先檢查題目層級的 total_quota 設定
+            # 4. Quota 檢查 - 基於題目的 total_quota 設定
             problem_quota = problem.total_quota  # -1 = 無限制, >= 0 = 有限制
             
-            # Wrap quota check and submission save in a single atomic transaction
-            # to ensure consistency (prevent quota decrement without submission save)
-            with transaction.atomic():
-                if problem_quota >= 0:
-                    # 題目有配額限制，需要檢查/建立 UserProblemQuota 記錄
-                    # Use explicit try-except pattern to avoid race condition with get_or_create
-                    try:
-                        # Try to get existing quota record with row-level lock
-                        quota = UserProblemQuota.objects.select_for_update().get(
-                            user=user,
-                            problem_id=problem_id,
-                            assignment_id=None  # Global quota (no assignment)
-                        )
-                    except UserProblemQuota.DoesNotExist:
-                        # Record doesn't exist, create it
-                        # The unique constraint will handle concurrent creates
-                        try:
-                            quota = UserProblemQuota.objects.create(
-                                user=user,
-                                problem_id=problem_id,
-                                assignment_id=None,
-                                total_quota=problem_quota,
-                                remaining_attempts=problem_quota
-                            )
-                        except IntegrityError:
-                            # If another thread created it concurrently, get it with lock
-                            quota = UserProblemQuota.objects.select_for_update().get(
-                                user=user,
-                                problem_id=problem_id,
-                                assignment_id=None
-                            )
-                    
-                    # 如果記錄已存在但 total_quota 與題目設定不同，可能是題目設定更新了
-                    # 這裡我們不自動更新，保持原有配額（避免用戶突然獲得更多或更少配額）
+            if problem_quota >= 0:
+                # 題目有配額限制，需要檢查/建立該用戶的 UserProblemQuota 記錄
+                with transaction.atomic():
+                    quota, created = UserProblemQuota.objects.select_for_update().get_or_create(
+                        user=user,
+                        problem_id=problem_id,
+                        assignment_id=None,  # 全域配額（非作業）
+                        defaults={
+                            'total_quota': problem_quota,
+                            'remaining_attempts': problem_quota
+                        }
+                    )
                     
                     if quota.remaining_attempts == 0:
                         return api_response(
@@ -927,36 +904,35 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                         )
                     
                     # 減少配額
-                    # Note: remaining_attempts can be -1 (unlimited) if manually set by admin
-                    # In this case, we preserve the unlimited quota by not decrementing
                     if quota.remaining_attempts > 0:
                         quota.remaining_attempts -= 1
                         quota.save()
-                else:
-                    # 題目無配額限制，但仍檢查是否有手動設定的 UserProblemQuota
-                    try:
+            else:
+                # 題目無配額限制 (total_quota == -1)
+                # 但仍檢查是否有管理員手動設定的 UserProblemQuota（針對特定用戶的限制）
+                try:
+                    with transaction.atomic():
                         quota = UserProblemQuota.objects.select_for_update().get(
                             user=user,
                             problem_id=problem_id,
-                            assignment_id=None  # Global quota (no assignment)
+                            assignment_id__isnull=True
                         )
-                        if quota.remaining_attempts == 0:
-                            return api_response(
-                                data=None,
-                                message="you have used all your quotas",
-                                status_code=status.HTTP_403_FORBIDDEN
-                            )
-                        # Note: remaining_attempts can be -1 (unlimited) if manually set
-                        # In this case, we preserve the unlimited quota by not decrementing
-                        if quota.remaining_attempts > 0:
-                            quota.remaining_attempts -= 1
-                            quota.save()
-                    except UserProblemQuota.DoesNotExist:
-                        # 沒有任何配額限制，允許提交
-                        pass
-                
-                # Save submission within the same transaction to ensure atomicity
-                submission = serializer.save()
+                        # 只有當 total_quota >= 0 時才檢查（-1 表示此用戶也無限制）
+                        if quota.total_quota >= 0:
+                            if quota.remaining_attempts == 0:
+                                return api_response(
+                                    data=None,
+                                    message="you have used all your quotas",
+                                    status_code=status.HTTP_403_FORBIDDEN
+                                )
+                            if quota.remaining_attempts > 0:
+                                quota.remaining_attempts -= 1
+                                quota.save()
+                except UserProblemQuota.DoesNotExist:
+                    # 沒有任何配額限制，允許提交
+                    pass
+            
+            submission = serializer.save()
             
             # NOJ 格式響應
             return api_response(

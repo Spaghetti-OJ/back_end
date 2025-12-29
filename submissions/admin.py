@@ -236,8 +236,8 @@ class UserProblemQuotaAdmin(admin.ModelAdmin):
         percentage = (used / obj.total_quota * 100) if obj.total_quota > 0 else 0
         color = 'green' if percentage < 50 else 'orange' if percentage < 80 else 'red'
         return format_html(
-            '<span style="color: {};">{}/{} ({:.0f}%)</span>',
-            color, used, obj.total_quota, percentage
+            '<span style="color: {};">{}/{} ({}%)</span>',
+            color, used, obj.total_quota, int(percentage)
         )
     quota_usage.short_description = '配額使用'
 
