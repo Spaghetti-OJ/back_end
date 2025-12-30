@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from user.models import UserProfile
+from courses.models import Course_members, Courses
 
 User = get_user_model()
 
@@ -37,9 +38,20 @@ class MeSerializer(serializers.Serializer):
     email = serializers.EmailField(read_only=True)
     role = serializers.CharField(source="identity", read_only=True)
     email_verified = serializers.SerializerMethodField()
+    access_course = serializers.SerializerMethodField()
 
     def get_email_verified(self, obj):
         userprofile = getattr(obj, "userprofile", None)
         if userprofile is not None and hasattr(userprofile, "email_verified"):
             return userprofile.email_verified
         return False
+    
+    def get_access_course(self, user):
+        member_ids = Course_members.objects.filter(
+            user_id=user,
+            role__in=[Course_members.Role.TA, Course_members.Role.TEACHER],
+        ).values_list("course_id_id", flat=True)
+
+        teacher_ids = Courses.objects.filter(teacher_id=user).values_list("id", flat=True)
+
+        return sorted(set(member_ids) | set(teacher_ids))

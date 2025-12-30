@@ -39,9 +39,25 @@ def create_test_user():
     if created:
         user.set_password(password)
         user.save()
-        print(f"創建新用戶: {username}")
+        print(f"✓ 創建新用戶: {username}")
     else:
-        print(f"使用現有用戶: {username}")
+        print(f"✓ 使用現有用戶: {username}")
+    
+    # 確保 email 已驗證（測試用）
+    try:
+        from user.models import UserProfile
+        profile, profile_created = UserProfile.objects.get_or_create(
+            user=user,
+            defaults={'email_verified': True}
+        )
+        if not profile.email_verified:
+            profile.email_verified = True
+            profile.save()
+            print(f"✓ Email 已設為驗證狀態")
+        else:
+            print(f"✓ Email 已是驗證狀態")
+    except Exception as e:
+        print(f"⚠ 無法設置 email 驗證狀態: {e}")
     
     return user, password
 

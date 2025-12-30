@@ -10,7 +10,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
 from django.utils.crypto import get_random_string
-from rest_framework import generics, permissions, status, parsers
+from rest_framework import generics, parsers, status
 from rest_framework.exceptions import ErrorDetail
 from rest_framework.response import Response
 
@@ -29,7 +29,6 @@ class CourseImportCSVView(generics.GenericAPIView):
      - POST /course/<course_id>/import-csv
     """
 
-    permission_classes = [permissions.IsAuthenticated]
     serializer_class = CourseImportCSVSerializer
     parser_classes = [parsers.MultiPartParser, parsers.FormParser]
 

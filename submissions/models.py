@@ -108,6 +108,7 @@ class SubmissionResult(models.Model):
     STATUS_CHOICES = [
         ('accepted', 'Accepted'),
         ('wrong_answer', 'Wrong Answer'),
+        ('compile_error', 'Compile Error'),
         ('time_limit_exceeded', 'Time Limit Exceeded'),
         ('memory_limit_exceeded', 'Memory Limit Exceeded'),
         ('runtime_error', 'Runtime Error'),
@@ -119,14 +120,14 @@ class SubmissionResult(models.Model):
         ('solved', 'Solved'),
     ]
     
-    # Primary key - UUID
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
-    # Foreign keys
-    problem_id = models.IntegerField()
+    # Foreign keys - 複合主鍵的一部分
     submission = models.ForeignKey(Submission, on_delete=models.CASCADE, related_name='results')
-    test_case_id = models.IntegerField()
-    test_case_index = models.IntegerField()
+    subtask_id = models.IntegerField()  # 複合主鍵：第幾個子題
+    test_case_index = models.IntegerField()  # 複合主鍵：第幾筆測資（相對於 subtask）
+    
+    # Other foreign keys
+    problem_id = models.IntegerField()
+    test_case_id = models.IntegerField(null=True, blank=True)  # CE 時可能為 None
     
     # Status and scoring
     status = models.CharField(max_length=30, choices=STATUS_CHOICES)
@@ -149,10 +150,12 @@ class SubmissionResult(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
+        # 複合主鍵：submission + subtask_id + test_case_index
+        unique_together = [['submission', 'subtask_id', 'test_case_index']]
         indexes = [
-            models.Index(fields=['submission', 'test_case_index']),
+            models.Index(fields=['submission', 'subtask_id', 'test_case_index']),
         ]
-        ordering = ['test_case_index']
+        ordering = ['subtask_id', 'test_case_index']
         db_table = 'submission_results'
     
     def __str__(self):
@@ -397,14 +400,7 @@ class Editorial(models.Model):
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     
     # Core fields
-    title = models.CharField(max_length=255)
     content = models.TextField()
-    difficulty_rating = models.DecimalField(
-        max_digits=3, 
-        decimal_places=1, 
-        null=True, 
-        blank=True
-    )
     
     # Statistics
     likes_count = models.IntegerField(default=0)
@@ -412,7 +408,6 @@ class Editorial(models.Model):
     
     # Status
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
-    is_official = models.BooleanField(default=False)
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -421,7 +416,6 @@ class Editorial(models.Model):
     
     class Meta:
         indexes = [
-            models.Index(fields=['problem_id', 'is_official']),
             models.Index(fields=['problem_id', 'likes_count']),
             models.Index(fields=['author', 'created_at']),
         ]
@@ -429,7 +423,7 @@ class Editorial(models.Model):
         db_table = 'editorials'
     
     def __str__(self):
-        return f"Editorial {self.title} - Problem {self.problem_id} - {self.author.username}"
+        return f"Editorial {self.id} - Problem {self.problem_id} - {self.author.username}"
 
 
 class EditorialLike(models.Model):
@@ -460,4 +454,4 @@ class EditorialLike(models.Model):
         db_table = 'editorial_likes'
     
     def __str__(self):
-        return f"Like {self.editorial.title} by {self.user.username}"
+        return f"Like Editorial {self.editorial.id} by {self.user.username}"

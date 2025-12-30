@@ -41,7 +41,14 @@
     ],
     "fillInTemplate": null,
     "submitCount": 2,
-    "highScore": 80
+    "highScore": 80,
+    "static_analysis_rules": ["forbid-loops"],
+    "forbidden_functions": [],
+    "use_static_analysis": true,
+    "static_analysis_config": {
+      "enabled": true,
+      "rules": ["forbid-loops"]
+    }
   },
   "message": "Problem can view.",
   "status": "200"
@@ -51,6 +58,10 @@
 - `description.sampleInput` / `description.sampleOutput`：後端已將原始換行字串依行切割為陣列；若為空字串則回傳 `[]`。
 - `allowedLanguage`：語言遮罩（c=1, cpp=2, java=4, python=8；相加形成整數）。
 - `testCase`：僅在題目已有上傳測資 zip 且解析成功時出現。沒有則為空陣列。
+- `static_analysis_rules`：靜態分析規則列表，可選值：`forbid-loops`、`forbid-arrays`、`forbid-stl`、`forbid-functions`。空陣列表示不使用靜態分析。
+- `forbidden_functions`：禁止使用的函數名稱列表。當 `static_analysis_rules` 包含 `forbid-functions` 時會有值。
+- `use_static_analysis`：布林值，表示是否啟用靜態分析（根據 `static_analysis_rules` 自動計算）。
+- `static_analysis_config`：完整的靜態分析配置物件（供 Sandbox 使用）。
 未登入或無權限時可能回 403；若是舊邏輯隱藏題目也可能視需求回 404。
 
 **cURL**
@@ -142,17 +153,17 @@ curl "http://127.0.0.1:8000/problem/30/test-case" -H "Authorization: Bearer $TOK
 
 沙盒在判題前會：
 1. 下載 zip 檔案。
-2. 呼叫 checksum 端點確認 MD5 是否一致（避免網路傳輸損毀）。
+2. 呼叫 checksum 端點確認 SHA256 是否一致（避免網路傳輸損毀）。
 3. 呼叫 meta 端點取得測資對列表（in/out）以便依序執行。
 
 安全驗證：使用 query string `token` 與後端設定的 `SANDBOX_TOKEN` 比對；不需一般登入權限。若 token 缺失或不符 → 401。
 
-#### 1) 取得 MD5 校驗和
+#### 1) 取得 SHA256 校驗和
 - 路徑：`GET /problem/<problem_id>/checksum?token=<sandbox_token>`
 - 成功回應：
 ```json
 {
-  "data": { "checksum": "d41d8cd98f00b204e9800998ecf8427e" },
+  "data": { "checksum": "EXAMPLE_SHA256_CHECKSUM" },
   "message": "OK",
   "status": "200"
 }
@@ -167,7 +178,7 @@ curl "http://127.0.0.1:8000/problem/30/checksum?token=$SANDBOX_TOKEN"
 #### 2) 取得測資元資料
 - 路徑：`GET /problem/<problem_id>/meta?token=<sandbox_token>`
 - 回傳欄位：
-  - `checksum`: 與 /checksum 相同 MD5（方便比對）
+  - `checksum`: 與 /checksum 相同 SHA256（方便比對）
   - `task_count`: 總測試對數量
   - `missing_pairs`: 缺失配對的 stem 列表（理想應為空）
   - `tasks`: 陣列，每項包含 `no`, `stem`, `in`, `out`
@@ -176,7 +187,7 @@ curl "http://127.0.0.1:8000/problem/30/checksum?token=$SANDBOX_TOKEN"
 ```json
 {
   "data": {
-    "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+    "checksum": "a3f2b8c9d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1",
     "task_count": 2,
     "missing_pairs": [],
     "tasks": [
@@ -230,7 +241,7 @@ curl "http://127.0.0.1:8000/problem/30/testdata?token=$SANDBOX_TOKEN" -o testdat
 
 # 2. 取得 checksum 並驗證完整性
 CHECKSUM=$(curl -s "http://127.0.0.1:8000/problem/30/checksum?token=$SANDBOX_TOKEN" | jq -r '.data.checksum')
-echo "$CHECKSUM  testdata.zip" | md5sum -c
+echo "$CHECKSUM  testdata.zip" | sha256sum -c
 
 # 3. 取得測資結構資訊
 curl "http://127.0.0.1:8000/problem/30/meta?token=$SANDBOX_TOKEN" | jq '.data.tasks'
@@ -430,12 +441,40 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/stats" \
 | hint | string/null | ❌ | null | 提示文字 |
 | subtask_description | string/null | ❌ | null | 子任務敘述（若有 subtasks） |
 | supported_languages | array | ❌ | `["c","cpp","java","python"]` | 可提交語言（陣列字串） |
+| static_analysis_rules | string[] | ❌ | `[]` | 靜態分析規則列表，可選值見下方說明 |
+| forbidden_functions | string[] | ❌ | `[]` | 禁止使用的函數名稱列表（當啟用 `forbid-functions` 規則時必填且至少一個） |
 | tags | int[] | ❌ | (無) | 標籤 id 陣列；嚴格驗證全部必須存在 |
 
 備註：
 1. 未提供可選欄位則使用預設或留空（null）。
 2. `tags` 為寫入用；回傳時使用 `tags` 物件陣列（含 id/name/usage_count）。
 3. 不支援在建立時直接寫 `like_count`、`view_count` 等統計欄位。
+
+### 靜態分析規則說明
+
+`static_analysis_rules` 可選用以下規則（可多選組合）：
+
+| 規則 | 說明 | 適用情境 |
+| ---- | ---- | -------- |
+| `forbid-loops` | 禁止使用迴圈（for、while、do-while） | 遞迴練習題 |
+| `forbid-arrays` | 禁止使用陣列 | 指標練習題 |
+| `forbid-stl` | 禁止使用 STL 容器和演算法 | 資料結構實作題 |
+| `forbid-functions` | 禁止使用特定函數 | 演算法實作題（禁用內建排序等） |
+
+**驗證規則**：
+- 當 `static_analysis_rules` 包含 `forbid-functions` 時，`forbidden_functions` 必須提供且至少包含一個函數名稱。
+- 函數名稱不能為空字串。
+
+**回應中的額外欄位**：
+- `use_static_analysis`（boolean）：是否啟用靜態分析，根據 `static_analysis_rules` 是否為空自動計算。
+- `static_analysis_config`（object）：完整配置，供 Sandbox 判題使用，格式如下：
+```json
+{
+  "enabled": true,
+  "rules": ["forbid-functions", "forbid-stl"],
+  "forbidden_functions": ["sort", "qsort"]
+}
+```
 
 ### 最小可建立 Payload（僅必填）
 ```json
@@ -463,6 +502,8 @@ curl "http://127.0.0.1:8000/problem/$PROBLEM_ID/stats" \
   "hint": "使用雜湊表",
   "subtask_description": "Subtask1: n<=1000; Subtask2: n<=1e5",
   "supported_languages": ["c","cpp","python"],
+  "static_analysis_rules": ["forbid-functions"],
+  "forbidden_functions": ["sort", "qsort"],
   "tags": [1,2]
 }
 ```
@@ -626,6 +667,50 @@ curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
   -d '{
     "tags": [2,99999]
   }'
+```
+
+### 靜態分析設定範例
+
+> 啟用禁止迴圈和陣列（遞迴練習）
+```bash
+curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "static_analysis_rules": ["forbid-loops", "forbid-arrays"]
+  }'
+```
+
+> 啟用禁止特定函數（演算法實作）
+```bash
+curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "static_analysis_rules": ["forbid-functions", "forbid-stl"],
+    "forbidden_functions": ["sort", "qsort", "stable_sort", "nth_element"]
+  }'
+```
+
+> 停用靜態分析
+```bash
+curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "static_analysis_rules": []
+  }'
+```
+
+> 靜態分析驗證錯誤（啟用 forbid-functions 但未提供函數列表，預期 400）
+```bash
+curl -X PUT http://127.0.0.1:8000/problem/manage/$PROBLEM_ID \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "static_analysis_rules": ["forbid-functions"]
+  }'
+# 回應：{"forbidden_functions": ["當啟用 forbid-functions 規則時，必須至少指定一個禁止使用的函數。"]}
 ```
 
 ---

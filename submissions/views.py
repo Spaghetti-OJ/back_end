@@ -1,5 +1,5 @@
 from django.shortcuts import render, get_object_or_404
-from django.db import models, transaction
+from django.db import models, transaction, IntegrityError
 from django.http import Http404
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
@@ -11,6 +11,8 @@ from rest_framework.views import APIView
 from problems.models import Problems, Problem_subtasks, Test_cases
 from user.models import User
 import uuid
+from datetime import datetime
+import logging
 
 # 統一的 API 響應格式
 def api_response(data=None, message="OK", status_code=200):
@@ -40,6 +42,198 @@ from .serializers import (
 from problems.models import Problems
 from courses.models import Courses, Course_members
 
+
+def update_user_problem_stats(submission):
+    """
+    更新使用者題目解題統計（全域層級）
+    
+    根據提交結果更新 UserProblemSolveStatus，包括：
+    - 總提交數
+    - AC 提交數
+    - 最佳分數
+    - 首次解題時間
+    - 最後提交時間
+    - 解題狀態（never_tried/attempted/partial_solved/fully_solved）
+    - 最佳執行時間和記憶體使用
+    """
+    from django.utils import timezone
+    from django.db.models import F
+    
+    try:
+        # 取得或創建 UserProblemSolveStatus
+        stats, created = UserProblemSolveStatus.objects.get_or_create(
+            user=submission.user,
+            problem_id=submission.problem_id,
+            defaults={
+                'total_submissions': 0,
+                'ac_submissions': 0,
+                'best_score': 0,
+                'solve_status': 'never_tried',
+            }
+        )
+        
+        # 更新總提交數
+        stats.total_submissions = F('total_submissions') + 1
+        
+        # 更新最後提交時間
+        stats.last_submission_time = submission.created_at
+        
+        # 如果是 AC (status='0')
+        if submission.status == '0':
+            stats.ac_submissions = F('ac_submissions') + 1
+            
+            # 更新首次解題時間（如果是第一次 AC）
+            if not stats.first_solve_time:
+                stats.first_solve_time = submission.judged_at or timezone.now()
+        
+        # 先保存以計算 F() 表達式
+        stats.save()
+        stats.refresh_from_db()
+        
+        # 更新最佳分數
+        if submission.score > stats.best_score:
+            stats.best_score = submission.score
+        
+        # 更新最佳執行時間（只在有效時更新）
+        if submission.execution_time > 0:
+            if stats.best_execution_time is None or submission.execution_time < stats.best_execution_time:
+                stats.best_execution_time = submission.execution_time
+            stats.total_execution_time += submission.execution_time
+        
+        # 更新最佳記憶體使用（只在有效時更新）
+        if submission.memory_usage > 0:
+            if stats.best_memory_usage is None or submission.memory_usage < stats.best_memory_usage:
+                stats.best_memory_usage = submission.memory_usage
+        
+        # 更新解題狀態
+        if stats.best_score >= 100:
+            stats.solve_status = 'fully_solved'
+        elif stats.best_score > 0:
+            stats.solve_status = 'partial_solved'
+        elif stats.total_submissions == 0:
+            stats.solve_status = 'never_tried'
+        else:
+            stats.solve_status = 'attempted'
+        
+        stats.save()
+        
+        logger = logging.getLogger(__name__)
+        logger.info(f'Updated solve status for user {submission.user.id} problem {submission.problem_id}: '
+                   f'status={stats.solve_status}, best_score={stats.best_score}, '
+                   f'total_submissions={stats.total_submissions}')
+        
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f'Failed to update user problem solve status: {str(e)}', exc_info=True)
+
+''' 這邊不再需要了，算成績的部分交給前端處理
+def update_user_assignment_stats(submission, assignment_id):
+    """
+    更新使用者作業題目統計（作業層級）
+    
+    根據提交結果更新 UserProblemStats，包括：
+    - 總提交數
+    - 最佳分數
+    - 首次 AC 時間
+    - 最後提交時間
+    - 解題狀態（unsolved/partial/solved）
+    - 最佳執行時間和記憶體使用
+    - 遲交處理
+    """
+    from django.utils import timezone
+    from django.db.models import F
+    from .models import UserProblemStats
+    from assignments.models import Assignments, Assignment_problems
+    
+    try:
+        # 檢查是否屬於作業
+        if not assignment_id:
+            return
+        
+        # 檢查 assignment 和 problem 的關聯
+        try:
+            assignment = Assignments.objects.get(id=assignment_id)
+            assignment_problem = Assignment_problems.objects.get(
+                assignment=assignment,
+                problem_id=submission.problem_id
+            )
+        except (Assignments.DoesNotExist, Assignment_problems.DoesNotExist):
+            # 如果作業或題目不存在，跳過
+            return
+        
+        # 取得或創建 UserProblemStats
+        stats, created = UserProblemStats.objects.get_or_create(
+            user=submission.user,
+            assignment_id=assignment_id,
+            problem_id=submission.problem_id,
+            defaults={
+                'total_submissions': 0,
+                'best_score': 0,
+                'max_possible_score': assignment_problem.weight * 100 if assignment_problem.weight else 100,
+                'solve_status': 'unsolved',
+            }
+        )
+        
+        # 更新總提交數
+        stats.total_submissions = F('total_submissions') + 1
+        
+        # 更新最後提交時間
+        stats.last_submission_time = submission.created_at
+        
+        # 檢查是否遲交
+        if assignment.due_time and submission.created_at > assignment.due_time:
+            stats.is_late = True
+            # 計算遲交罰分
+            if assignment.late_penalty > 0:
+                stats.penalty_score = assignment.late_penalty
+        
+        # 先保存以計算 F() 表達式
+        stats.save()
+        stats.refresh_from_db()
+        
+        # 更新最佳分數（考慮遲交罰分）
+        final_score = submission.score
+        if stats.is_late and stats.penalty_score > 0:
+            final_score = int(submission.score * (1 - float(stats.penalty_score) / 100))
+        
+        if final_score > stats.best_score:
+            stats.best_score = final_score
+            stats.best_submission = submission
+        
+        # 如果是 AC (status='0') 且還沒有 first_ac_time
+        if submission.status == '0' and not stats.first_ac_time:
+            stats.first_ac_time = submission.judged_at or timezone.now()
+        
+        # 更新最佳執行時間
+        if submission.execution_time > 0:
+            if stats.best_execution_time is None or submission.execution_time < stats.best_execution_time:
+                stats.best_execution_time = submission.execution_time
+        
+        # 更新最佳記憶體使用
+        if submission.memory_usage > 0:
+            if stats.best_memory_usage is None or submission.memory_usage < stats.best_memory_usage:
+                stats.best_memory_usage = submission.memory_usage
+        
+        # 更新解題狀態
+        if stats.best_score >= stats.max_possible_score:
+            stats.solve_status = 'solved'
+        elif stats.best_score > 0:
+            stats.solve_status = 'partial'
+        else:
+            stats.solve_status = 'unsolved'
+        
+        stats.save()
+        
+        logger = logging.getLogger(__name__)
+        logger.info(f'Updated assignment stats for user {submission.user.id} '
+                   f'assignment {assignment_id} problem {submission.problem_id}: '
+                   f'status={stats.solve_status}, best_score={stats.best_score}, '
+                   f'is_late={stats.is_late}')
+        
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f'Failed to update user assignment stats: {str(e)}', exc_info=True)
+'''
 
 class BasePermissionMixin:
     """基礎權限檢查 Mixin - 提供通用權限檢查方法"""
@@ -161,7 +355,6 @@ class BasePermissionMixin:
 
 class EditorialListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
     """題解列表和創建 API"""
-    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         problem_id = self.kwargs['problem_id']
@@ -175,7 +368,7 @@ class EditorialListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
         return Editorial.objects.filter(
             problem_id=problem_id,
             status='published'
-        ).order_by('-is_official', '-likes_count', '-created_at')
+        ).order_by('-likes_count', '-created_at')
     
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -203,9 +396,23 @@ class EditorialListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
         if response.status_code == status.HTTP_201_CREATED:
             editorial = Editorial.objects.get(id=response.data['id'])
             serializer = EditorialSerializer(editorial, context={'request': request})
-            response.data = serializer.data
+            return api_response(
+                data=serializer.data,
+                message='題解創建成功',
+                status_code=status.HTTP_201_CREATED
+            )
         
         return response
+    
+    def list(self, request, *args, **kwargs):
+        """獲取題解列表"""
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return api_response(
+            data=serializer.data,
+            message='獲取題解列表成功',
+            status_code=status.HTTP_200_OK
+        )
     
     def perform_create(self, serializer):
         """創建題解時設定相關欄位"""
@@ -221,7 +428,6 @@ class EditorialListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
 
 class EditorialDetailView(BasePermissionMixin, generics.RetrieveUpdateDestroyAPIView):
     """題解詳情、更新和刪除 API"""
-    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         problem_id = self.kwargs['problem_id']
@@ -267,6 +473,42 @@ class EditorialDetailView(BasePermissionMixin, generics.RetrieveUpdateDestroyAPI
         
         return obj
     
+    def retrieve(self, request, *args, **kwargs):
+        """獲取題解詳情"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return api_response(
+            data=serializer.data,
+            message='獲取題解詳情成功',
+            status_code=status.HTTP_200_OK
+        )
+    
+    def update(self, request, *args, **kwargs):
+        """更新題解"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        
+        # 使用 EditorialSerializer 返回完整資料
+        editorial_serializer = EditorialSerializer(instance, context={'request': request})
+        return api_response(
+            data=editorial_serializer.data,
+            message='題解更新成功',
+            status_code=status.HTTP_200_OK
+        )
+    
+    def destroy(self, request, *args, **kwargs):
+        """刪除題解"""
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return api_response(
+            data=None,
+            message='題解刪除成功',
+            status_code=status.HTTP_204_NO_CONTENT
+        )
+    
     def perform_update(self, serializer):
         """更新題解時保持 problem_id 不變"""
         problem_id = self.kwargs['problem_id']
@@ -274,7 +516,6 @@ class EditorialDetailView(BasePermissionMixin, generics.RetrieveUpdateDestroyAPI
 
 
 @api_view(['POST', 'DELETE'])
-@permission_classes([permissions.IsAuthenticated])
 def editorial_like_toggle(request, problem_id, solution_id):
     """題解按讚/取消按讚"""
     
@@ -400,9 +641,10 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
     """
     GET /submission/ - 獲取提交列表
     POST /submission/ - 創建新提交
+    POST /submission/ - 還沒實作黑名單
+
     """
     
-    permission_classes = [permissions.IsAuthenticated]
     
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -411,7 +653,115 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = Submission.objects.select_related('user').order_by('-created_at')
+        
+        # 篩選參數
+        problem_id = self.request.query_params.get('problem_id')
+        username = self.request.query_params.get('username')
+        status_filter = self.request.query_params.get('status')
+        course_id = self.request.query_params.get('course_id')
+        language_type = self.request.query_params.get('language_type')
+        before = self.request.query_params.get('before')  # Unix 時間戳記 (秒)
+        after = self.request.query_params.get('after')    # Unix 時間戳記 (秒)
+        ip_prefix = self.request.query_params.get('ip_prefix')  # IP 網段前綴
+        
+        # 套用篩選條件
+        if problem_id:
+            queryset = queryset.filter(problem_id=problem_id)
+        
+        if username:
+            queryset = queryset.filter(user__username=username)
+        
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        if course_id:
+            try:
+                # 透過課程找到所有題目，再篩選提交
+                problem_ids = Problems.objects.filter(course_id=course_id).values_list('id', flat=True)
+                queryset = queryset.filter(problem_id__in=problem_ids)
+            except (ValueError, TypeError) as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f'Invalid course_id parameter: {course_id}, error: {e}')
+                queryset = queryset.none()  # 查詢失敗返回空結果
+        
+        if language_type:
+            try:
+                queryset = queryset.filter(language_type=int(language_type))
+            except ValueError:
+                pass  # 忽略無效的語言類型
+        
+        if before:
+            try:
+                # 將 Unix 時間戳記轉換為 timezone-aware datetime 物件 (UTC)
+                before_dt = datetime.fromtimestamp(int(before), tz=timezone.utc)
+                queryset = queryset.filter(created_at__lt=before_dt)
+            except (ValueError, TypeError, OSError):
+                pass  # 忽略無效的時間格式
+        
+        if after:
+            try:
+                # 將 Unix 時間戳記轉換為 timezone-aware datetime 物件 (UTC)
+                after_dt = datetime.fromtimestamp(int(after), tz=timezone.utc)
+                queryset = queryset.filter(created_at__gt=after_dt)
+            except (ValueError, TypeError, OSError):
+                pass  # 忽略無效的時間格式
+        
+        # IP 網段前綴篩選
+        if ip_prefix:
+            try:
+                # 支援 CIDR 格式 (例如 192.168.1.0/24) 或簡單前綴 (例如 192.168.)
+                if '/' in ip_prefix:
+                    # CIDR 格式：使用 ipaddress 模組進行正確的 IP 範圍過濾
+                    import ipaddress
+                    from django.db.models import Q
+                    import struct
+                    import socket
+                    
+                    network = ipaddress.ip_network(ip_prefix, strict=False)
+                    
+                    # 使用 Django ORM 的自定義過濾
+                    # 由於 IP 地址存儲為字符串，我們需要逐一檢查
+                    matching_ips = []
+                    for submission in queryset:
+                        try:
+                            ip_obj = ipaddress.ip_address(submission.ip_address)
+                            if ip_obj in network:
+                                matching_ips.append(submission.id)
+                        except (ValueError, AttributeError):
+                            continue
+                    
+                    queryset = queryset.filter(id__in=matching_ips)
+                else:
+                    # 簡單前綴匹配：例如 "192.168." 會匹配所有 192.168.x.x
+                    queryset = queryset.filter(ip_address__startswith=ip_prefix)
+            except (ValueError, TypeError) as e:
+                logger = logging.getLogger(__name__)
+                logger.warning(f'Invalid ip_prefix parameter: {ip_prefix}, error: {e}')
+                pass  # 忽略無效的 IP 前綴
+        
         return self.get_viewable_submissions(self.request.user, queryset)
+    
+    def get_client_ip(self, request):
+        """獲取客戶端 IP"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0].strip()
+        else:
+            ip = request.META.get('REMOTE_ADDR', 'unknown')
+        return ip
+    
+    def is_ip_blacklisted(self, ip):
+        """檢查 IP 是否在黑名單中"""
+        # TODO: 實作 IP 黑名單邏輯
+        # 可以從資料庫、Redis 或配置文件讀取黑名單
+        # 範例：
+        # from django.core.cache import cache
+        # blacklist = cache.get('ip_blacklist', set())
+        # return ip in blacklist
+        
+        # 目前暫時返回 False（不阻擋任何 IP）
+        return False
     
     def post(self, request, *args, **kwargs):
         """創建新提交 (NOJ 兼容版本)"""
@@ -442,19 +792,171 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
                     elif 'not allowed language' in str(errors['language_type']):
                         return api_response(data=None, message="not allowed language", status_code=status.HTTP_403_FORBIDDEN)
                     else:
-                        return api_response(data=None, message="invalid data!", status_code=status.HTTP_400_BAD_REQUEST)
+                        return api_response(data=None, message=f"languageType 驗證失敗: {errors['language_type']}", status_code=status.HTTP_400_BAD_REQUEST)
                 
                 # 其他驗證錯誤
-                return api_response(data=None, message="invalid data!", status_code=status.HTTP_400_BAD_REQUEST)
+                error_details = '; '.join([f"{field}: {', '.join(msgs)}" for field, msgs in errors.items()])
+                return api_response(data=None, message=f"資料驗證失敗: {error_details}", status_code=status.HTTP_400_BAD_REQUEST)
             
-            # TODO: 添加其他 NOJ 檢查
-            # - problem permission denied
-            # - homework hasn't start
-            # - Invalid IP address
-            # - quota check: "you have used all your quotas"
-            # - rate limiting: "Submit too fast!" + waitFor
+            # 額外的安全檢查
+            problem_id = serializer.validated_data['problem_id']
+            user = request.user
+            # 確保用戶已通過身份驗證（防止 AnonymousUser 進入此邏輯）
+            if not getattr(user, "is_authenticated", False):
+                return api_response(
+                    data=None,
+                    message="Authentication credentials were not provided.",
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                )
             
-            submission = serializer.save()
+            # 1. Rate Limiting - 提交速率限制（每分鐘最多 10 次）
+            from django.core.cache import cache
+            rate_limit_key = f"submission_rate:{user.id}"
+            current_count = cache.get(rate_limit_key, 0)
+            
+            if current_count >= 10:
+                # 計算等待時間
+                ttl = cache.ttl(rate_limit_key)
+                wait_for = max(ttl, 1) if ttl else 60
+                return api_response(
+                    data={'waitFor': wait_for},
+                    message="Submit too fast!",
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS
+                )
+            
+            # 增加計數
+            cache.set(rate_limit_key, current_count + 1, 60)  # 60 秒過期
+            
+            # 2. IP 黑名單檢查
+            client_ip = self.get_client_ip(request)
+            if self.is_ip_blacklisted(client_ip):
+                logger.warning(f'Blocked submission from blacklisted IP: {client_ip}')
+                return api_response(
+                    data=None,
+                    message="Invalid IP address",
+                    status_code=status.HTTP_403_FORBIDDEN
+                )
+            
+            # 3. 題目權限檢查（先檢查題目是否存在，並獲取 quota 設定）
+            from problems.models import Problems
+            from .models import UserProblemQuota
+            try:
+                problem = Problems.objects.get(id=problem_id)
+                
+                # 檢查題目可見性
+                if problem.is_public == 'hidden':
+                    # Hidden 題目只有創建者和管理員可以提交
+                    if problem.creator_id != user and not user.is_staff:
+                        return api_response(
+                            data=None,
+                            message="problem permission denied",
+                            status_code=status.HTTP_403_FORBIDDEN
+                        )
+                elif problem.is_public == 'course':
+                    # Course 題目需要檢查是否在課程中
+                    from courses.models import Courses, Course_members
+                    course = problem.course_id
+                    # 若題目未關聯任何課程，則不應允許提交
+                    if course is None:
+                        return api_response(
+                            data=None,
+                            message="problem permission denied",
+                            status_code=status.HTTP_403_FORBIDDEN
+                        )
+                    # 檢查用戶是否是課程成員（老師、助教或學生）
+                    if not Course_members.objects.filter(
+                        course_id=course,
+                        user_id=user
+                    ).exists():
+                        return api_response(
+                            data=None,
+                            message="problem permission denied",
+                            status_code=status.HTTP_403_FORBIDDEN
+                        )
+            except Problems.DoesNotExist:
+                return api_response(
+                    data=None,
+                    message="Unexisted problem id.",
+                    status_code=status.HTTP_404_NOT_FOUND
+                )
+            
+            # 4. Quota 檢查 - 檢查用戶是否還有提交配額
+            # 先檢查題目層級的 total_quota 設定
+            problem_quota = problem.total_quota  # -1 = 無限制, >= 0 = 有限制
+            
+            # Wrap quota check and submission save in a single atomic transaction
+            # to ensure consistency (prevent quota decrement without submission save)
+            with transaction.atomic():
+                if problem_quota >= 0:
+                    # 題目有配額限制，需要檢查/建立 UserProblemQuota 記錄
+                    # Use explicit try-except pattern to avoid race condition with get_or_create
+                    try:
+                        # Try to get existing quota record with row-level lock
+                        quota = UserProblemQuota.objects.select_for_update().get(
+                            user=user,
+                            problem_id=problem_id,
+                            assignment_id=None  # Global quota (no assignment)
+                        )
+                    except UserProblemQuota.DoesNotExist:
+                        # Record doesn't exist, create it
+                        # The unique constraint will handle concurrent creates
+                        try:
+                            quota = UserProblemQuota.objects.create(
+                                user=user,
+                                problem_id=problem_id,
+                                assignment_id=None,
+                                total_quota=problem_quota,
+                                remaining_attempts=problem_quota
+                            )
+                        except IntegrityError:
+                            # If another thread created it concurrently, get it with lock
+                            quota = UserProblemQuota.objects.select_for_update().get(
+                                user=user,
+                                problem_id=problem_id,
+                                assignment_id=None
+                            )
+                    
+                    # 如果記錄已存在但 total_quota 與題目設定不同，可能是題目設定更新了
+                    # 這裡我們不自動更新，保持原有配額（避免用戶突然獲得更多或更少配額）
+                    
+                    if quota.remaining_attempts == 0:
+                        return api_response(
+                            data=None,
+                            message="you have used all your quotas",
+                            status_code=status.HTTP_403_FORBIDDEN
+                        )
+                    
+                    # 減少配額
+                    # Note: remaining_attempts can be -1 (unlimited) if manually set by admin
+                    # In this case, we preserve the unlimited quota by not decrementing
+                    if quota.remaining_attempts > 0:
+                        quota.remaining_attempts -= 1
+                        quota.save()
+                else:
+                    # 題目無配額限制，但仍檢查是否有手動設定的 UserProblemQuota
+                    try:
+                        quota = UserProblemQuota.objects.select_for_update().get(
+                            user=user,
+                            problem_id=problem_id,
+                            assignment_id=None  # Global quota (no assignment)
+                        )
+                        if quota.remaining_attempts == 0:
+                            return api_response(
+                                data=None,
+                                message="you have used all your quotas",
+                                status_code=status.HTTP_403_FORBIDDEN
+                            )
+                        # Note: remaining_attempts can be -1 (unlimited) if manually set
+                        # In this case, we preserve the unlimited quota by not decrementing
+                        if quota.remaining_attempts > 0:
+                            quota.remaining_attempts -= 1
+                            quota.save()
+                    except UserProblemQuota.DoesNotExist:
+                        # 沒有任何配額限制，允許提交
+                        pass
+                
+                # Save submission within the same transaction to ensure atomicity
+                submission = serializer.save()
             
             # NOJ 格式響應
             return api_response(
@@ -468,11 +970,14 @@ class SubmissionListCreateView(BasePermissionMixin, generics.ListCreateAPIView):
             error_message = str(e.detail[0]) if hasattr(e, 'detail') and e.detail else str(e)
             if 'problem' in error_message.lower():
                 return api_response(data=None, message="Unexisted problem id.", status_code=status.HTTP_404_NOT_FOUND)
-            return api_response(data=None, message="invalid data!", status_code=status.HTTP_400_BAD_REQUEST)
+            return api_response(data=None, message=f"資料驗證錯誤: {error_message}", status_code=status.HTTP_400_BAD_REQUEST)
         
         except Exception as e:
             # 其他系統錯誤
-            return api_response(data=None, message="invalid data!", status_code=status.HTTP_400_BAD_REQUEST)
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"提交創建失敗: {str(e)}", exc_info=True)
+            return api_response(data=None, message=f"系統錯誤: {str(e)[:200]}", status_code=status.HTTP_400_BAD_REQUEST)
     
     def list(self, request, *args, **kwargs):
         """獲取提交列表 (NOJ 兼容版本)"""
@@ -510,7 +1015,6 @@ class SubmissionRetrieveUpdateView(BasePermissionMixin, generics.RetrieveUpdateA
     PUT /submission/{id} - 上傳程式碼
     """
     
-    permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'id'
     
     def get_serializer_class(self):
@@ -614,7 +1118,6 @@ class SubmissionRetrieveUpdateView(BasePermissionMixin, generics.RetrieveUpdateA
             return api_response(data=None, message="can not find the source file", status_code=status.HTTP_400_BAD_REQUEST)
 
 @api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
 def submission_output_view(request, id, task_no, case_no):
     """
     GET /submission/{id}/output/{task_no}/{case_no}
@@ -641,22 +1144,58 @@ def submission_output_view(request, id, task_no, case_no):
         return api_response(None, "task_no not found", 404)
 
     # 4. 找 test_case（task_no + case_no）
+    # 注意：我們嘗試找 test_case 來驗證，但實際查詢 SubmissionResult 時主要用 test_case_index
+    test_case = None
+    test_case_id = None
     try:
         test_case = Test_cases.objects.get(
             subtask_id=subtask.id,
             idx=case_no
         )
+        test_case_id = test_case.id
     except Test_cases.DoesNotExist:
-        return api_response(None, "case_no not found", 404)
+        logger.warning(f'Test case not found: subtask_id={subtask.id}, idx={case_no}')
+        # 即使找不到 test_case，也繼續用 test_case_index 查詢
 
     # 5. 找結果
+    # 重要：查詢需要 subtask_id + test_case_index（因為 test_case_index 只是相對於 subtask 的編號）
     try:
-        result = SubmissionResult.objects.get(
+        result = SubmissionResult.objects.filter(
             submission_id=submission.id,
-            test_case_id=test_case.id
+            subtask_id=subtask.id,
+            test_case_index=case_no
+        ).order_by('-created_at').first()
+        
+        if not result:
+            # 提供詳細的診斷資訊
+            all_results = SubmissionResult.objects.filter(submission_id=submission.id)
+            total_results = all_results.count()
+            
+            # 列出該 submission 所有現有的測資結果
+            existing_cases = []
+            for r in all_results[:10]:  # 最多顯示 10 筆
+                existing_cases.append(f"subtask_id={r.subtask_id}, case_index={r.test_case_index}")
+            
+            error_detail = (
+                f"找不到測資結果。"
+                f"查詢條件: submission_id={submission.id}, subtask_id={subtask.id}, case_no={case_no}. "
+                f"該 submission 共有 {total_results} 筆測資結果"
+                f"{': ' + ', '.join(existing_cases) if existing_cases else '（無任何測資結果）'}. "
+                f"可能原因: 1) 判題尚未完成 2) subtask_id 不匹配 3) case_no 超出範圍"
+            )
+            
+            return api_response(
+                None, 
+                error_detail,
+                404
+            )
+    except Exception as e:
+        logger.error(f'Error fetching submission result: {str(e)}')
+        return api_response(
+            None, 
+            f"查詢測資結果時發生錯誤：{str(e)}",
+            404
         )
-    except SubmissionResult.DoesNotExist:
-        return api_response(None, "output not found", 404)
 
     # 6. 回傳
     payload = {
@@ -681,7 +1220,6 @@ class SubmissionListView(BasePermissionMixin, generics.ListAPIView):
     """GET /submission/ - 獲取提交列表"""
     
     serializer_class = SubmissionListSerializer
-    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         queryset = Submission.objects.select_related('user').order_by('-created_at')
@@ -719,7 +1257,6 @@ class SubmissionDetailView(BasePermissionMixin, generics.RetrieveAPIView):
     """GET /submission/{id} - 獲取提交詳情"""
     
     serializer_class = SubmissionDetailSerializer
-    permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'id'
     
     def get_queryset(self):
@@ -750,7 +1287,6 @@ class SubmissionCodeView(BasePermissionMixin, generics.RetrieveAPIView):
     """GET /submission/{id}/code - 獲取提交程式碼"""
     
     serializer_class = SubmissionCodeSerializer
-    permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'id'
     
     def get_queryset(self):
@@ -785,7 +1321,6 @@ class SubmissionStdoutView(BasePermissionMixin, generics.RetrieveAPIView):
     """GET /submission/{id}/stdout - 獲取提交標準輸出"""
     
     serializer_class = SubmissionStdoutSerializer
-    permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'id'
     
     def get_queryset(self):
@@ -813,7 +1348,6 @@ class SubmissionStdoutView(BasePermissionMixin, generics.RetrieveAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
 def submission_rejudge(request, id):
     """GET /submission/{id}/rejudge - 重新判題"""
     
@@ -870,7 +1404,6 @@ def submission_rejudge(request, id):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
 def ranking_view(request):
     """GET /ranking - 獲取排行榜"""
     
@@ -899,6 +1432,13 @@ def ranking_view(request):
             # 總提交數量
             total_submission_count = user_submissions.count()
             
+            # 獲取用戶頭像
+            try:
+                profile = user.userprofile
+                avatar_url = profile.avatar.url if profile.avatar else None
+            except:
+                avatar_url = None
+            
             # 組裝用戶資料（參照 NOJ 格式）
             user_data = {
                 'user': {
@@ -906,6 +1446,7 @@ def ranking_view(request):
                     'username': user.username,
                     'real_name': getattr(user, 'real_name', user.username),
                     'email': user.email,
+                    'avatar': avatar_url,
                     'is_active': user.is_active,
                     'date_joined': user.date_joined.isoformat() if user.date_joined else None
                 },
@@ -926,7 +1467,6 @@ def ranking_view(request):
     except Exception as e:
         return api_response(data=None, message="Some error occurred, please contact the admin", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
 def user_stats_view(request, user_id):
     """
     GET /stats/user/{userId} - 使用者統計
@@ -1050,7 +1590,6 @@ except Exception as e:
 
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
 def submit_custom_test(request, problem_id):
     """
     提交自定義測試（不存資料庫）
@@ -1238,7 +1777,6 @@ def submit_custom_test(request, problem_id):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
 def get_custom_test_result(request, custom_test_id):
     """
     查詢自定義測試結果
@@ -1383,7 +1921,7 @@ class SubmissionCallbackAPIView(APIView):
     接收 Sandbox 判題結果的 callback endpoint
     
     Sandbox 判題完成後會 POST 到這個 endpoint
-    URL: POST /api/submissions/callback/
+    URL: POST /{callback_url}/submissions/callback/
     """
     permission_classes = [permissions.AllowAny]  # Sandbox 不需要 JWT 認證
     
@@ -1440,7 +1978,8 @@ class SubmissionCallbackAPIView(APIView):
             memory_usage = data.get('memory_usage', 0)
             test_results = data.get('test_results', [])
             
-            logger.info(f'Received callback for submission {submission_id}: status={judge_status}, score={total_score}')
+            logger.info(f'Received callback for submission {submission_id}: status={judge_status}, score={total_score}, test_results count={len(test_results)}')
+            logger.debug(f'Full callback payload: {data}')
             
             if not submission_id:
                 return api_response(
@@ -1478,28 +2017,155 @@ class SubmissionCallbackAPIView(APIView):
                 logger.info(f'Updated submission {submission_id}: status={submission.status}, score={total_score}')
                 
                 # 4. 建立 SubmissionResult 記錄
-                for test_result in test_results:
-                    # 轉換 status 為字串格式（SubmissionResult 使用字串）
-                    result_status = test_result.get('status', 'runtime_error')
+                from problems.models import Problem_subtasks, Test_cases
+                
+                # 特殊處理：如果是 CE/SE 且 test_results 數量不足，為所有測資創建相同的錯誤記錄
+                if judge_status in ['compile_error', 'system_error']:
+                    # 取得該題目的所有測資
+                    all_test_cases = []
+                    subtasks = Problem_subtasks.objects.filter(problem_id=submission.problem_id).order_by('subtask_no')
+                    for subtask in subtasks:
+                        test_cases = Test_cases.objects.filter(subtask_id=subtask.id).order_by('idx')
+                        all_test_cases.extend(test_cases)
                     
-                    SubmissionResult.objects.create(
-                        submission=submission,  # 使用 submission 而非 submission_id
-                        problem_id=submission.problem_id,
-                        test_case_id=test_result.get('test_case_id'),
-                        test_case_index=test_result.get('test_case_index', 0),
-                        status=result_status,  # SubmissionResult 的 status 是字串類型
-                        execution_time=test_result.get('execution_time'),
-                        memory_usage=test_result.get('memory_usage'),
-                        score=test_result.get('score', 0),
-                        max_score=test_result.get('max_score', 100),
-                        error_message=test_result.get('error_message'),
-                    )
+                    # 取得錯誤訊息（從第一筆 test_result 或使用預設值）
+                    error_message = data.get('error_message', f'{judge_status.replace("_", " ").title()}')
+                    if test_results and len(test_results) > 0:
+                        error_message = test_results[0].get('error_message', error_message)
+                    
+                    # 為每個測資創建或更新錯誤記錄
+                    for test_case in all_test_cases:
+                        SubmissionResult.objects.update_or_create(
+                            submission=submission,
+                            subtask_id=test_case.subtask_id.id,
+                            test_case_index=test_case.idx,
+                            defaults={
+                                'problem_id': submission.problem_id,
+                                'test_case_id': None,  # CE/SE 時不關聯具體測資
+                                'status': judge_status,
+                                'execution_time': 0,
+                                'memory_usage': 0,
+                                'score': 0,
+                                'max_score': 100,
+                                'error_message': error_message,
+                            }
+                        )
+                    
+                    logger.info(f'Created {len(all_test_cases)} {judge_status} results for all test cases of submission {submission_id}')
+                elif judge_status == 'accepted' and len(test_results) == 0:
+                    # 特殊處理：AC 但沒有回傳 test_results，為所有測資創建 AC 記錄
+                    logger.info(f'Processing test_result: specail AC with no test_results')
+                    all_test_cases = []
+                    subtasks = Problem_subtasks.objects.filter(problem_id=submission.problem_id).order_by('subtask_no')
+                    for subtask in subtasks:
+                        test_cases = Test_cases.objects.filter(subtask_id=subtask.id).order_by('idx')
+                        all_test_cases.extend(test_cases)
+                    
+                    total_cases = len(all_test_cases)
+                    score_per_case = submission.max_score // total_cases if total_cases > 0 else 0
+                    
+                    for test_case in all_test_cases:
+                        SubmissionResult.objects.update_or_create(
+                            submission=submission,
+                            subtask_id=test_case.subtask_id.id,
+                            test_case_index=test_case.idx,
+                            defaults={
+                                'problem_id': submission.problem_id,
+                                'test_case_id': None,
+                                'status': 'accepted',
+                                'execution_time': execution_time // total_cases if total_cases > 0 else execution_time,
+                                'memory_usage': memory_usage,
+                                'score': score_per_case,
+                                'max_score': score_per_case,
+                                'error_message': None,
+                            }
+                        )
+                    
+                    logger.info(f'Created {len(all_test_cases)} accepted results for all test cases of submission {submission_id}')
+                else:
+                    # 正常情況：處理每個測資結果
+                    logger.info(f'Processing {len(test_results)} test results normally')
+                    
+                    if len(test_results) == 0:
+                        logger.warning(f'Submission {submission_id} has status={judge_status} but test_results is empty!')
+                    
+                    for test_result in test_results:
+                        # 轉換 status 為字串格式（SubmissionResult 使用字串）
+                        result_status = test_result.get('status', 'runtime_error')
+                        
+                        # 重要：Sandbox 文件中的欄位映射
+                        # - Sandbox 的 test_case_id → 實際是 subtask_no（第幾個 subtask）
+                        # - Sandbox 的 test_case_index → 測資編號（相對於 subtask）
+                        subtask_no = test_result.get('test_case_id')  # Sandbox 用這個欄位傳 subtask 編號
+                        test_case_index = test_result.get('test_case_index', 1)  # 測資編號
+                        
+                        logger.info(f'Processing test_result: subtask_no={subtask_no} (type={type(subtask_no)}), test_case_index={test_case_index}, status={result_status}')
+                        
+                        if subtask_no is None:
+                            logger.warning(f'Missing subtask_no (test_case_id) in test_result')
+                            continue
+                        
+                        # 容錯：嘗試轉換 subtask_no 為整數（防止型別不匹配）
+                        try:
+                            subtask_no = int(subtask_no)
+                        except (ValueError, TypeError):
+                            logger.error(f'Invalid subtask_no format: {subtask_no}')
+                            continue
+                        
+                        # 根據 subtask_no 找到實際的 subtask_id
+                        try:
+                            subtask = Problem_subtasks.objects.get(
+                                problem_id=submission.problem_id,
+                                subtask_no=subtask_no
+                            )
+                            subtask_id = subtask.id
+                            logger.info(f'Found subtask: subtask_no={subtask_no} -> subtask_id={subtask_id}')
+                        except Problem_subtasks.DoesNotExist:
+                            # 容錯：如果找不到，嘗試 subtask_no+1（因為 Sandbox 可能從 0 開始）
+                            try:
+                                logger.warning(f'Subtask not found with subtask_no={subtask_no}, trying subtask_no={subtask_no+1}')
+                                subtask = Problem_subtasks.objects.get(
+                                    problem_id=submission.problem_id,
+                                    subtask_no=subtask_no + 1
+                                )
+                                subtask_id = subtask.id
+                                logger.info(f'Found subtask with adjusted index: subtask_no={subtask_no+1} -> subtask_id={subtask_id}')
+                            except Problem_subtasks.DoesNotExist:
+                                logger.error(f'Subtask not found even with adjusted index: problem_id={submission.problem_id}, subtask_no={subtask_no} or {subtask_no+1}')
+                                continue
+                        
+                        # 創建或更新記錄
+                        result, created = SubmissionResult.objects.update_or_create(
+                            submission=submission,
+                            subtask_id=subtask_id,
+                            test_case_index=test_case_index,
+                            defaults={
+                                'problem_id': submission.problem_id,
+                                'test_case_id': None,  # 實際的 test_case_id 不使用
+                                'status': result_status,
+                                'execution_time': test_result.get('execution_time', 0),
+                                'memory_usage': test_result.get('memory_usage', 0),
+                                'score': test_result.get('score', 0),
+                                'max_score': test_result.get('max_score', 100),
+                                'error_message': test_result.get('error_message'),
+                            }
+                        )
+                        logger.info(f'SubmissionResult {"created" if created else "updated"}: subtask_id={subtask_id}, test_case_index={test_case_index}')
+                    
+                    logger.info(f'Created {len(test_results)} test results for submission {submission_id}')
                 
-                logger.info(f'Created {len(test_results)} test results for submission {submission_id}')
-                
-                # 5. TODO: 更新 User_problem_stats (之後實現)
-                # update_user_problem_stats(submission)
-            
+                # 5. 更新 UserProblemSolveStatus（全域層級）
+                update_user_problem_stats(submission)
+                '''這邊也不需要了，算成績的部分交給前端處理
+
+                    # 6. 更新 UserProblemStats（作業層級）
+                    # 嘗試從 submission 找到對應的 assignment_id
+                    # submission model 需要加上 assignment_id 欄位，或者從 context 傳入
+                    # 目前先跳過，等 submission model 更新後再啟用
+                    # if hasattr(submission, 'assignment_id') and submission.assignment_id:
+                    #     update_user_assignment_stats(submission, submission.assignment_id)
+
+                '''
             return api_response(
                 data={'submission_id': str(submission_id)},
                 message='Callback processed successfully',

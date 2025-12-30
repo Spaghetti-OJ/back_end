@@ -36,7 +36,7 @@ class ApiTokenListView(APIView):
     - POST: 為當前使用者建立一個新的 API Token。
     """
 
-    authentication_classes = [ApiTokenAuthentication, JWTAuthentication, SessionAuthentication]
+    # authentication_classes = [ApiTokenAuthentication, JWTAuthentication, SessionAuthentication]  # Commented to use global default
     # permission_classes = [IsAuthenticated, TokenHasScope] # Removed to use global default
 
     def get(self, request):
@@ -72,7 +72,7 @@ class ApiTokenDetailView(APIView):
     - DELETE: 刪除指定的 Token
     """
     
-    authentication_classes = [ApiTokenAuthentication, JWTAuthentication, SessionAuthentication]
+    # authentication_classes = [ApiTokenAuthentication, JWTAuthentication, SessionAuthentication]  # Commented to use global default
     # permission_classes = [IsAuthenticated] # Removed to use global default
 
     def get_object(self, request, tokenId):

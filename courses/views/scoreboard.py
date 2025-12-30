@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple, Union
 from django.contrib.auth import get_user_model
 from django.db.models import Count, Max
 from django.utils import timezone
-from rest_framework import permissions, status
+from rest_framework import status
 from rest_framework.views import APIView
 
 from ..common.responses import api_response
@@ -31,8 +31,6 @@ class CourseScoreboardView(APIView):
       400: pids 解析錯誤或 start/end 型別錯誤
       403: 無評分權限
     """
-
-    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, course_id):
         course = self._get_course(course_id)

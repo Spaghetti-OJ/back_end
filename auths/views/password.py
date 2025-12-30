@@ -78,7 +78,7 @@ class ChangePasswordView(APIView):
 class ForgotPasswordView(APIView):
     """
     POST /auth/forgot-password/
-    使用者輸入 username，如果有「已驗證的 email」就寄出重設密碼信。
+    使用者輸入 username + email，兩者都正確且 email 已驗證才寄出重設密碼信。
     """
     permission_classes = [AllowAny]
     skip_email_verification = True
@@ -90,15 +90,14 @@ class ForgotPasswordView(APIView):
         serializer.is_valid(raise_exception=True)
 
         username = serializer.validated_data["username"]
+        email_input = serializer.validated_data["email"]
 
-        # 1) 找 user
-        try:
-            user = User.objects.get(username=username)
-        except User.DoesNotExist:
+        user = User.objects.filter(username=username, email__iexact=email_input).first()
+        if user is None:
             return api_response(
                 data=None,
-                message="找不到此使用者。",
-                status_code=status.HTTP_404_NOT_FOUND,
+                message="帳號或信箱不正確。",
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
 
         # 2) 檢查是否有已驗證 email
@@ -111,9 +110,7 @@ class ForgotPasswordView(APIView):
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
-        email = getattr(user, "email", None)
-
-        if not email or not profile.email_verified:
+        if not user.email or not profile.email_verified:
             return api_response(
                 data=None,
                 message="此帳號尚未綁定或驗證信箱，無法使用密碼恢復，請聯絡管理員。",
@@ -126,22 +123,15 @@ class ForgotPasswordView(APIView):
         expires_at = now + timezone.timedelta(minutes=RESET_TOKEN_LIFETIME_MINUTES)
 
         with transaction.atomic():
-            PasswordResetToken.objects.filter(user=user, used=False).update(
-                used=True,
-            )
-
-            PasswordResetToken.objects.create(
-                user=user,
-                token=token,
-                expires_at=expires_at,
-            )
+            PasswordResetToken.objects.filter(user=user, used=False).update(used=True)
+            PasswordResetToken.objects.create(user=user, token=token, expires_at=expires_at)
 
         # 4) 組出前端重設密碼連結
         frontend_base = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000")
         reset_url = f"{frontend_base}/reset-password?token={token}"
 
         # 5) 寄信
-        send_password_reset_email(to_email=email, reset_url=reset_url)
+        send_password_reset_email(to_email=user.email, reset_url=reset_url)
 
         return api_response(
             data=None,

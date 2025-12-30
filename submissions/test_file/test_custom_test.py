@@ -34,7 +34,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from problems.models import Problems
 
 # 測試配置
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "http://127.0.0.1:8443"  # Django 後端運行在 8443 埠
 SANDBOX_URL = "http://34.81.90.111:8000"
 
 def print_section(title):
@@ -382,8 +382,6 @@ def test_celery_task_direct():
 
 def main():
     """主測試流程"""
-def main():
-    """主測試流程"""
     print("""
 ======================================================================
               Custom Test (自定義測試) 功能測試
@@ -409,42 +407,24 @@ def main():
         if create_problem != 'y':
             print("\n測試取消")
             print("\n[步驟] 快速創建題目步驟:")
-            print("   1. python submissions/test_file/create_test_problem.py")
-            print("   2. python submissions/test_file/test_custom_test.py")
-            return
-    
-    # 準備測試環境
-    print_section("環境準備")
-    
-    print("\n1. 檢查用戶...")
-    user = get_or_create_test_user()
-    token = get_jwt_token(user)
-    print(f"OK:  Token 已生成")
-    
-    print("\n2. 檢查題目...")
-    problem_id = 1
-    if not check_problem_exists(problem_id):
-        print(f"\nWarning :  題目 {problem_id} 不存在，請先創建題目")
-        create_problem = input("是否繼續測試？(y/N): ").strip().lower()
-        if create_problem != 'y':
-            print("測試取消")
+            print("   python manage.py seed_data")
             return
     
     print("\n3. 檢查 Backend 服務...")
     try:
         response = requests.get(f"{BASE_URL}/", timeout=5)
-        print(f"OK:  Backend 服務運行中 (狀態碼: {response.status_code})")
+        print(f"[OK] Backend 服務運行中 (狀態碼: {response.status_code})")
     except Exception as e:
-        print(f"Not good:  Backend 服務無法連接: {e}")
-        print("請確認 Django 開發伺服器已啟動")
+        print(f"[ERROR] Backend 服務無法連接: {e}")
+        print("請確認 Django 開發伺服器已啟動：python manage.py runserver")
         return
     
     print("\n4. 檢查 Sandbox API...")
     try:
         response = requests.get(f"{SANDBOX_URL}/docs", timeout=5)
-        print(f"OK:  Sandbox API 可訪問")
+        print(f"[OK] Sandbox API 可訪問")
     except Exception as e:
-        print(f"Warning :  Sandbox API 無法連接: {e}")
+        print(f"[WARNING] Sandbox API 無法連接: {e}")
         print("測試將繼續，但可能無法完成判題")
     
     # 開始測試
